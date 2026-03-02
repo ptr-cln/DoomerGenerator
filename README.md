@@ -67,4 +67,5 @@ Le cartelle vengono create se non esistono.
 ## Note
 
 - Se `ffmpeg` non e nel `PATH`, l'app mostra un errore all'avvio conversione.
+- Default effetti: rallentamento `20`, taglio alte `75`, bass boost `50`, vinile `65`, reverb `15`.
 - I valori dei parametri sono pensati come base iniziale: possiamo rifinire la timbrica nel prossimo passaggio.

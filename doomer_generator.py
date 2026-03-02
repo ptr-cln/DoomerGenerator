@@ -28,20 +28,22 @@ SUPPORTED_EXTENSIONS = {
 
 @dataclass(frozen=True)
 class DoomerSettings:
-    slowdown_percent: float = 18.0
-    lowpass_strength: float = 55.0
-    bass_boost_percent: float = 40.0
-    vinyl_volume_percent: float = 18.0
-    reverb_percent: float = 12.0
+    slowdown_percent: float = 20.0
+    lowpass_strength: float = 75.0
+    bass_boost_percent: float = 50.0
+    vinyl_volume_percent: float = 65.0
+    reverb_percent: float = 15.0
     output_format: str = "mp3"
 
     def build_filter_complex(self) -> str:
         speed = max(0.50, min(1.00, 1.0 - (self.slowdown_percent / 100.0)))
         cutoff_hz = int(16000 - (self.lowpass_strength / 100.0) * 13800)
         bass_gain = round((self.bass_boost_percent / 100.0) * 12.0, 2)
-        vinyl_weight = round((self.vinyl_volume_percent / 100.0) * 0.40, 3)
+        vinyl_intensity = max(0.0, min(1.0, self.vinyl_volume_percent / 100.0))
+        vinyl_weight = round(vinyl_intensity * 1.9, 3)
+        hiss_amplitude = round(0.001 + vinyl_intensity * 0.014, 4)
+        crackle_amplitude = round(0.015 + vinyl_intensity * 0.095, 4)
         reverb_decay = round(0.10 + (self.reverb_percent / 100.0) * 0.35, 3)
-        noise_amplitude = round(0.01 + (self.vinyl_volume_percent / 100.0) * 0.025, 4)
 
         return (
             "[0:a]"
@@ -52,9 +54,17 @@ class DoomerSettings:
             f"aecho=0.8:0.7:60|120:{reverb_decay}|{reverb_decay * 0.7},"
             "acompressor=threshold=-17dB:ratio=2.3:attack=20:release=180"
             "[main];"
-            f"anoisesrc=color=pink:amplitude={noise_amplitude},"
+            f"anoisesrc=color=pink:amplitude={hiss_amplitude},"
             "aformat=sample_rates=44100:channel_layouts=stereo,"
-            "highpass=f=1100,lowpass=f=8500"
+            "highpass=f=1000,lowpass=f=8500"
+            "[hiss];"
+            f"anoisesrc=color=white:amplitude={crackle_amplitude},"
+            "aformat=sample_rates=44100:channel_layouts=stereo,"
+            "highpass=f=2600,lowpass=f=11000,"
+            "agate=threshold=0.15:ratio=20:attack=0.5:release=8"
+            "[crackle];"
+            "[hiss][crackle]amix=inputs=2:weights='1 1.25':normalize=0,"
+            "alimiter=limit=0.92"
             "[vinyl];"
             f"[main][vinyl]amix=inputs=2:weights='1 {vinyl_weight}':duration=first:normalize=0"
             "[out]"
@@ -162,10 +172,11 @@ class DoomerGeneratorApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Doomer Wave Generator")
-        self.root.geometry("900x700")
-        self.root.minsize(820, 620)
+        self.root.geometry("1024x900")
+        self.root.minsize(920, 760)
         self.project_dir = Path(__file__).resolve().parent
         self.links_file = self.project_dir / "youtube_links.txt"
+        self.default_settings = DoomerSettings()
 
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.processing = False
@@ -181,13 +192,13 @@ class DoomerGeneratorApp:
         self.output_var = tk.StringVar(value=str(default_output))
         self.ffmpeg_var = tk.StringVar(value=self._default_ffmpeg_path())
         self.links_file_var = tk.StringVar(value=str(self.links_file))
-        self.format_var = tk.StringVar(value="mp3")
+        self.format_var = tk.StringVar(value=self.default_settings.output_format)
 
-        self.slowdown_var = tk.DoubleVar(value=18.0)
-        self.lowpass_var = tk.DoubleVar(value=55.0)
-        self.bass_var = tk.DoubleVar(value=40.0)
-        self.vinyl_var = tk.DoubleVar(value=18.0)
-        self.reverb_var = tk.DoubleVar(value=12.0)
+        self.slowdown_var = tk.DoubleVar(value=self.default_settings.slowdown_percent)
+        self.lowpass_var = tk.DoubleVar(value=self.default_settings.lowpass_strength)
+        self.bass_var = tk.DoubleVar(value=self.default_settings.bass_boost_percent)
+        self.vinyl_var = tk.DoubleVar(value=self.default_settings.vinyl_volume_percent)
+        self.reverb_var = tk.DoubleVar(value=self.default_settings.reverb_percent)
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value="Pronto")
@@ -303,10 +314,10 @@ class DoomerGeneratorApp:
 
         controls = ttk.Frame(main)
         controls.pack(fill=tk.X, pady=(0, 8))
-        self.start_button = ttk.Button(controls, text="Avvia conversione batch", command=self._start)
-        self.start_button.pack(side=tk.LEFT)
         self.download_button = ttk.Button(controls, text="Scarica Mp3", command=self._start_download)
-        self.download_button.pack(side=tk.LEFT, padx=8)
+        self.download_button.pack(side=tk.LEFT)
+        self.start_button = ttk.Button(controls, text="Avvia conversione batch", command=self._start)
+        self.start_button.pack(side=tk.LEFT, padx=8)
         self.reset_button = ttk.Button(controls, text="Reset default", command=self._reset_defaults)
         self.reset_button.pack(side=tk.LEFT, padx=8)
 
@@ -320,7 +331,7 @@ class DoomerGeneratorApp:
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(0, weight=1)
 
-        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=14, state=tk.DISABLED)
+        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
         self.log_widget.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -388,12 +399,12 @@ class DoomerGeneratorApp:
             messagebox.showerror("Errore apertura file", f"Impossibile aprire il file link.\n{error}")
 
     def _reset_defaults(self) -> None:
-        self.slowdown_var.set(18.0)
-        self.lowpass_var.set(55.0)
-        self.bass_var.set(40.0)
-        self.vinyl_var.set(18.0)
-        self.reverb_var.set(12.0)
-        self.format_var.set("mp3")
+        self.slowdown_var.set(self.default_settings.slowdown_percent)
+        self.lowpass_var.set(self.default_settings.lowpass_strength)
+        self.bass_var.set(self.default_settings.bass_boost_percent)
+        self.vinyl_var.set(self.default_settings.vinyl_volume_percent)
+        self.reverb_var.set(self.default_settings.reverb_percent)
+        self.format_var.set(self.default_settings.output_format)
         self._log("Parametri ripristinati ai valori di default.")
 
     def _start(self) -> None:
