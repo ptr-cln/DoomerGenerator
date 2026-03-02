@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import queue
 import shutil
 import subprocess
@@ -167,7 +168,7 @@ class DoomerGeneratorApp:
 
         self.input_var = tk.StringVar(value=str(default_input))
         self.output_var = tk.StringVar(value=str(default_output))
-        self.ffmpeg_var = tk.StringVar()
+        self.ffmpeg_var = tk.StringVar(value=self._default_ffmpeg_path())
         self.format_var = tk.StringVar(value="mp3")
 
         self.slowdown_var = tk.DoubleVar(value=18.0)
@@ -441,12 +442,55 @@ class DoomerGeneratorApp:
         if system_ffmpeg:
             return system_ffmpeg
 
+        for candidate in self._winget_ffmpeg_candidates():
+            if candidate.is_file():
+                self.ffmpeg_var.set(str(candidate))
+                return str(candidate)
+
         for candidate in self._local_ffmpeg_candidates():
             if candidate.is_file():
                 self.ffmpeg_var.set(str(candidate))
                 return str(candidate)
 
         return None
+
+    def _default_ffmpeg_path(self) -> str:
+        for candidate in self._winget_ffmpeg_candidates():
+            return str(candidate)
+
+        system_ffmpeg = shutil.which("ffmpeg")
+        if system_ffmpeg:
+            return system_ffmpeg
+
+        for candidate in self._local_ffmpeg_candidates():
+            if candidate.is_file():
+                return str(candidate)
+
+        return ""
+
+    @staticmethod
+    def _winget_ffmpeg_candidates() -> list[Path]:
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if not local_app_data:
+            return []
+
+        winget_packages = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
+        if not winget_packages.is_dir():
+            return []
+
+        try:
+            candidates = [path for path in winget_packages.rglob("ffmpeg.exe") if path.is_file()]
+        except OSError:
+            return []
+
+        def _mtime_or_zero(path: Path) -> float:
+            try:
+                return path.stat().st_mtime
+            except OSError:
+                return 0.0
+
+        candidates.sort(key=_mtime_or_zero, reverse=True)
+        return candidates
 
     @staticmethod
     def _local_ffmpeg_candidates() -> list[Path]:

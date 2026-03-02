@@ -27,6 +27,8 @@ ffmpeg -version
 ```
 
 Se non vuoi configurare il `PATH`, puoi anche selezionare manualmente `ffmpeg.exe` dalla GUI nel campo `ffmpeg.exe (opzionale)`.
+All'avvio, l'app prova a precompilare automaticamente quel campo cercando `ffmpeg.exe` in:
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages` (logica equivalente al comando PowerShell suggerito).
 
 Installazione rapida su Windows (consigliata):
 
