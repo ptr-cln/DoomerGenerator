@@ -1,0 +1,3 @@
+# Nessuna dipendenza esterna Python:
+# - tkinter: inclusa nella maggior parte delle installazioni Python desktop
+# - ffmpeg: dipendenza di sistema (richiesta nel PATH)
