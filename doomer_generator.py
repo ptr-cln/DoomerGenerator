@@ -4,6 +4,7 @@ import os
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -64,6 +65,13 @@ class DoomerSettings:
 class ConversionSummary:
     total: int
     converted: int
+    failed: int
+
+
+@dataclass
+class DownloadSummary:
+    total: int
+    downloaded: int
     failed: int
 
 
@@ -157,18 +165,22 @@ class DoomerGeneratorApp:
         self.root.geometry("900x700")
         self.root.minsize(820, 620)
         self.project_dir = Path(__file__).resolve().parent
+        self.links_file = self.project_dir / "youtube_links.txt"
 
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.processing = False
+        self.downloading = False
 
         default_input = self.project_dir / "in"
         default_output = self.project_dir / "out"
         default_input.mkdir(parents=True, exist_ok=True)
         default_output.mkdir(parents=True, exist_ok=True)
+        self._ensure_links_file()
 
         self.input_var = tk.StringVar(value=str(default_input))
         self.output_var = tk.StringVar(value=str(default_output))
         self.ffmpeg_var = tk.StringVar(value=self._default_ffmpeg_path())
+        self.links_file_var = tk.StringVar(value=str(self.links_file))
         self.format_var = tk.StringVar(value="mp3")
 
         self.slowdown_var = tk.DoubleVar(value=18.0)
@@ -228,6 +240,18 @@ class DoomerGeneratorApp:
         format_combo.grid(row=3, column=1, padx=8, pady=8, sticky="w")
         format_combo.current(0)
 
+        youtube_box = ttk.LabelFrame(main, text="YouTube")
+        youtube_box.pack(fill=tk.X, pady=(0, 10))
+        youtube_box.columnconfigure(1, weight=1)
+        ttk.Label(youtube_box, text="File link").grid(row=0, column=0, padx=8, pady=8, sticky="w")
+        ttk.Entry(youtube_box, textvariable=self.links_file_var, state="readonly").grid(
+            row=0, column=1, padx=8, pady=8, sticky="ew"
+        )
+        self.open_links_button = ttk.Button(
+            youtube_box, text="Apri file", command=self._open_links_file
+        )
+        self.open_links_button.grid(row=0, column=2, padx=8, pady=8)
+
         effects = ttk.LabelFrame(main, text="Effetti Doomer Wave")
         effects.pack(fill=tk.X, pady=(0, 10))
 
@@ -281,7 +305,10 @@ class DoomerGeneratorApp:
         controls.pack(fill=tk.X, pady=(0, 8))
         self.start_button = ttk.Button(controls, text="Avvia conversione batch", command=self._start)
         self.start_button.pack(side=tk.LEFT)
-        ttk.Button(controls, text="Reset default", command=self._reset_defaults).pack(side=tk.LEFT, padx=8)
+        self.download_button = ttk.Button(controls, text="Scarica Mp3", command=self._start_download)
+        self.download_button.pack(side=tk.LEFT, padx=8)
+        self.reset_button = ttk.Button(controls, text="Reset default", command=self._reset_defaults)
+        self.reset_button.pack(side=tk.LEFT, padx=8)
 
         progress = ttk.Frame(main)
         progress.pack(fill=tk.X, pady=(0, 8))
@@ -346,6 +373,20 @@ class DoomerGeneratorApp:
         if selected:
             self.ffmpeg_var.set(selected)
 
+    def _open_links_file(self) -> None:
+        self._ensure_links_file()
+        file_path = self.links_file
+        try:
+            if hasattr(os, "startfile"):
+                os.startfile(str(file_path))
+                return
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", str(file_path)])
+                return
+            subprocess.Popen(["xdg-open", str(file_path)])
+        except OSError as error:
+            messagebox.showerror("Errore apertura file", f"Impossibile aprire il file link.\n{error}")
+
     def _reset_defaults(self) -> None:
         self.slowdown_var.set(18.0)
         self.lowpass_var.set(55.0)
@@ -356,7 +397,7 @@ class DoomerGeneratorApp:
         self._log("Parametri ripristinati ai valori di default.")
 
     def _start(self) -> None:
-        if self.processing:
+        if self.processing or self.downloading:
             return
 
         ffmpeg_bin = self._resolve_ffmpeg()
@@ -392,7 +433,7 @@ class DoomerGeneratorApp:
         )
 
         self.processing = True
-        self.start_button.configure(state=tk.DISABLED)
+        self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
         self.progress_text.set("Conversione in corso...")
         self._log("Avvio conversione batch...")
@@ -401,6 +442,60 @@ class DoomerGeneratorApp:
         thread = threading.Thread(
             target=self._run_batch,
             args=(ffmpeg_bin, input_dir, output_dir, settings),
+            daemon=True,
+        )
+        thread.start()
+
+    def _start_download(self) -> None:
+        if self.processing or self.downloading:
+            return
+
+        self._ensure_links_file()
+        links = self._read_youtube_links()
+        if not links:
+            messagebox.showinfo(
+                "Nessun link",
+                "Il file dei link e vuoto.\nAggiungi almeno un URL YouTube e riprova.",
+            )
+            self._open_links_file()
+            return
+
+        ffmpeg_bin = self._resolve_ffmpeg()
+        if not ffmpeg_bin:
+            messagebox.showerror(
+                "ffmpeg non trovato",
+                "ffmpeg serve anche per l'estrazione MP3.\n"
+                "Installa con: winget install Gyan.FFmpeg\n"
+                "oppure seleziona ffmpeg.exe nel campo dedicato.",
+            )
+            return
+
+        ytdlp_command = self._resolve_yt_dlp()
+        if not ytdlp_command:
+            messagebox.showerror(
+                "yt-dlp non trovato",
+                "Per scaricare da YouTube installa yt-dlp:\n"
+                "pip install yt-dlp\n"
+                "oppure: winget install yt-dlp.yt-dlp",
+            )
+            return
+
+        target_input = self.project_dir / "in"
+        target_input.mkdir(parents=True, exist_ok=True)
+        self.input_var.set(str(target_input))
+
+        self.downloading = True
+        self._set_action_buttons_enabled(False)
+        self.progress_var.set(0)
+        self.progress_text.set("Download MP3 in corso...")
+        self._log(f"Avvio download YouTube ({len(links)} link)...")
+        self._log(f"File link: {self.links_file}")
+        self._log(f"Cartella destinazione: {target_input}")
+        self._log(f"Uso ffmpeg: {ffmpeg_bin}")
+
+        thread = threading.Thread(
+            target=self._run_download_batch,
+            args=(ytdlp_command, ffmpeg_bin, links, target_input),
             daemon=True,
         )
         thread.start()
@@ -425,7 +520,77 @@ class DoomerGeneratorApp:
             settings=settings,
             progress=progress_callback,
         )
-        self.events.put(("finished", summary))
+        self.events.put(("convert_finished", summary))
+
+    def _run_download_batch(
+        self,
+        ytdlp_command: list[str],
+        ffmpeg_bin: str,
+        links: list[str],
+        target_dir: Path,
+    ) -> None:
+        total = len(links)
+        downloaded = 0
+        failed = 0
+        ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
+
+        for index, link in enumerate(links, start=1):
+            self.events.put(("log", f"[{index}/{total}] Download: {link}"))
+            command = [
+                *ytdlp_command,
+                "--no-playlist",
+                "--ignore-errors",
+                "--no-warnings",
+                "--extract-audio",
+                "--audio-format",
+                "mp3",
+                "--audio-quality",
+                "0",
+                "-f",
+                "bestaudio/best",
+                "--ffmpeg-location",
+                ffmpeg_location,
+                "--paths",
+                str(target_dir),
+                "--output",
+                "%(title)s [%(id)s].%(ext)s",
+                link,
+            ]
+
+            result = subprocess.run(command, capture_output=True, text=True)
+            if result.returncode == 0:
+                downloaded += 1
+                self.events.put(("log", "  OK"))
+            else:
+                failed += 1
+                detail = self._summarize_process_output(result.stdout, result.stderr)
+                if detail:
+                    self.events.put(("log", f"  yt-dlp: {detail}"))
+                self.events.put(("log", "  ERRORE"))
+
+            self.events.put(("progress", (index, total)))
+
+        self.events.put(
+            (
+                "download_finished",
+                DownloadSummary(total=total, downloaded=downloaded, failed=failed),
+            )
+        )
+
+    def _resolve_yt_dlp(self) -> list[str] | None:
+        executable = shutil.which("yt-dlp")
+        if executable:
+            return [executable]
+
+        probe = subprocess.run(
+            [sys.executable, "-m", "yt_dlp", "--version"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0:
+            return [sys.executable, "-m", "yt_dlp"]
+
+        return None
 
     def _resolve_ffmpeg(self) -> str | None:
         manual = self.ffmpeg_var.get().strip().strip('"')
@@ -506,6 +671,47 @@ class DoomerGeneratorApp:
             Path.cwd() / "bin" / "ffmpeg",
         ]
 
+    def _ensure_links_file(self) -> None:
+        if self.links_file.is_file():
+            return
+
+        self.links_file.write_text(
+            "# Inserisci un link YouTube per riga.\n"
+            "# Le righe vuote o con # all'inizio vengono ignorate.\n"
+            "# Esempio:\n"
+            "# https://www.youtube.com/watch?v=XXXXXXXXXXX\n",
+            encoding="utf-8",
+        )
+
+    def _read_youtube_links(self) -> list[str]:
+        try:
+            text = self.links_file.read_text(encoding="utf-8")
+        except OSError:
+            return []
+
+        links: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            links.append(line)
+        return links
+
+    def _set_action_buttons_enabled(self, enabled: bool) -> None:
+        state = tk.NORMAL if enabled else tk.DISABLED
+        self.start_button.configure(state=state)
+        self.download_button.configure(state=state)
+        self.reset_button.configure(state=state)
+        self.open_links_button.configure(state=state)
+
+    @staticmethod
+    def _summarize_process_output(stdout: str, stderr: str) -> str:
+        for text in (stderr, stdout):
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            if lines:
+                return lines[-1]
+        return ""
+
     def _poll_events(self) -> None:
         while True:
             try:
@@ -520,10 +726,11 @@ class DoomerGeneratorApp:
                 percent = 0 if total == 0 else (done / total) * 100
                 self.progress_var.set(percent)
                 self.progress_text.set(f"Progress: {done}/{total}")
-            elif event == "finished":
+            elif event == "convert_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.processing = False
-                self.start_button.configure(state=tk.NORMAL)
+                if not self.downloading:
+                    self._set_action_buttons_enabled(True)
                 if summary.total == 0:
                     self.progress_text.set("Nessun file trovato")
                 else:
@@ -534,6 +741,22 @@ class DoomerGeneratorApp:
                 self._log(
                     "Fine conversione. "
                     f"Totale: {summary.total}, OK: {summary.converted}, Errori: {summary.failed}"
+                )
+            elif event == "download_finished":
+                summary: DownloadSummary = payload  # type: ignore[assignment]
+                self.downloading = False
+                if not self.processing:
+                    self._set_action_buttons_enabled(True)
+                if summary.total == 0:
+                    self.progress_text.set("Nessun link da scaricare")
+                else:
+                    self.progress_var.set(100)
+                    self.progress_text.set(
+                        f"Download completato - OK: {summary.downloaded}, Errori: {summary.failed}"
+                    )
+                self._log(
+                    "Fine download YouTube. "
+                    f"Totale: {summary.total}, OK: {summary.downloaded}, Errori: {summary.failed}"
                 )
 
         self.root.after(120, self._poll_events)

@@ -5,6 +5,7 @@ Generatore batch di tracce in stile **Doomer Wave** con interfaccia grafica.
 ## Funzioni attuali
 
 - Conversione audio in massa da una cartella input.
+- Download batch da YouTube in MP3 (qualita massima audio) dalla lista link in `youtube_links.txt`.
 - Cartella output separata (struttura sottocartelle mantenuta).
 - Effetti regolabili con slider e valori di default:
   - Rallentamento (con pitch leggermente piu basso).
@@ -19,6 +20,7 @@ Generatore batch di tracce in stile **Doomer Wave** con interfaccia grafica.
 
 - Python 3.10+
 - `ffmpeg` installato (nel `PATH` oppure selezionabile manualmente dalla GUI)
+- `yt-dlp` installato (comando `yt-dlp` oppure modulo Python `yt_dlp`)
 
 Verifica rapida:
 
@@ -34,6 +36,13 @@ Installazione rapida su Windows (consigliata):
 
 ```powershell
 winget install Gyan.FFmpeg
+winget install yt-dlp.yt-dlp
+```
+
+Oppure via pip:
+
+```bash
+pip install -r requirements.txt
 ```
 
 ## Avvio
@@ -48,6 +57,12 @@ All'avvio, la GUI preimposta automaticamente:
 - output: cartella `out`
 
 Le cartelle vengono create se non esistono.
+
+## Download YouTube
+
+- Inserisci uno o piu link in `youtube_links.txt`, uno per riga.
+- Premi il pulsante `Scarica Mp3`.
+- I file vengono scaricati in `in` in formato MP3 con `bestaudio` + conversione MP3 qualita `0` (massima per `yt-dlp`).
 
 ## Note
 
