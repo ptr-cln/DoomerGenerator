@@ -155,12 +155,19 @@ class DoomerGeneratorApp:
         self.root.title("Doomer Wave Generator")
         self.root.geometry("900x700")
         self.root.minsize(820, 620)
+        self.project_dir = Path(__file__).resolve().parent
 
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.processing = False
 
-        self.input_var = tk.StringVar()
-        self.output_var = tk.StringVar()
+        default_input = self.project_dir / "in"
+        default_output = self.project_dir / "out"
+        default_input.mkdir(parents=True, exist_ok=True)
+        default_output.mkdir(parents=True, exist_ok=True)
+
+        self.input_var = tk.StringVar(value=str(default_input))
+        self.output_var = tk.StringVar(value=str(default_output))
+        self.ffmpeg_var = tk.StringVar()
         self.format_var = tk.StringVar(value="mp3")
 
         self.slowdown_var = tk.DoubleVar(value=18.0)
@@ -199,7 +206,17 @@ class DoomerGeneratorApp:
             row=1, column=2, padx=8, pady=8
         )
 
-        ttk.Label(paths, text="Formato output").grid(row=2, column=0, padx=8, pady=8, sticky="w")
+        ttk.Label(paths, text="ffmpeg.exe (opzionale)").grid(
+            row=2, column=0, padx=8, pady=8, sticky="w"
+        )
+        ttk.Entry(paths, textvariable=self.ffmpeg_var).grid(
+            row=2, column=1, padx=8, pady=8, sticky="ew"
+        )
+        ttk.Button(paths, text="Sfoglia...", command=self._pick_ffmpeg).grid(
+            row=2, column=2, padx=8, pady=8
+        )
+
+        ttk.Label(paths, text="Formato output").grid(row=3, column=0, padx=8, pady=8, sticky="w")
         format_combo = ttk.Combobox(
             paths,
             textvariable=self.format_var,
@@ -207,7 +224,7 @@ class DoomerGeneratorApp:
             state="readonly",
             width=10,
         )
-        format_combo.grid(row=2, column=1, padx=8, pady=8, sticky="w")
+        format_combo.grid(row=3, column=1, padx=8, pady=8, sticky="w")
         format_combo.current(0)
 
         effects = ttk.LabelFrame(main, text="Effetti Doomer Wave")
@@ -316,6 +333,18 @@ class DoomerGeneratorApp:
         if selected:
             self.output_var.set(selected)
 
+    def _pick_ffmpeg(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Seleziona ffmpeg",
+            filetypes=[
+                ("ffmpeg", "ffmpeg.exe"),
+                ("Eseguibili", "*.exe"),
+                ("Tutti i file", "*.*"),
+            ],
+        )
+        if selected:
+            self.ffmpeg_var.set(selected)
+
     def _reset_defaults(self) -> None:
         self.slowdown_var.set(18.0)
         self.lowpass_var.set(55.0)
@@ -329,11 +358,14 @@ class DoomerGeneratorApp:
         if self.processing:
             return
 
-        ffmpeg_bin = shutil.which("ffmpeg")
+        ffmpeg_bin = self._resolve_ffmpeg()
         if not ffmpeg_bin:
             messagebox.showerror(
                 "ffmpeg non trovato",
-                "ffmpeg non e disponibile nel PATH. Installa ffmpeg e riprova.",
+                "ffmpeg non trovato.\n\n"
+                "Opzioni:\n"
+                "1) Installa con: winget install Gyan.FFmpeg\n"
+                "2) Oppure seleziona ffmpeg.exe nel campo dedicato e riprova.",
             )
             return
 
@@ -363,6 +395,7 @@ class DoomerGeneratorApp:
         self.progress_var.set(0)
         self.progress_text.set("Conversione in corso...")
         self._log("Avvio conversione batch...")
+        self._log(f"Uso ffmpeg: {ffmpeg_bin}")
 
         thread = threading.Thread(
             target=self._run_batch,
@@ -392,6 +425,42 @@ class DoomerGeneratorApp:
             progress=progress_callback,
         )
         self.events.put(("finished", summary))
+
+    def _resolve_ffmpeg(self) -> str | None:
+        manual = self.ffmpeg_var.get().strip().strip('"')
+        if manual:
+            manual_path = Path(manual)
+            if manual_path.is_file():
+                return str(manual_path)
+
+            lookup = shutil.which(manual)
+            if lookup:
+                return lookup
+
+        system_ffmpeg = shutil.which("ffmpeg")
+        if system_ffmpeg:
+            return system_ffmpeg
+
+        for candidate in self._local_ffmpeg_candidates():
+            if candidate.is_file():
+                self.ffmpeg_var.set(str(candidate))
+                return str(candidate)
+
+        return None
+
+    @staticmethod
+    def _local_ffmpeg_candidates() -> list[Path]:
+        base_dir = Path(__file__).resolve().parent
+        return [
+            base_dir / "ffmpeg.exe",
+            base_dir / "ffmpeg",
+            base_dir / "bin" / "ffmpeg.exe",
+            base_dir / "bin" / "ffmpeg",
+            Path.cwd() / "ffmpeg.exe",
+            Path.cwd() / "ffmpeg",
+            Path.cwd() / "bin" / "ffmpeg.exe",
+            Path.cwd() / "bin" / "ffmpeg",
+        ]
 
     def _poll_events(self) -> None:
         while True:

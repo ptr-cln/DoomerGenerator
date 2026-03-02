@@ -18,7 +18,7 @@ Generatore batch di tracce in stile **Doomer Wave** con interfaccia grafica.
 ## Requisiti
 
 - Python 3.10+
-- `ffmpeg` installato e disponibile nel `PATH`
+- `ffmpeg` installato (nel `PATH` oppure selezionabile manualmente dalla GUI)
 
 Verifica rapida:
 
@@ -26,11 +26,26 @@ Verifica rapida:
 ffmpeg -version
 ```
 
+Se non vuoi configurare il `PATH`, puoi anche selezionare manualmente `ffmpeg.exe` dalla GUI nel campo `ffmpeg.exe (opzionale)`.
+
+Installazione rapida su Windows (consigliata):
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
 ## Avvio
 
 ```bash
 python doomer_generator.py
 ```
+
+All'avvio, la GUI preimposta automaticamente:
+
+- input: cartella `in`
+- output: cartella `out`
+
+Le cartelle vengono create se non esistono.
 
 ## Note
 
