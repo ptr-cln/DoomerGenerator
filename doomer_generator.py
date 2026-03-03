@@ -443,6 +443,8 @@ def _clear_directory_contents(path: Path) -> int:
     for item in items:
         try:
             if item.is_file() or item.is_symlink():
+                if item.name == ".gitkeep":
+                    continue
                 item.unlink()
                 removed_files += 1
             elif item.is_dir():
