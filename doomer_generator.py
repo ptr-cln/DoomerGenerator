@@ -1614,6 +1614,9 @@ class DoomerGeneratorApp:
         self.root = root
         self.current_language = "it"
         self.main_frame: ttk.Frame | None = None
+        self.notebook_widget: ttk.Notebook | None = None
+        self.tab_scroll_canvases: dict[str, tk.Canvas] = {}
+        self.active_tab_scroll_canvas: tk.Canvas | None = None
         self.root.geometry("1200x900")
         self.root.minsize(980, 760)
 
@@ -1753,24 +1756,30 @@ class DoomerGeneratorApp:
         if self.main_frame is not None:
             self.main_frame.destroy()
         self.root.title(self._t("app_title"))
+        self.tab_scroll_canvases = {}
+        self.active_tab_scroll_canvas = None
 
         main = ttk.Frame(self.root, padding=12)
         self.main_frame = main
         main.pack(fill=tk.BOTH, expand=True)
 
         notebook = ttk.Notebook(main)
+        self.notebook_widget = notebook
         notebook.pack(fill=tk.BOTH, expand=False)
 
-        general_tab = ttk.Frame(notebook, padding=10)
-        download_tab = ttk.Frame(notebook, padding=10)
-        audio_tab = ttk.Frame(notebook, padding=10)
-        video_tab = ttk.Frame(notebook, padding=10)
-        upload_tab = ttk.Frame(notebook, padding=10)
-        notebook.add(general_tab, text=self._t("tab_general"))
-        notebook.add(download_tab, text=self._t("tab_download"))
-        notebook.add(audio_tab, text=self._t("tab_audio"))
-        notebook.add(video_tab, text=self._t("tab_video"))
-        notebook.add(upload_tab, text=self._t("tab_upload"))
+        general_tab_container, general_tab = self._create_scrollable_tab(notebook)
+        download_tab_container, download_tab = self._create_scrollable_tab(notebook)
+        audio_tab_container, audio_tab = self._create_scrollable_tab(notebook)
+        video_tab_container, video_tab = self._create_scrollable_tab(notebook)
+        upload_tab_container, upload_tab = self._create_scrollable_tab(notebook)
+        notebook.add(general_tab_container, text=self._t("tab_general"))
+        notebook.add(download_tab_container, text=self._t("tab_download"))
+        notebook.add(audio_tab_container, text=self._t("tab_audio"))
+        notebook.add(video_tab_container, text=self._t("tab_video"))
+        notebook.add(upload_tab_container, text=self._t("tab_upload"))
+        notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
+        self._on_notebook_tab_changed()
+        self._bind_tab_mousewheel()
 
         self._build_general_tab(general_tab)
         self._build_download_tab(download_tab)
@@ -1793,6 +1802,90 @@ class DoomerGeneratorApp:
         scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_widget.configure(yscrollcommand=scrollbar.set)
+
+    def _create_scrollable_tab(self, notebook: ttk.Notebook) -> tuple[ttk.Frame, ttk.Frame]:
+        container = ttk.Frame(notebook)
+        canvas = tk.Canvas(container, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        content = ttk.Frame(canvas, padding=10)
+        window_id = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def _on_content_configure(_event: tk.Event) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_configure(event: tk.Event) -> None:
+            canvas.itemconfigure(window_id, width=event.width)
+
+        content.bind("<Configure>", _on_content_configure)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        self.tab_scroll_canvases[str(container)] = canvas
+        return container, content
+
+    def _bind_tab_mousewheel(self) -> None:
+        self.root.unbind_all("<MouseWheel>")
+        self.root.unbind_all("<Button-4>")
+        self.root.unbind_all("<Button-5>")
+        self.root.bind_all("<MouseWheel>", self._on_tab_mousewheel, add="+")
+        self.root.bind_all("<Button-4>", self._on_tab_mousewheel, add="+")
+        self.root.bind_all("<Button-5>", self._on_tab_mousewheel, add="+")
+
+    def _on_notebook_tab_changed(self, _event=None) -> None:
+        if self.notebook_widget is None:
+            self.active_tab_scroll_canvas = None
+            return
+        selected = self.notebook_widget.select()
+        self.active_tab_scroll_canvas = self.tab_scroll_canvases.get(selected)
+
+    def _widget_belongs_to_canvas(self, widget: object, canvas: tk.Canvas) -> bool:
+        if not isinstance(widget, tk.Misc):
+            return False
+        current: tk.Misc | None = widget
+        while current is not None:
+            if current == canvas:
+                return True
+            parent_name = current.winfo_parent()
+            if not parent_name:
+                return False
+            try:
+                current = current.nametowidget(parent_name)
+            except KeyError:
+                return False
+        return False
+
+    def _on_tab_mousewheel(self, event: tk.Event) -> None:
+        canvas = self.active_tab_scroll_canvas
+        if canvas is None:
+            return
+        if isinstance(event.widget, tk.Text):
+            return
+        if not self._widget_belongs_to_canvas(event.widget, canvas):
+            return
+
+        bbox = canvas.bbox("all")
+        if not bbox:
+            return
+        if bbox[3] <= canvas.winfo_height():
+            return
+
+        units = 0
+        delta = getattr(event, "delta", 0)
+        if delta:
+            units = -int(delta / 120)
+            if units == 0:
+                units = -1 if delta > 0 else 1
+        else:
+            number = getattr(event, "num", 0)
+            if number == 4:
+                units = -1
+            elif number == 5:
+                units = 1
+        if units:
+            canvas.yview_scroll(units, "units")
 
     def _build_general_tab(self, parent: ttk.Frame) -> None:
         language_box = ttk.LabelFrame(parent, text=self._t("general_group_language"), padding=8)
@@ -1969,6 +2062,8 @@ class DoomerGeneratorApp:
             resolution=0.1,
         )
 
+        self._build_audio_equalizer(parent)
+
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X)
         self.audio_convert_button = ttk.Button(
@@ -2001,8 +2096,6 @@ class DoomerGeneratorApp:
             command=self._stop_audio_test,
         )
         self.audio_test_stop_button.pack(side=tk.LEFT, padx=8)
-
-        self._build_audio_equalizer(parent)
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
         resources_box = ttk.LabelFrame(parent, text=self._t("video_group_resources"), padding=8)

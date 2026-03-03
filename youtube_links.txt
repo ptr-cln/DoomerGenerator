@@ -2,33 +2,15 @@
 # Le righe vuote o con # all'inizio vengono ignorate.
 # Esempio:
 # https://www.youtube.com/watch?v=XXXXXXXXXXX
-https://www.youtube.com/watch?v=XLjo0lY450c&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw
-https://www.youtube.com/watch?v=XQLhHbjFd5M&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=2
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=3
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=4
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=5
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=6
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=7
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=8
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=9
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=10
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=11
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=12
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=13
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=14
-https://www.youtube.com/watch?v=qiN2rE7shBc&list=PL81_CtYCym28M8c2NFVCEIEBDCu6o1tXw&index=15
-https://www.youtube.com/watch?v=dw21eJHGdpY&list=PL32130004826569B5
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=2
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=3
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=4
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=5
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=6
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=7
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=8
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=9
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=10
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=11
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=12
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=13
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=14
-https://www.youtube.com/watch?v=av79DAPFDTs&list=PL32130004826569B5&index=15
+https://www.youtube.com/watch?v=tRx212PUa4g&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=2
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=3
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=4
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=5
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=6
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=7
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=8
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=9
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=10
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=11
+https://www.youtube.com/watch?v=s3tqIk8TPWM&list=PLNPGM2D7aODfMqKbpmlRANiWA5kvEABSY&index=12
