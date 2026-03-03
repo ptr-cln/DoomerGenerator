@@ -449,7 +449,6 @@ class AudioSettings:
             "[0:a]"
             "aformat=sample_rates=44100:channel_layouts=stereo,"
             f"asetrate=44100*{speed},aresample=44100,"
-            f"{eq_chain},"
             f"aecho=0.8:0.7:60|120:{reverb_decay}|{round(reverb_decay * 0.7, 3)},"
             "acompressor=threshold=-17dB:ratio=2.3:attack=20:release=180"
             "[main]"
@@ -472,7 +471,8 @@ class AudioSettings:
         else:
             parts.append("[main]anull[mixed]")
 
-        cursor = "mixed"
+        parts.append(f"[mixed]{eq_chain}[eqmixed]")
+        cursor = "eqmixed"
         if fade_in > 0:
             parts.append(f"[{cursor}]afade=t=in:st=0:d={fade_in:.2f}[fadin]")
             cursor = "fadin"
