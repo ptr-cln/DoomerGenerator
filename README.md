@@ -47,7 +47,7 @@ Risorse richieste:
 - login OAuth Google (`Login YouTube`)
 - metadata:
   - titolo = nome file
-  - privacy (`private/unlisted/public`)
+  - privacy (`private/unlisted/public`, default `public`)
   - categoria YouTube
   - descrizione template (`{title}` disponibile)
   - tag smart automatici + tag extra CSV

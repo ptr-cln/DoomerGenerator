@@ -183,7 +183,7 @@ class VideoSummary:
 
 @dataclass(frozen=True)
 class UploadSettings:
-    privacy_status: str = "unlisted"
+    privacy_status: str = "public"
     category_id: str = "10"
     description_template: str = (
         "{title}\n\n"
