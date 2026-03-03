@@ -32,6 +32,11 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
 DOOMER_SUFFIX = " (Doomer Wave)"
 YOUTUBE_UPLOAD_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+VIDEO_FRAME_WIDTH = 1920
+VIDEO_FRAME_HEIGHT = 1080
+DOOMER_OVERLAY_WIDTH = 760
+DOOMER_OVERLAY_HEIGHT = 980
+DOOMER_OVERLAY_LEFT = 36
 
 
 @dataclass(frozen=True)
@@ -116,14 +121,15 @@ class VideoSettings:
 
         parts = [
             "[0:v]"
-            "scale=1920:1080:force_original_aspect_ratio=increase,"
-            "crop=1920:1080,setsar=1"
+            f"scale={VIDEO_FRAME_WIDTH}:{VIDEO_FRAME_HEIGHT}:force_original_aspect_ratio=increase,"
+            f"crop={VIDEO_FRAME_WIDTH}:{VIDEO_FRAME_HEIGHT},setsar=1"
             "[bg]",
             "[1:v]"
             "format=rgba,"
-            "scale=-1:980"
+            f"scale={DOOMER_OVERLAY_WIDTH}:{DOOMER_OVERLAY_HEIGHT}:force_original_aspect_ratio=decrease,"
+            f"pad={DOOMER_OVERLAY_WIDTH}:{DOOMER_OVERLAY_HEIGHT}:(ow-iw)/2:(oh-ih):color=black@0"
             "[doomer]",
-            "[bg][doomer]overlay=x=36:y=H-h:format=auto[scene]",
+            f"[bg][doomer]overlay=x={DOOMER_OVERLAY_LEFT}:y=H-h:format=auto[scene]",
         ]
 
         parts.append(
@@ -1785,7 +1791,7 @@ class DoomerGeneratorApp:
                     "--paths",
                     str(target_dir),
                     "--output",
-                    "%(title)s [%(id)s].%(ext)s",
+                    "%(title)s.%(ext)s",
                     link,
                 ]
 
