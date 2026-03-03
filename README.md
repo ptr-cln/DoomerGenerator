@@ -1,20 +1,21 @@
 # DoomerGenerator
 
-Generatore automatico Doomer Wave con GUI:
+Generatore Doomer Wave con GUI a tab:
 - download MP3 da YouTube
 - conversione audio batch con effetti
 - generazione video Full HD batch
+- upload batch su YouTube con API ufficiali
 
 ## Struttura cartelle
 
-L'app crea e usa automaticamente:
+L'app usa:
 - `audio/in`
 - `audio/out`
 - `video/out`
 
 Risorse richieste:
-- `resources/vinyls` (rumori vinile reali, scelti a caso per ogni traccia)
-- `resources/backgrounds` (sfondi per i video)
+- `resources/vinyls`
+- `resources/backgrounds`
 - `resources/Doomer_Guy.png` (fallback automatico su `.jpg/.jpeg/.webp`)
 
 ## Tab GUI
@@ -27,48 +28,52 @@ Risorse richieste:
 - svuota tutto
 
 ### 2) Download
-- file link: `youtube_links.txt`
+- legge link da `youtube_links.txt`
 - pulsante `Scarica Mp3`
-- output diretto in `audio/in` (MP3 qualita massima yt-dlp)
+- output in `audio/in`
 
 ### 3) Audio
-- input/output audio batch
-- effetti: slowdown, low-pass, bass boost, vinile, reverb
-- fade in/out audio regolabili (default `1s` + `1s`)
-- output format: `mp3`, `wav`, `flac`, `ogg`
-
-Default audio:
-- rallentamento: `20`
-- taglio alte: `75`
-- bass boost: `50`
-- vinile: `10`
-- reverb: `15`
-- fade in/out: `1s / 1s`
+- conversione batch da `audio/in` a `audio/out`
+- effetti doomer + fade in/out audio
+- output con suffisso ` (Doomer Wave)`
 
 ### 4) Video
-- input audio (default: `audio/out`)
-- output video (default: `video/out`)
-- output `.mp4` Full HD (`1920x1080`)
-- background casuale + overlay doomer in basso a sinistra
-- effetti globali stile VHS/noise/distorsione statica su tutto il frame
-- fade in/out video regolabili (default `1s / 1s`)
+- genera MP4 Full HD da file audio
+- output in `video/out`
+- stesso nome base del file audio
+
+### 5) Upload
+- upload batch di tutti i video in `video/out` (o cartella scelta)
+- login OAuth Google (`Login YouTube`)
+- metadata:
+  - titolo = nome file
+  - privacy (`private/unlisted/public`)
+  - categoria YouTube
+  - descrizione template (`{title}` disponibile)
+  - tag smart automatici + tag extra CSV
+
+## Setup Upload YouTube (API ufficiali)
+
+1. Crea un progetto su Google Cloud.
+2. Abilita **YouTube Data API v3**.
+3. Crea credenziali OAuth tipo **Desktop app**.
+4. Scarica il JSON e mettilo nel progetto come `youtube_client_secret.json`
+   (oppure selezionalo dal tab `Upload`).
+5. Premi `Login YouTube` nel tab `Upload`.
+6. Dopo il login viene creato `youtube_token.json`.
 
 ## Requisiti
 
 - Python 3.10+
 - `ffmpeg`
 - `yt-dlp`
+- librerie Python in `requirements.txt`
 
 Installazione rapida su Windows:
 
 ```powershell
 winget install Gyan.FFmpeg
 winget install yt-dlp.yt-dlp
-```
-
-Oppure:
-
-```bash
 pip install -r requirements.txt
 ```
 

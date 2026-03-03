@@ -29,7 +29,9 @@ AUDIO_EXTENSIONS = {
 
 VINYL_EXTENSIONS = AUDIO_EXTENSIONS
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
 DOOMER_SUFFIX = " (Doomer Wave)"
+YOUTUBE_UPLOAD_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
 @dataclass(frozen=True)
@@ -179,6 +181,26 @@ class VideoSummary:
     failed: int
 
 
+@dataclass(frozen=True)
+class UploadSettings:
+    privacy_status: str = "unlisted"
+    category_id: str = "10"
+    description_template: str = (
+        "{title}\n\n"
+        "Generated with DoomerGenerator.\n"
+        "#doomerwave #slowed #reverb"
+    )
+    extra_tags_csv: str = ""
+    smart_tags_enabled: bool = True
+
+
+@dataclass
+class UploadSummary:
+    total: int
+    uploaded: int
+    failed: int
+
+
 def _safe_mtime(path: Path) -> float:
     try:
         return path.stat().st_mtime
@@ -237,6 +259,227 @@ def _resolve_doomer_image(resources_dir: Path) -> Path:
         if candidate.is_file():
             return candidate
     return preferred[0]
+
+
+def _parse_csv_tags(csv_tags: str) -> list[str]:
+    tags: list[str] = []
+    for raw in csv_tags.split(","):
+        cleaned = _sanitize_tag(raw)
+        if cleaned:
+            tags.append(cleaned)
+    return tags
+
+
+def _sanitize_tag(tag: str) -> str:
+    normalized = re.sub(r"\s+", " ", tag.strip())
+    if not normalized:
+        return ""
+    if len(normalized) > 30:
+        normalized = normalized[:30].rstrip()
+    return normalized
+
+
+def _build_smart_tags(title: str) -> list[str]:
+    base_tags = [
+        "doomer wave",
+        "doomer music",
+        "slowed",
+        "slowed reverb",
+        "sad playlist",
+        "dark ambience",
+        "nostalgic",
+        "night drive",
+        "lonely night",
+        "melancholic",
+        "post punk vibes",
+    ]
+    cleaned_title = re.sub(r"[_\-]+", " ", title)
+    tokens = re.findall(r"[A-Za-z0-9']+", cleaned_title.lower())
+    stop_words = {
+        "the",
+        "and",
+        "feat",
+        "official",
+        "video",
+        "audio",
+        "hd",
+        "remaster",
+        "lyrics",
+        "music",
+        "live",
+        "version",
+    }
+    keyword_tokens = []
+    for token in tokens:
+        if len(token) < 3 or token in stop_words:
+            continue
+        if token not in keyword_tokens:
+            keyword_tokens.append(token)
+
+    dynamic_tags = [_sanitize_tag(cleaned_title)]
+    dynamic_tags.extend(_sanitize_tag(token) for token in keyword_tokens[:10])
+    dynamic_tags.extend(_sanitize_tag(f"{token} slowed") for token in keyword_tokens[:5])
+    dynamic_tags.extend(_sanitize_tag(f"{token} doomer wave") for token in keyword_tokens[:4])
+
+    ordered: list[str] = []
+    for tag in dynamic_tags + base_tags:
+        sanitized = _sanitize_tag(tag)
+        if not sanitized:
+            continue
+        if sanitized.lower() not in [item.lower() for item in ordered]:
+            ordered.append(sanitized)
+    return ordered[:25]
+
+
+def _compose_youtube_tags(title: str, settings: UploadSettings) -> list[str]:
+    tags: list[str] = []
+    if settings.smart_tags_enabled:
+        tags.extend(_build_smart_tags(title))
+    tags.extend(_parse_csv_tags(settings.extra_tags_csv))
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    total_chars = 0
+    for tag in tags:
+        key = tag.lower()
+        if key in seen:
+            continue
+        projected = total_chars + len(tag) + (1 if unique else 0)
+        if projected > 460:
+            break
+        unique.append(tag)
+        seen.add(key)
+        total_chars = projected
+    return unique
+
+
+def _import_youtube_modules():
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as error:  # pragma: no cover - runtime dependency check
+        raise RuntimeError(
+            "Dipendenze YouTube mancanti. Esegui: pip install -r requirements.txt"
+        ) from error
+    return Request, Credentials, InstalledAppFlow, build, HttpError, MediaFileUpload
+
+
+class YouTubeUploader:
+    def __init__(self, client_secret_path: Path, token_path: Path, log: Callable[[str], None]):
+        self.client_secret_path = client_secret_path
+        self.token_path = token_path
+        self.log = log
+
+    def login(self) -> None:
+        self._authenticate(interactive=True)
+
+    def upload_folder(
+        self,
+        video_dir: Path,
+        settings: UploadSettings,
+        progress: Callable[[float, int, int, float, str], None],
+    ) -> UploadSummary:
+        files = _collect_files(video_dir, VIDEO_EXTENSIONS)
+        total = len(files)
+        if total == 0:
+            self.log("Nessun video trovato in video/out.")
+            return UploadSummary(total=0, uploaded=0, failed=0)
+
+        _, _, _, build, HttpError, MediaFileUpload = _import_youtube_modules()
+        credentials = self._authenticate(interactive=False)
+        service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+
+        uploaded = 0
+        failed = 0
+        for index, video_file in enumerate(files, start=1):
+            title = video_file.stem
+            self.log(f"[{index}/{total}] Upload: {video_file.name}")
+            try:
+                try:
+                    description = settings.description_template.format(title=title)
+                except Exception:
+                    description = f"{title}\n\n{settings.description_template}"
+                tags = _compose_youtube_tags(title, settings)
+
+                request_body = {
+                    "snippet": {
+                        "title": title,
+                        "description": description,
+                        "categoryId": settings.category_id,
+                        "tags": tags,
+                    },
+                    "status": {
+                        "privacyStatus": settings.privacy_status,
+                        "selfDeclaredMadeForKids": False,
+                    },
+                }
+                media = MediaFileUpload(str(video_file), chunksize=8 * 1024 * 1024, resumable=True)
+                insert_request = service.videos().insert(
+                    part="snippet,status",
+                    body=request_body,
+                    media_body=media,
+                )
+
+                response = None
+                while response is None:
+                    status, response = insert_request.next_chunk(num_retries=3)
+                    if status is None:
+                        continue
+                    link_percent = max(0.0, min(100.0, status.progress() * 100.0))
+                    overall_percent = ((index - 1) + status.progress()) / total * 100.0
+                    progress(overall_percent, index, total, link_percent, video_file.name)
+
+                uploaded += 1
+                video_id = response.get("id", "N/A")
+                self.log(f"  OK -> https://youtu.be/{video_id}")
+            except HttpError as error:
+                failed += 1
+                self.log(f"  HTTP error: {error}")
+            except Exception as error:  # noqa: BLE001
+                failed += 1
+                self.log(f"  Upload error: {error}")
+            finally:
+                progress((index / total) * 100.0, index, total, 100.0, video_file.name)
+
+        return UploadSummary(total=total, uploaded=uploaded, failed=failed)
+
+    def _authenticate(self, interactive: bool):
+        Request, Credentials, InstalledAppFlow, _, _, _ = _import_youtube_modules()
+
+        if not self.client_secret_path.is_file():
+            raise RuntimeError(
+                f"File OAuth mancante: {self.client_secret_path}\n"
+                "Crea credenziali OAuth Desktop su Google Cloud e scarica il JSON."
+            )
+
+        credentials = None
+        if self.token_path.is_file():
+            try:
+                credentials = Credentials.from_authorized_user_file(
+                    str(self.token_path),
+                    YOUTUBE_UPLOAD_SCOPES,
+                )
+            except Exception:
+                credentials = None
+
+        if credentials and credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+
+        if not credentials or not credentials.valid:
+            if not interactive:
+                raise RuntimeError("Login YouTube richiesto. Premi prima il pulsante 'Login YouTube'.")
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(self.client_secret_path),
+                YOUTUBE_UPLOAD_SCOPES,
+            )
+            credentials = flow.run_local_server(port=0, open_browser=True)
+
+        self.token_path.write_text(credentials.to_json(), encoding="utf-8")
+        return credentials
 
 
 class DoomerBatchConverter:
@@ -518,14 +761,19 @@ class DoomerGeneratorApp:
         self.audio_input_dir = self.audio_root / "in"
         self.audio_output_dir = self.audio_root / "out"
         self.video_output_dir = self.video_root / "out"
+        self.youtube_client_secret_path = self.project_dir / "youtube_client_secret.json"
+        self.youtube_token_path = self.project_dir / "youtube_token.json"
 
         self.default_audio_settings = AudioSettings()
         self.default_video_settings = VideoSettings()
+        self.default_upload_settings = UploadSettings()
 
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.downloading = False
         self.audio_processing = False
         self.video_processing = False
+        self.uploading = False
+        self.youtube_authenticating = False
 
         self._ensure_default_filesystem()
         self._ensure_links_file()
@@ -553,6 +801,13 @@ class DoomerGeneratorApp:
         self.video_fade_out_var = tk.DoubleVar(value=self.default_video_settings.fade_out_seconds)
         self.video_noise_var = tk.DoubleVar(value=self.default_video_settings.noise_percent)
         self.video_distortion_var = tk.DoubleVar(value=self.default_video_settings.distortion_percent)
+        self.upload_video_input_var = tk.StringVar(value=str(self.video_output_dir))
+        self.youtube_client_secret_var = tk.StringVar(value=str(self.youtube_client_secret_path))
+        self.youtube_token_var = tk.StringVar(value=str(self.youtube_token_path))
+        self.youtube_privacy_var = tk.StringVar(value=self.default_upload_settings.privacy_status)
+        self.youtube_category_var = tk.StringVar(value=self.default_upload_settings.category_id)
+        self.youtube_extra_tags_var = tk.StringVar(value=self.default_upload_settings.extra_tags_csv)
+        self.youtube_smart_tags_var = tk.BooleanVar(value=self.default_upload_settings.smart_tags_enabled)
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value="Pronto")
@@ -571,15 +826,18 @@ class DoomerGeneratorApp:
         download_tab = ttk.Frame(notebook, padding=10)
         audio_tab = ttk.Frame(notebook, padding=10)
         video_tab = ttk.Frame(notebook, padding=10)
+        upload_tab = ttk.Frame(notebook, padding=10)
         notebook.add(general_tab, text="General")
         notebook.add(download_tab, text="Download")
         notebook.add(audio_tab, text="Audio")
         notebook.add(video_tab, text="Video")
+        notebook.add(upload_tab, text="Upload")
 
         self._build_general_tab(general_tab)
         self._build_download_tab(download_tab)
         self._build_audio_tab(audio_tab)
         self._build_video_tab(video_tab)
+        self._build_upload_tab(upload_tab)
 
         progress_box = ttk.LabelFrame(main, text="Stato", padding=8)
         progress_box.pack(fill=tk.X, pady=(10, 8))
@@ -881,6 +1139,99 @@ class DoomerGeneratorApp:
         )
         self.video_generate_button.pack(side=tk.LEFT)
 
+    def _build_upload_tab(self, parent: ttk.Frame) -> None:
+        source_box = ttk.LabelFrame(parent, text="Sorgente Upload", padding=8)
+        source_box.pack(fill=tk.X, pady=(0, 8))
+        source_box.columnconfigure(1, weight=1)
+
+        ttk.Label(source_box, text="Cartella video").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(source_box, textvariable=self.upload_video_input_var).grid(
+            row=0, column=1, padx=6, pady=6, sticky="ew"
+        )
+        self.pick_upload_video_button = ttk.Button(
+            source_box,
+            text="Sfoglia...",
+            command=self._pick_upload_video_input,
+        )
+        self.pick_upload_video_button.grid(
+            row=0, column=2, padx=6, pady=6
+        )
+
+        auth_box = ttk.LabelFrame(parent, text="Autenticazione YouTube API", padding=8)
+        auth_box.pack(fill=tk.X, pady=(0, 8))
+        auth_box.columnconfigure(1, weight=1)
+
+        ttk.Label(auth_box, text="OAuth client JSON").grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        ttk.Entry(auth_box, textvariable=self.youtube_client_secret_var).grid(
+            row=0, column=1, padx=6, pady=6, sticky="ew"
+        )
+        self.pick_client_secret_button = ttk.Button(
+            auth_box,
+            text="Sfoglia...",
+            command=self._pick_youtube_client_secret,
+        )
+        self.pick_client_secret_button.grid(row=0, column=2, padx=6, pady=6)
+
+        ttk.Label(auth_box, text="Token OAuth").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(auth_box, textvariable=self.youtube_token_var, state="readonly").grid(
+            row=1, column=1, padx=6, pady=6, sticky="ew"
+        )
+
+        options_box = ttk.LabelFrame(parent, text="Opzioni Upload", padding=8)
+        options_box.pack(fill=tk.X, pady=(0, 8))
+        options_box.columnconfigure(3, weight=1)
+
+        ttk.Label(options_box, text="Privacy").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Combobox(
+            options_box,
+            textvariable=self.youtube_privacy_var,
+            values=["private", "unlisted", "public"],
+            state="readonly",
+            width=12,
+        ).grid(row=0, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Label(options_box, text="Categoria").grid(row=0, column=2, padx=6, pady=6, sticky="w")
+        ttk.Entry(options_box, textvariable=self.youtube_category_var, width=8).grid(
+            row=0, column=3, padx=6, pady=6, sticky="w"
+        )
+
+        self.youtube_smart_tags_check = ttk.Checkbutton(
+            options_box,
+            text="Tag smart automatici (AI-like)",
+            variable=self.youtube_smart_tags_var,
+        )
+        self.youtube_smart_tags_check.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+
+        ttk.Label(options_box, text="Tag extra (csv)").grid(row=1, column=2, padx=6, pady=6, sticky="w")
+        ttk.Entry(options_box, textvariable=self.youtube_extra_tags_var).grid(
+            row=1, column=3, padx=6, pady=6, sticky="ew"
+        )
+
+        desc_box = ttk.LabelFrame(parent, text="Template Descrizione", padding=8)
+        desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        ttk.Label(desc_box, text="Placeholder disponibile: {title}").pack(anchor="w", pady=(0, 4))
+        self.youtube_description_widget = tk.Text(desc_box, height=5, wrap=tk.WORD)
+        self.youtube_description_widget.pack(fill=tk.BOTH, expand=True)
+        self.youtube_description_widget.insert(tk.END, self.default_upload_settings.description_template)
+
+        actions = ttk.Frame(parent)
+        actions.pack(fill=tk.X)
+        self.youtube_login_button = ttk.Button(
+            actions,
+            text="Login YouTube",
+            command=self._start_youtube_login,
+        )
+        self.youtube_login_button.pack(side=tk.LEFT)
+
+        self.youtube_upload_button = ttk.Button(
+            actions,
+            text="Upload video/out",
+            command=self._start_youtube_upload,
+        )
+        self.youtube_upload_button.pack(side=tk.LEFT, padx=8)
+
     def _add_slider(
         self,
         parent: ttk.LabelFrame,
@@ -936,6 +1287,11 @@ class DoomerGeneratorApp:
         if selected:
             self.video_output_var.set(selected)
 
+    def _pick_upload_video_input(self) -> None:
+        selected = filedialog.askdirectory(title="Seleziona cartella video da caricare")
+        if selected:
+            self.upload_video_input_var.set(selected)
+
     def _pick_ffmpeg(self) -> None:
         selected = filedialog.askopenfilename(
             title="Seleziona ffmpeg",
@@ -947,6 +1303,14 @@ class DoomerGeneratorApp:
         )
         if selected:
             self.ffmpeg_var.set(selected)
+
+    def _pick_youtube_client_secret(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Seleziona OAuth client JSON",
+            filetypes=[("JSON", "*.json"), ("Tutti i file", "*.*")],
+        )
+        if selected:
+            self.youtube_client_secret_var.set(selected)
 
     def _open_links_file(self) -> None:
         self._ensure_links_file()
@@ -1163,6 +1527,79 @@ class DoomerGeneratorApp:
         )
         thread.start()
 
+    def _start_youtube_login(self) -> None:
+        if self._is_busy():
+            return
+
+        self.youtube_authenticating = True
+        self._set_action_buttons_enabled(False)
+        self.progress_var.set(0)
+        self.progress_text.set("Login YouTube in corso...")
+
+        thread = threading.Thread(target=self._run_youtube_login, daemon=True)
+        thread.start()
+
+    def _start_youtube_upload(self) -> None:
+        if self._is_busy():
+            return
+
+        video_dir = Path(self.upload_video_input_var.get().strip())
+        if not video_dir.is_dir():
+            messagebox.showerror("Input non valido", "Seleziona una cartella video valida.")
+            return
+
+        category_id = self.youtube_category_var.get().strip()
+        if not category_id.isdigit():
+            messagebox.showerror("Categoria non valida", "Category ID deve essere numerico (es. 10).")
+            return
+
+        settings = self._collect_upload_settings()
+        self.uploading = True
+        self._set_action_buttons_enabled(False)
+        self.progress_var.set(0)
+        self.progress_text.set("Upload YouTube in corso...")
+        self._log(f"Avvio upload YouTube da: {video_dir}")
+
+        thread = threading.Thread(
+            target=self._run_youtube_upload_batch,
+            args=(video_dir, settings),
+            daemon=True,
+        )
+        thread.start()
+
+    def _collect_upload_settings(self) -> UploadSettings:
+        description_template = self.youtube_description_widget.get("1.0", tk.END).strip()
+        if not description_template:
+            description_template = self.default_upload_settings.description_template
+        return UploadSettings(
+            privacy_status=self.youtube_privacy_var.get().strip(),
+            category_id=self.youtube_category_var.get().strip(),
+            description_template=description_template,
+            extra_tags_csv=self.youtube_extra_tags_var.get().strip(),
+            smart_tags_enabled=bool(self.youtube_smart_tags_var.get()),
+        )
+
+    def _run_youtube_login(self) -> None:
+        try:
+            uploader = self._build_youtube_uploader()
+            uploader.login()
+            self.events.put(("youtube_login_ok", None))
+        except Exception as error:  # noqa: BLE001
+            self.events.put(("youtube_login_error", str(error)))
+
+    def _run_youtube_upload_batch(self, video_dir: Path, settings: UploadSettings) -> None:
+        try:
+            uploader = self._build_youtube_uploader()
+            summary = uploader.upload_folder(
+                video_dir=video_dir,
+                settings=settings,
+                progress=self._queue_upload_progress,
+            )
+            self.events.put(("upload_finished", summary))
+        except Exception as error:  # noqa: BLE001
+            self.events.put(("upload_runtime_error", str(error)))
+            self.events.put(("upload_finished", UploadSummary(total=0, uploaded=0, failed=0)))
+
     def _run_download_batch(
         self,
         ytdlp_command: list[str],
@@ -1313,6 +1750,26 @@ class DoomerGeneratorApp:
     def _queue_progress(self, done: int, total: int) -> None:
         self.events.put(("progress", (done, total)))
 
+    def _queue_upload_progress(
+        self,
+        overall_percent: float,
+        index: int,
+        total: int,
+        file_percent: float,
+        file_name: str,
+    ) -> None:
+        self.events.put(
+            (
+                "upload_progress",
+                (overall_percent, index, total, file_percent, file_name),
+            )
+        )
+
+    def _build_youtube_uploader(self) -> YouTubeUploader:
+        client_secret = Path(self.youtube_client_secret_var.get().strip())
+        token_path = Path(self.youtube_token_var.get().strip())
+        return YouTubeUploader(client_secret_path=client_secret, token_path=token_path, log=self._queue_log)
+
     def _reset_audio_defaults(self) -> None:
         defaults = self.default_audio_settings
         self.slowdown_var.set(defaults.slowdown_percent)
@@ -1326,7 +1783,13 @@ class DoomerGeneratorApp:
         self._log("Parametri audio ripristinati ai default.")
 
     def _is_busy(self) -> bool:
-        return self.downloading or self.audio_processing or self.video_processing
+        return (
+            self.downloading
+            or self.audio_processing
+            or self.video_processing
+            or self.uploading
+            or self.youtube_authenticating
+        )
 
     def _set_action_buttons_enabled(self, enabled: bool) -> None:
         state = tk.NORMAL if enabled else tk.DISABLED
@@ -1334,6 +1797,11 @@ class DoomerGeneratorApp:
         self.audio_convert_button.configure(state=state)
         self.audio_reset_button.configure(state=state)
         self.video_generate_button.configure(state=state)
+        self.youtube_login_button.configure(state=state)
+        self.youtube_upload_button.configure(state=state)
+        self.pick_upload_video_button.configure(state=state)
+        self.pick_client_secret_button.configure(state=state)
+        self.youtube_smart_tags_check.configure(state=state)
         self.open_links_button.configure(state=state)
         self.clear_audio_input_button.configure(state=state)
         self.clear_audio_output_button.configure(state=state)
@@ -1356,6 +1824,12 @@ class DoomerGeneratorApp:
                 self.progress_text.set(
                     f"Download in corso: {index}/{total} - {link_percent:.1f}% del link"
                 )
+            elif event == "upload_progress":
+                percent, index, total, file_percent, file_name = payload  # type: ignore[misc]
+                self.progress_var.set(percent)
+                self.progress_text.set(
+                    f"Upload {index}/{total} - {file_percent:.1f}% ({file_name})"
+                )
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
@@ -1377,6 +1851,35 @@ class DoomerGeneratorApp:
                 detail = str(payload)
                 self._log(f"Errore runtime download: {detail}")
                 self.progress_text.set("Errore durante il download")
+            elif event == "youtube_login_ok":
+                self.youtube_authenticating = False
+                self._set_action_buttons_enabled(True)
+                self.progress_var.set(100)
+                self.progress_text.set("Login YouTube completato")
+                self._log("Login YouTube completato e token salvato.")
+            elif event == "youtube_login_error":
+                self.youtube_authenticating = False
+                self._set_action_buttons_enabled(True)
+                detail = str(payload)
+                self.progress_text.set("Errore login YouTube")
+                self._log(f"Errore login YouTube: {detail}")
+            elif event == "upload_finished":
+                summary: UploadSummary = payload  # type: ignore[assignment]
+                self.uploading = False
+                if not self.youtube_authenticating:
+                    self._set_action_buttons_enabled(True)
+                self.progress_var.set(100 if summary.total else 0)
+                self.progress_text.set(
+                    f"Upload completato - OK: {summary.uploaded}, Errori: {summary.failed}"
+                )
+                self._log(
+                    "Fine upload YouTube. "
+                    f"Totale: {summary.total}, OK: {summary.uploaded}, Errori: {summary.failed}"
+                )
+            elif event == "upload_runtime_error":
+                detail = str(payload)
+                self._log(f"Errore runtime upload: {detail}")
+                self.progress_text.set("Errore durante upload YouTube")
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False

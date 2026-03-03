@@ -13,3 +13,5 @@ video/out/*
 
 /in/
 /out/
+youtube_token.json
+youtube_client_secret.json
