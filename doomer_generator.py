@@ -144,6 +144,7 @@ UI_TEXTS = {
         "upload_label_privacy": "Privacy",
         "upload_label_category": "Categoria",
         "upload_check_auto_tags": "Tag automatici (AI + fallback smart)",
+        "upload_check_shutdown": "Spegni computer al termine (60s)",
         "upload_label_extra_tags": "Tag extra (csv)",
         "upload_label_openai_model": "OpenAI model",
         "upload_label_openai_key": "OpenAI API key (opzionale)",
@@ -210,6 +211,10 @@ UI_TEXTS = {
         "log_video_finished": "Fine generazione video. Totale: {total}, OK: {ok}, Errori: {err}",
         "log_runtime_download_error": "Errore runtime download: {detail}",
         "log_runtime_upload_error": "Errore runtime upload: {detail}",
+        "log_shutdown_scheduled": "Spegnimento pianificato tra 60 secondi. Annulla con: {cancel}",
+        "log_shutdown_skipped_errors": "Spegnimento non pianificato: upload non completato per tutti i file.",
+        "log_shutdown_unsupported": "Spegnimento automatico non supportato su questo sistema.",
+        "log_shutdown_error": "Errore pianificazione spegnimento: {detail}",
         "log_login_done": "Login YouTube completato e token salvato.",
         "log_login_error": "Errore login YouTube: {detail}",
         "log_test_start": "Play test su file casuale: {name}",
@@ -321,6 +326,7 @@ UI_TEXTS = {
         "upload_label_privacy": "Privacy",
         "upload_label_category": "Category",
         "upload_check_auto_tags": "Automatic tags (AI + smart fallback)",
+        "upload_check_shutdown": "Turn off computer when done (60s)",
         "upload_label_extra_tags": "Extra tags (csv)",
         "upload_label_openai_model": "OpenAI model",
         "upload_label_openai_key": "OpenAI API key (optional)",
@@ -387,6 +393,10 @@ UI_TEXTS = {
         "log_video_finished": "Video generation finished. Total: {total}, OK: {ok}, Errors: {err}",
         "log_runtime_download_error": "Download runtime error: {detail}",
         "log_runtime_upload_error": "Upload runtime error: {detail}",
+        "log_shutdown_scheduled": "Shutdown scheduled in 60 seconds. Cancel with: {cancel}",
+        "log_shutdown_skipped_errors": "Shutdown not scheduled: upload did not complete for all files.",
+        "log_shutdown_unsupported": "Automatic shutdown is not supported on this system.",
+        "log_shutdown_error": "Shutdown schedule error: {detail}",
         "log_login_done": "YouTube login completed and token saved.",
         "log_login_error": "YouTube login error: {detail}",
         "log_test_start": "Test playback on random file: {name}",
@@ -583,6 +593,7 @@ class UploadSettings:
     )
     extra_tags_csv: str = ""
     smart_tags_enabled: bool = True
+    shutdown_after_upload: bool = False
     openai_model: str = "gpt-4o-mini"
     openai_api_key: str = ""
     openai_timeout_seconds: float = 20.0
@@ -1398,6 +1409,8 @@ class DoomerVideoGenerator:
         self.log = log
         self.available_video_encoders = self._detect_available_video_encoders()
         self.failed_video_encoders: set[str] = set()
+        detected = ", ".join(sorted(self.available_video_encoders))
+        self.log(f"Encoder disponibili (runtime): {detected}")
 
     def generate_from_audio_folder(
         self,
@@ -1477,6 +1490,9 @@ class DoomerVideoGenerator:
             return True
 
         if active_encoder != "cpu":
+            gpu_detail = _summarize_process_output(result.stdout, result.stderr)
+            if gpu_detail:
+                self.log(f"  ffmpeg ({active_encoder}): {gpu_detail}")
             self.log("  Encoder GPU non disponibile/stabile su questo host. Fallback CPU...")
             self.failed_video_encoders.add(active_encoder)
             fallback_command = self._build_video_render_command(
@@ -1544,21 +1560,66 @@ class DoomerVideoGenerator:
 
     def _detect_available_video_encoders(self) -> set[str]:
         available = {"cpu"}
+        compiled = self._detect_compiled_video_encoders()
+        for encoder in ("nvidia", "intel", "amd"):
+            if encoder not in compiled:
+                continue
+            if self._is_encoder_runtime_usable(encoder):
+                available.add(encoder)
+            else:
+                self.log(f"Encoder {encoder} rilevato ma non utilizzabile a runtime.")
+        return available
+
+    def _detect_compiled_video_encoders(self) -> set[str]:
+        compiled: set[str] = set()
         command = [self.ffmpeg_bin, "-hide_banner", "-encoders"]
         try:
             result = subprocess.run(command, capture_output=True, text=True)
         except OSError:
-            return available
+            return compiled
         if result.returncode != 0:
-            return available
+            return compiled
         text = f"{result.stdout}\n{result.stderr}".lower()
         if "h264_nvenc" in text:
-            available.add("nvidia")
+            compiled.add("nvidia")
         if "h264_qsv" in text:
-            available.add("intel")
+            compiled.add("intel")
         if "h264_amf" in text:
-            available.add("amd")
-        return available
+            compiled.add("amd")
+        return compiled
+
+    def _is_encoder_runtime_usable(self, encoder: str) -> bool:
+        codec_by_encoder = {
+            "nvidia": "h264_nvenc",
+            "intel": "h264_qsv",
+            "amd": "h264_amf",
+        }
+        codec = codec_by_encoder.get(encoder)
+        if not codec:
+            return False
+        command = [
+            self.ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=320x180:r=30:d=0.6",
+            "-frames:v",
+            "18",
+            "-an",
+            "-c:v",
+            codec,
+            "-f",
+            "null",
+            "-",
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0
 
     def _resolve_video_encoder(self, requested: str) -> str:
         normalized = requested.strip().lower()
@@ -1578,7 +1639,22 @@ class DoomerVideoGenerator:
     @staticmethod
     def _video_codec_flags(encoder: str) -> list[str]:
         if encoder == "nvidia":
-            return ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "22", "-b:v", "0"]
+            return [
+                "-c:v",
+                "h264_nvenc",
+                "-preset",
+                "p4",
+                "-rc",
+                "vbr",
+                "-cq",
+                "23",
+                "-b:v",
+                "4M",
+                "-maxrate",
+                "8M",
+                "-bufsize",
+                "16M",
+            ]
         if encoder == "intel":
             return ["-c:v", "h264_qsv", "-global_quality", "23"]
         if encoder == "amd":
@@ -1700,10 +1776,14 @@ class DoomerGeneratorApp:
         self.youtube_category_var = tk.StringVar(value=self.default_upload_settings.category_id)
         self.youtube_extra_tags_var = tk.StringVar(value=self.default_upload_settings.extra_tags_csv)
         self.youtube_smart_tags_var = tk.BooleanVar(value=self.default_upload_settings.smart_tags_enabled)
+        self.youtube_shutdown_after_upload_var = tk.BooleanVar(
+            value=self.default_upload_settings.shutdown_after_upload
+        )
         self.youtube_openai_model_var = tk.StringVar(value=self.default_upload_settings.openai_model)
         self.youtube_openai_key_var = tk.StringVar(value="")
         self.youtube_description_text = self.default_upload_settings.description_template
         self.language_var = tk.StringVar(value=LANGUAGE_CODE_TO_LABEL[self.current_language])
+        self.shutdown_after_upload_requested = False
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value=self._t("status_ready"))
@@ -2304,28 +2384,35 @@ class DoomerGeneratorApp:
             row=1, column=3, padx=6, pady=6, sticky="ew"
         )
 
-        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=2, column=0, padx=6, pady=6, sticky="w")
+        self.youtube_shutdown_after_upload_check = ttk.Checkbutton(
+            options_box,
+            text=self._t("upload_check_shutdown"),
+            variable=self.youtube_shutdown_after_upload_var,
+        )
+        self.youtube_shutdown_after_upload_check.grid(row=2, column=0, columnspan=4, padx=6, pady=6, sticky="w")
+
+        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=3, column=0, padx=6, pady=6, sticky="w")
         self.youtube_openai_model_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_model_var,
             width=16,
         )
-        self.youtube_openai_model_entry.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+        self.youtube_openai_model_entry.grid(row=3, column=1, padx=6, pady=6, sticky="w")
 
         ttk.Label(options_box, text=self._t("upload_label_openai_key")).grid(
-            row=2, column=2, padx=6, pady=6, sticky="w"
+            row=3, column=2, padx=6, pady=6, sticky="w"
         )
         self.youtube_openai_key_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_key_var,
             show="*",
         )
-        self.youtube_openai_key_entry.grid(row=2, column=3, padx=6, pady=6, sticky="ew")
+        self.youtube_openai_key_entry.grid(row=3, column=3, padx=6, pady=6, sticky="ew")
 
         ttk.Label(
             options_box,
             text=self._t("upload_openai_hint"),
-        ).grid(row=3, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
+        ).grid(row=4, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
         desc_box = ttk.LabelFrame(parent, text=self._t("upload_group_description"), padding=8)
         desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
@@ -2870,6 +2957,7 @@ class DoomerGeneratorApp:
     def _start_youtube_upload(self) -> None:
         if self._is_busy():
             return
+        self.shutdown_after_upload_requested = False
 
         if not self._try_prepare_youtube_oauth_file():
             return
@@ -2885,6 +2973,7 @@ class DoomerGeneratorApp:
             return
 
         settings = self._collect_upload_settings()
+        self.shutdown_after_upload_requested = settings.shutdown_after_upload
         self.uploading = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
@@ -2908,6 +2997,7 @@ class DoomerGeneratorApp:
             description_template=description_template,
             extra_tags_csv=self.youtube_extra_tags_var.get().strip(),
             smart_tags_enabled=bool(self.youtube_smart_tags_var.get()),
+            shutdown_after_upload=bool(self.youtube_shutdown_after_upload_var.get()),
             openai_model=self.youtube_openai_model_var.get().strip(),
             openai_api_key=self.youtube_openai_key_var.get().strip(),
         )
@@ -3147,6 +3237,30 @@ class DoomerGeneratorApp:
         self._queue_log(f"  Cleanup post-upload: rimossi {len(removed)} file correlati.")
         for path in removed:
             self._queue_log(f"    - {self._display_path(path)}")
+
+    def _schedule_shutdown_after_upload(self) -> None:
+        if os.name == "nt":
+            command = ["shutdown", "/s", "/t", "60"]
+            cancel_hint = "shutdown /a"
+        elif sys.platform.startswith("linux"):
+            command = ["shutdown", "-h", "+1"]
+            cancel_hint = "shutdown -c"
+        else:
+            self._log(self._t("log_shutdown_unsupported"))
+            return
+
+        try:
+            result = subprocess.run(command, capture_output=True, text=True)
+        except OSError as error:
+            self._log(self._t("log_shutdown_error", detail=error))
+            return
+
+        if result.returncode == 0:
+            self._log(self._t("log_shutdown_scheduled", cancel=cancel_hint))
+            return
+
+        detail = _summarize_process_output(result.stdout, result.stderr) or f"exit={result.returncode}"
+        self._log(self._t("log_shutdown_error", detail=detail))
 
     def _display_path(self, path: Path) -> str:
         try:
@@ -3405,6 +3519,10 @@ class DoomerGeneratorApp:
             if isinstance(smart_tags, bool):
                 self.youtube_smart_tags_var.set(smart_tags)
 
+            shutdown_after_upload = upload.get("shutdown_after_upload")
+            if isinstance(shutdown_after_upload, bool):
+                self.youtube_shutdown_after_upload_var.set(shutdown_after_upload)
+
             openai_model = upload.get("openai_model")
             if isinstance(openai_model, str) and openai_model.strip():
                 self.youtube_openai_model_var.set(openai_model.strip())
@@ -3465,6 +3583,7 @@ class DoomerGeneratorApp:
             "category_id": self.youtube_category_var.get().strip(),
             "extra_tags_csv": self.youtube_extra_tags_var.get().strip(),
             "smart_tags_enabled": bool(self.youtube_smart_tags_var.get()),
+            "shutdown_after_upload": bool(self.youtube_shutdown_after_upload_var.get()),
             "openai_model": self.youtube_openai_model_var.get().strip(),
             "openai_api_key": self.youtube_openai_key_var.get().strip(),
             "description_template": description_template,
@@ -3499,6 +3618,7 @@ class DoomerGeneratorApp:
         self.pick_upload_video_button.configure(state=state)
         self.pick_client_secret_button.configure(state=state)
         self.youtube_smart_tags_check.configure(state=state)
+        self.youtube_shutdown_after_upload_check.configure(state=state)
         self.youtube_openai_model_entry.configure(state=state)
         self.youtube_openai_key_entry.configure(state=state)
         self.open_links_button.configure(state=state)
@@ -3603,6 +3723,12 @@ class DoomerGeneratorApp:
                         err=summary.failed,
                     )
                 )
+                if self.shutdown_after_upload_requested:
+                    if summary.total > 0 and summary.failed == 0 and summary.uploaded == summary.total:
+                        self._schedule_shutdown_after_upload()
+                    else:
+                        self._log(self._t("log_shutdown_skipped_errors"))
+                    self.shutdown_after_upload_requested = False
             elif event == "upload_runtime_error":
                 detail = str(payload)
                 self._log(self._t("log_runtime_upload_error", detail=detail))
