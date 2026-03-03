@@ -15,3 +15,4 @@ video/out/*
 /out/
 youtube_token.json
 youtube_client_secret.json
+youtube_links.txt
