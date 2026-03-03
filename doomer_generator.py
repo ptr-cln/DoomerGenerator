@@ -556,8 +556,6 @@ class DoomerGeneratorApp:
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value="Pronto")
-        self.download_progress_var = tk.DoubleVar(value=0.0)
-        self.download_progress_text = tk.StringVar(value="In attesa")
 
         self._build_ui()
         self.root.after(100, self._poll_events)
@@ -657,11 +655,6 @@ class DoomerGeneratorApp:
         actions.pack(fill=tk.X, pady=(10, 0))
         self.download_button = ttk.Button(actions, text="Scarica Mp3", command=self._start_download)
         self.download_button.pack(side=tk.LEFT)
-
-        progress_box = ttk.LabelFrame(parent, text="Progresso Download", padding=8)
-        progress_box.pack(fill=tk.X, pady=(10, 0))
-        ttk.Progressbar(progress_box, variable=self.download_progress_var, maximum=100).pack(fill=tk.X)
-        ttk.Label(progress_box, textvariable=self.download_progress_text).pack(anchor="w", pady=(6, 0))
 
         ttk.Label(
             parent,
@@ -1064,8 +1057,6 @@ class DoomerGeneratorApp:
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
         self.progress_text.set("Download MP3 in corso...")
-        self.download_progress_var.set(0)
-        self.download_progress_text.set("Avvio download...")
         self._log(f"Avvio download YouTube ({len(links)} link)...")
         self._log(f"File link: {self.links_file}")
         self._log(f"Destinazione: {target_input}")
@@ -1365,10 +1356,6 @@ class DoomerGeneratorApp:
                 self.progress_text.set(
                     f"Download in corso: {index}/{total} - {link_percent:.1f}% del link"
                 )
-                self.download_progress_var.set(percent)
-                self.download_progress_text.set(
-                    f"Link {index}/{total}: {link_percent:.1f}%"
-                )
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
@@ -1379,12 +1366,8 @@ class DoomerGeneratorApp:
                 self.downloading = False
                 self._set_action_buttons_enabled(True)
                 self.progress_var.set(100 if summary.total else 0)
-                self.download_progress_var.set(100 if summary.total else 0)
                 self.progress_text.set(
                     f"Download completato - OK: {summary.downloaded}, Errori: {summary.failed}"
-                )
-                self.download_progress_text.set(
-                    f"Completato - OK: {summary.downloaded}, Errori: {summary.failed}"
                 )
                 self._log(
                     "Fine download YouTube. "
@@ -1394,7 +1377,6 @@ class DoomerGeneratorApp:
                 detail = str(payload)
                 self._log(f"Errore runtime download: {detail}")
                 self.progress_text.set("Errore durante il download")
-                self.download_progress_text.set("Errore durante il download")
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
