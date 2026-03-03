@@ -16,3 +16,4 @@ video/out/*
 youtube_token.json
 youtube_client_secret.json
 youtube_links.txt
+app_settings.json
