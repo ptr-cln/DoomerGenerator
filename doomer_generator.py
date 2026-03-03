@@ -1625,6 +1625,13 @@ class DoomerGeneratorApp:
                     *ytdlp_command,
                     "--no-playlist",
                     "--newline",
+                    "--retries",
+                    "8",
+                    "--fragment-retries",
+                    "8",
+                    "--extractor-retries",
+                    "3",
+                    "--force-overwrites",
                     "--extract-audio",
                     "--audio-format",
                     "mp3",
@@ -1653,6 +1660,7 @@ class DoomerGeneratorApp:
                 )
                 last_detail = ""
                 output_file: str | None = None
+                already_downloaded = False
 
                 if process.stdout:
                     for raw_line in process.stdout:
@@ -1677,6 +1685,10 @@ class DoomerGeneratorApp:
                             self.events.put(("log", f"  {line}"))
                             last_detail = line
                             continue
+                        if "has already been downloaded" in line:
+                            already_downloaded = True
+                            self.events.put(("log", f"  {line}"))
+                            continue
                         if line.endswith(".mp3") and "://" not in line:
                             output_file = line
                             continue
@@ -1688,6 +1700,8 @@ class DoomerGeneratorApp:
                     downloaded += 1
                     if output_file:
                         self.events.put(("log", f"  File: {output_file}"))
+                    elif already_downloaded:
+                        self.events.put(("log", "  File gia presente (riuso output esistente)."))
                     self.events.put(("log", "  OK"))
                 else:
                     failed += 1
