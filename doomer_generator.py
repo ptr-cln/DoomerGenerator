@@ -133,6 +133,7 @@ UI_TEXTS = {
         "video_lbl_distortion": "Distorsione (%)",
         "video_desc_distortion": "Jitter/instabilita stile VHS su tutto il frame.",
         "video_btn_generate": "Genera video batch",
+        "video_btn_reset": "Reset default",
         "upload_group_source": "Sorgente Upload",
         "upload_label_video_folder": "Cartella video",
         "upload_group_auth": "Autenticazione YouTube API",
@@ -196,7 +197,8 @@ UI_TEXTS = {
         "log_input_audio": "Input audio: {path}",
         "log_output_video": "Output video: {path}",
         "log_upload_start": "Avvio upload YouTube da: {path}",
-        "log_audio_defaults_reset": "Parametri audio ripristinati ai default.",
+        "log_audio_defaults_reset": "Impostazioni audio ripristinate da salvataggio (o default).",
+        "log_video_defaults_reset": "Impostazioni video ripristinate da salvataggio (o default).",
         "log_audio_settings_saved": "Impostazioni audio salvate in {file}.",
         "log_video_settings_saved": "Impostazioni video salvate in {file}.",
         "log_upload_settings_saved": "Impostazioni upload salvate in {file}.",
@@ -308,6 +310,7 @@ UI_TEXTS = {
         "video_lbl_distortion": "Distortion (%)",
         "video_desc_distortion": "VHS-style jitter/instability across the full frame.",
         "video_btn_generate": "Generate batch videos",
+        "video_btn_reset": "Reset defaults",
         "upload_group_source": "Upload Source",
         "upload_label_video_folder": "Video folder",
         "upload_group_auth": "YouTube API Authentication",
@@ -371,7 +374,8 @@ UI_TEXTS = {
         "log_input_audio": "Audio input: {path}",
         "log_output_video": "Video output: {path}",
         "log_upload_start": "Starting YouTube upload from: {path}",
-        "log_audio_defaults_reset": "Audio settings reset to defaults.",
+        "log_audio_defaults_reset": "Audio settings restored from saved values (or defaults).",
+        "log_video_defaults_reset": "Video settings restored from saved values (or defaults).",
         "log_audio_settings_saved": "Audio settings saved to {file}.",
         "log_video_settings_saved": "Video settings saved to {file}.",
         "log_upload_settings_saved": "Upload settings saved to {file}.",
@@ -2205,6 +2209,12 @@ class DoomerGeneratorApp:
             command=self._start_video_generation,
         )
         self.video_generate_button.pack(side=tk.LEFT)
+        self.video_reset_button = ttk.Button(
+            actions,
+            text=self._t("video_btn_reset"),
+            command=self._reset_video_defaults,
+        )
+        self.video_reset_button.pack(side=tk.LEFT, padx=8)
         self.video_save_button = ttk.Button(
             actions,
             text=self._t("save_settings_btn"),
@@ -3133,15 +3143,39 @@ class DoomerGeneratorApp:
             return str(path)
 
     def _reset_audio_defaults(self) -> None:
-        defaults = self.default_audio_settings
-        self.slowdown_var.set(defaults.slowdown_percent)
-        self.vinyl_var.set(defaults.vinyl_volume_percent)
-        self.reverb_var.set(defaults.reverb_percent)
-        self.audio_fade_in_var.set(defaults.fade_in_seconds)
-        self.audio_fade_out_var.set(defaults.fade_out_seconds)
-        self.audio_format_var.set(defaults.output_format)
-        self._set_eq_band_gains(defaults.eq_band_gains)
+        payload = self._read_persisted_app_settings()
+        audio = payload.get("audio")
+        if isinstance(audio, dict):
+            self._apply_audio_settings(audio)
+        else:
+            defaults = self.default_audio_settings
+            self.audio_input_var.set(str(self.audio_input_dir))
+            self.audio_output_var.set(str(self.audio_output_dir))
+            self.ffmpeg_var.set(self._default_ffmpeg_path())
+            self.slowdown_var.set(defaults.slowdown_percent)
+            self.vinyl_var.set(defaults.vinyl_volume_percent)
+            self.reverb_var.set(defaults.reverb_percent)
+            self.audio_fade_in_var.set(defaults.fade_in_seconds)
+            self.audio_fade_out_var.set(defaults.fade_out_seconds)
+            self.audio_format_var.set(defaults.output_format)
+            self._set_eq_band_gains(defaults.eq_band_gains)
         self._log(self._t("log_audio_defaults_reset"))
+
+    def _reset_video_defaults(self) -> None:
+        payload = self._read_persisted_app_settings()
+        video = payload.get("video")
+        if isinstance(video, dict):
+            self._apply_video_settings(video)
+        else:
+            defaults = self.default_video_settings
+            self.video_audio_input_var.set(str(self.audio_output_dir))
+            self.video_output_var.set(str(self.video_output_dir))
+            self.video_fade_in_var.set(defaults.fade_in_seconds)
+            self.video_fade_out_var.set(defaults.fade_out_seconds)
+            self.video_noise_var.set(defaults.noise_percent)
+            self.video_distortion_var.set(defaults.distortion_percent)
+            self.video_encoder_var.set(defaults.video_encoder)
+        self._log(self._t("log_video_defaults_reset"))
 
     @staticmethod
     def _coerce_float(
@@ -3203,6 +3237,113 @@ class DoomerGeneratorApp:
             self._log(self._t("log_settings_save_error", error=error))
             return False
 
+    def _apply_audio_settings(self, audio: dict[str, object]) -> None:
+        audio_input = audio.get("input_dir")
+        if isinstance(audio_input, str) and audio_input.strip():
+            self.audio_input_var.set(audio_input)
+
+        audio_output = audio.get("output_dir")
+        if isinstance(audio_output, str) and audio_output.strip():
+            self.audio_output_var.set(audio_output)
+
+        ffmpeg_path = audio.get("ffmpeg_path")
+        if isinstance(ffmpeg_path, str):
+            self.ffmpeg_var.set(ffmpeg_path)
+
+        output_format = audio.get("output_format")
+        if isinstance(output_format, str) and output_format in AUDIO_OUTPUT_FORMATS:
+            self.audio_format_var.set(output_format)
+
+        self.slowdown_var.set(
+            self._coerce_float(
+                audio.get("slowdown_percent"),
+                self.default_audio_settings.slowdown_percent,
+                0.0,
+                45.0,
+            )
+        )
+        self.vinyl_var.set(
+            self._coerce_float(
+                audio.get("vinyl_volume_percent"),
+                self.default_audio_settings.vinyl_volume_percent,
+                0.0,
+                100.0,
+            )
+        )
+        self.reverb_var.set(
+            self._coerce_float(
+                audio.get("reverb_percent"),
+                self.default_audio_settings.reverb_percent,
+                0.0,
+                100.0,
+            )
+        )
+        self.audio_fade_in_var.set(
+            self._coerce_float(
+                audio.get("fade_in_seconds"),
+                self.default_audio_settings.fade_in_seconds,
+                0.0,
+                8.0,
+            )
+        )
+        self._set_eq_band_gains(audio.get("eq_band_gains"))
+        self.audio_fade_out_var.set(
+            self._coerce_float(
+                audio.get("fade_out_seconds"),
+                self.default_audio_settings.fade_out_seconds,
+                0.0,
+                8.0,
+            )
+        )
+
+    def _apply_video_settings(self, video: dict[str, object]) -> None:
+        video_audio_input = video.get("audio_input_dir")
+        if isinstance(video_audio_input, str) and video_audio_input.strip():
+            self.video_audio_input_var.set(video_audio_input)
+
+        video_output = video.get("output_dir")
+        if isinstance(video_output, str) and video_output.strip():
+            self.video_output_var.set(video_output)
+
+        self.video_fade_in_var.set(
+            self._coerce_float(
+                video.get("fade_in_seconds"),
+                self.default_video_settings.fade_in_seconds,
+                0.0,
+                8.0,
+            )
+        )
+        self.video_fade_out_var.set(
+            self._coerce_float(
+                video.get("fade_out_seconds"),
+                self.default_video_settings.fade_out_seconds,
+                0.0,
+                8.0,
+            )
+        )
+        self.video_noise_var.set(
+            self._coerce_float(
+                video.get("noise_percent"),
+                self.default_video_settings.noise_percent,
+                0.0,
+                100.0,
+            )
+        )
+        self.video_distortion_var.set(
+            self._coerce_float(
+                video.get("distortion_percent"),
+                self.default_video_settings.distortion_percent,
+                0.0,
+                100.0,
+            )
+        )
+        self.video_encoder_var.set(
+            self._sanitize_video_encoder(
+                video.get("video_encoder"),
+                self.default_video_settings.video_encoder,
+            )
+        )
+
     def _load_persisted_app_settings(self) -> None:
         payload = self._read_persisted_app_settings()
         if not payload:
@@ -3216,112 +3357,11 @@ class DoomerGeneratorApp:
 
         audio = payload.get("audio")
         if isinstance(audio, dict):
-            audio_input = audio.get("input_dir")
-            if isinstance(audio_input, str) and audio_input.strip():
-                self.audio_input_var.set(audio_input)
-
-            audio_output = audio.get("output_dir")
-            if isinstance(audio_output, str) and audio_output.strip():
-                self.audio_output_var.set(audio_output)
-
-            ffmpeg_path = audio.get("ffmpeg_path")
-            if isinstance(ffmpeg_path, str):
-                self.ffmpeg_var.set(ffmpeg_path)
-
-            output_format = audio.get("output_format")
-            if isinstance(output_format, str) and output_format in AUDIO_OUTPUT_FORMATS:
-                self.audio_format_var.set(output_format)
-
-            self.slowdown_var.set(
-                self._coerce_float(
-                    audio.get("slowdown_percent"),
-                    self.default_audio_settings.slowdown_percent,
-                    0.0,
-                    45.0,
-                )
-            )
-            self.vinyl_var.set(
-                self._coerce_float(
-                    audio.get("vinyl_volume_percent"),
-                    self.default_audio_settings.vinyl_volume_percent,
-                    0.0,
-                    100.0,
-                )
-            )
-            self.reverb_var.set(
-                self._coerce_float(
-                    audio.get("reverb_percent"),
-                    self.default_audio_settings.reverb_percent,
-                    0.0,
-                    100.0,
-                )
-            )
-            self.audio_fade_in_var.set(
-                self._coerce_float(
-                    audio.get("fade_in_seconds"),
-                    self.default_audio_settings.fade_in_seconds,
-                    0.0,
-                    8.0,
-                )
-            )
-            self._set_eq_band_gains(audio.get("eq_band_gains"))
-            self.audio_fade_out_var.set(
-                self._coerce_float(
-                    audio.get("fade_out_seconds"),
-                    self.default_audio_settings.fade_out_seconds,
-                    0.0,
-                    8.0,
-                )
-            )
+            self._apply_audio_settings(audio)
 
         video = payload.get("video")
         if isinstance(video, dict):
-            video_audio_input = video.get("audio_input_dir")
-            if isinstance(video_audio_input, str) and video_audio_input.strip():
-                self.video_audio_input_var.set(video_audio_input)
-
-            video_output = video.get("output_dir")
-            if isinstance(video_output, str) and video_output.strip():
-                self.video_output_var.set(video_output)
-
-            self.video_fade_in_var.set(
-                self._coerce_float(
-                    video.get("fade_in_seconds"),
-                    self.default_video_settings.fade_in_seconds,
-                    0.0,
-                    8.0,
-                )
-            )
-            self.video_fade_out_var.set(
-                self._coerce_float(
-                    video.get("fade_out_seconds"),
-                    self.default_video_settings.fade_out_seconds,
-                    0.0,
-                    8.0,
-                )
-            )
-            self.video_noise_var.set(
-                self._coerce_float(
-                    video.get("noise_percent"),
-                    self.default_video_settings.noise_percent,
-                    0.0,
-                    100.0,
-                )
-            )
-            self.video_distortion_var.set(
-                self._coerce_float(
-                    video.get("distortion_percent"),
-                    self.default_video_settings.distortion_percent,
-                    0.0,
-                    100.0,
-                )
-            )
-            self.video_encoder_var.set(
-                self._sanitize_video_encoder(
-                    video.get("video_encoder"),
-                    self.default_video_settings.video_encoder,
-                )
-            )
+            self._apply_video_settings(video)
 
         upload = payload.get("upload")
         if isinstance(upload, dict):
@@ -3438,6 +3478,7 @@ class DoomerGeneratorApp:
         self.audio_test_play_button.configure(state=state)
         self.audio_test_stop_button.configure(state=state)
         self.video_generate_button.configure(state=state)
+        self.video_reset_button.configure(state=state)
         self.video_save_button.configure(state=state)
         self.video_encoder_combo.configure(state="readonly" if enabled else "disabled")
         self.youtube_login_button.configure(state=state)
