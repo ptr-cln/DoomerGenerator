@@ -43,6 +43,349 @@ DOOMER_OVERLAY_HEIGHT = 980
 DOOMER_OVERLAY_LEFT = 36
 APP_SETTINGS_FILE = "app_settings.json"
 AUDIO_OUTPUT_FORMATS = {"mp3", "wav", "flac", "ogg"}
+VIDEO_ENCODER_OPTIONS = {"auto", "cpu", "nvidia", "intel", "amd"}
+VIDEO_ENCODER_LABELS = {
+    "auto": "Auto (GPU se disponibile)",
+    "cpu": "CPU (libx264)",
+    "nvidia": "NVIDIA NVENC",
+    "intel": "Intel Quick Sync (QSV)",
+    "amd": "AMD AMF",
+}
+LANGUAGE_LABEL_TO_CODE = {
+    "Italiano": "it",
+    "English": "en",
+}
+LANGUAGE_CODE_TO_LABEL = {code: label for label, code in LANGUAGE_LABEL_TO_CODE.items()}
+UI_TEXTS = {
+    "it": {
+        "app_title": "Doomer Wave Generator",
+        "status_ready": "Pronto",
+        "tab_general": "General",
+        "tab_download": "Download",
+        "tab_audio": "Audio",
+        "tab_video": "Video",
+        "tab_upload": "Upload",
+        "status_group": "Stato",
+        "log_group": "Log",
+        "general_group_language": "Lingua",
+        "general_label_language": "Lingua interfaccia",
+        "general_group_maintenance": "Manutenzione",
+        "general_btn_clear_audio_in": "Svuota input audio",
+        "general_btn_clear_audio_out": "Svuota output audio",
+        "general_btn_clear_video_out": "Svuota output video",
+        "general_btn_clear_links": "Svuota YouTube links",
+        "general_btn_clear_all": "Svuota tutto",
+        "general_group_paths": "Percorsi",
+        "general_path_audio_in": "Audio input: {path}",
+        "general_path_audio_out": "Audio output: {path}",
+        "general_path_video_out": "Video output: {path}",
+        "general_path_links": "YouTube links: {path}",
+        "download_group": "YouTube",
+        "download_label_links_file": "File link",
+        "download_btn_open_file": "Apri file",
+        "download_btn_download_mp3": "Scarica Mp3",
+        "download_hint_target": "I download vengono salvati in: {path}",
+        "audio_group_folders": "Cartelle Audio",
+        "audio_label_input": "Input",
+        "audio_label_output": "Output",
+        "browse_btn": "Sfoglia...",
+        "audio_group_tools": "Strumenti",
+        "audio_label_ffmpeg_optional": "ffmpeg.exe (opzionale)",
+        "audio_label_output_format": "Formato output",
+        "audio_group_effects": "Effetti Audio",
+        "audio_lbl_slowdown": "Rallentamento (%)",
+        "audio_desc_slowdown": "Rallenta e abbassa leggermente il pitch.",
+        "audio_lbl_lowpass": "Taglio alte frequenze (%)",
+        "audio_desc_lowpass": "Riduce le alte frequenze.",
+        "audio_lbl_bass": "Bass boost (%)",
+        "audio_desc_bass": "Aumenta la presenza delle frequenze basse.",
+        "audio_lbl_vinyl": "Volume vinile (%)",
+        "audio_desc_vinyl": "Mix del vinile casuale da resources/vinyls.",
+        "audio_lbl_reverb": "Reverb (%)",
+        "audio_desc_reverb": "Riverbero leggero atmosferico.",
+        "audio_lbl_fade_in": "Fade in audio (secondi)",
+        "audio_desc_fade_in": "Durata dissolvenza in ingresso.",
+        "audio_lbl_fade_out": "Fade out audio (secondi)",
+        "audio_desc_fade_out": "Durata dissolvenza in uscita.",
+        "audio_btn_convert": "Avvia conversione batch",
+        "audio_btn_reset": "Reset default",
+        "save_settings_btn": "Salva impostazioni",
+        "video_group_resources": "Risorse Video",
+        "video_label_backgrounds": "Backgrounds",
+        "video_label_doomer_image": "Doomer image",
+        "video_group_folders": "Cartelle Video",
+        "video_label_audio_input": "Input audio",
+        "video_label_output": "Output video",
+        "video_label_encoder": "Encoder video",
+        "video_encoder_hint": "auto: prova NVENC/QSV/AMF e fallback a CPU se necessario.",
+        "video_group_effects": "Effetti Video",
+        "video_lbl_fade_in": "Fade in video (secondi)",
+        "video_desc_fade_in": "Dissolvenza in ingresso su video + audio.",
+        "video_lbl_fade_out": "Fade out video (secondi)",
+        "video_desc_fade_out": "Dissolvenza in uscita su video + audio.",
+        "video_lbl_noise": "Rumore video (%)",
+        "video_desc_noise": "Grana/noise su tutto il frame.",
+        "video_lbl_distortion": "Distorsione (%)",
+        "video_desc_distortion": "Jitter/instabilita stile VHS su tutto il frame.",
+        "video_btn_generate": "Genera video batch",
+        "upload_group_source": "Sorgente Upload",
+        "upload_label_video_folder": "Cartella video",
+        "upload_group_auth": "Autenticazione YouTube API",
+        "upload_label_oauth_client": "OAuth client JSON",
+        "upload_label_oauth_token": "Token OAuth",
+        "upload_group_options": "Opzioni Upload",
+        "upload_label_privacy": "Privacy",
+        "upload_label_category": "Categoria",
+        "upload_check_auto_tags": "Tag automatici (AI + fallback smart)",
+        "upload_label_extra_tags": "Tag extra (csv)",
+        "upload_label_openai_model": "OpenAI model",
+        "upload_label_openai_key": "OpenAI API key (opzionale)",
+        "upload_openai_hint": "Se la key e vuota, viene usata la variabile ambiente OPENAI_API_KEY.",
+        "upload_group_description": "Template Descrizione",
+        "upload_placeholder_hint": "Placeholder disponibile: {title}",
+        "upload_btn_login": "Login YouTube",
+        "upload_btn_upload": "Upload video/out",
+        "dialog_info_title": "Info",
+        "dialog_error_title": "Errore",
+        "dialog_completed_title": "Completato",
+        "dialog_confirm_title": "Conferma",
+        "dialog_busy_message": "Attendi la fine dell'elaborazione corrente.",
+        "dialog_no_links_title": "Nessun link",
+        "dialog_no_links_body": "Il file dei link e vuoto.\nAggiungi almeno un URL YouTube e riprova.",
+        "dialog_no_valid_links_title": "Nessun link valido",
+        "dialog_no_valid_links_body": "Non ci sono target validi da scaricare dopo la deduplica dei link.",
+        "dialog_invalid_input_title": "Input non valido",
+        "dialog_invalid_audio_input_body": "Seleziona una cartella input audio valida.",
+        "dialog_invalid_video_folder_body": "Seleziona una cartella video valida.",
+        "dialog_invalid_folders_title": "Cartelle non valide",
+        "dialog_invalid_folders_body": "Input e output audio devono essere diversi.",
+        "dialog_invalid_category_title": "Categoria non valida",
+        "dialog_invalid_category_body": "Category ID deve essere numerico (es. 10).",
+        "progress_download_running": "Download MP3 in corso...",
+        "progress_audio_running": "Conversione audio in corso...",
+        "progress_video_running": "Generazione video in corso...",
+        "progress_login_running": "Login YouTube in corso...",
+        "progress_upload_running": "Upload YouTube in corso...",
+        "progress_runtime_download_error": "Errore durante il download",
+        "progress_runtime_upload_error": "Errore durante upload YouTube",
+        "progress_login_done": "Login YouTube completato",
+        "progress_login_error": "Errore login YouTube",
+        "progress_download_file": "Download in corso: {index}/{total} - {percent:.1f}% del link",
+        "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name})",
+        "progress_generic": "Progress: {done}/{total}",
+        "progress_download_done": "Download completato - OK: {ok}, Errori: {err}",
+        "progress_upload_done": "Upload completato - OK: {ok}, Errori: {err}",
+        "progress_audio_done": "Audio completato - OK: {ok}, Errori: {err}",
+        "progress_video_done": "Video completato - OK: {ok}, Errori: {err}",
+        "log_download_start": "Avvio download YouTube ({total} target unici)...",
+        "log_links_file": "File link: {path}",
+        "log_destination": "Destinazione: {path}",
+        "log_duplicates_ignored": "Link duplicati ignorati: {count}",
+        "log_audio_start": "Avvio conversione audio batch...",
+        "log_ffmpeg_using": "Uso ffmpeg: {path}",
+        "log_video_start": "Avvio generazione video batch...",
+        "log_input_audio": "Input audio: {path}",
+        "log_output_video": "Output video: {path}",
+        "log_upload_start": "Avvio upload YouTube da: {path}",
+        "log_audio_defaults_reset": "Parametri audio ripristinati ai default.",
+        "log_audio_settings_saved": "Impostazioni audio salvate in {file}.",
+        "log_video_settings_saved": "Impostazioni video salvate in {file}.",
+        "log_upload_settings_saved": "Impostazioni upload salvate in {file}.",
+        "log_settings_save_error": "Errore salvataggio impostazioni: {error}",
+        "log_download_finished": "Fine download YouTube. Totale: {total}, OK: {ok}, Errori: {err}",
+        "log_upload_finished": "Fine upload YouTube. Totale: {total}, OK: {ok}, Errori: {err}",
+        "log_audio_finished": "Fine conversione audio. Totale: {total}, OK: {ok}, Errori: {err}",
+        "log_video_finished": "Fine generazione video. Totale: {total}, OK: {ok}, Errori: {err}",
+        "log_runtime_download_error": "Errore runtime download: {detail}",
+        "log_runtime_upload_error": "Errore runtime upload: {detail}",
+        "log_login_done": "Login YouTube completato e token salvato.",
+        "log_login_error": "Errore login YouTube: {detail}",
+        "log_clear_dir": "Svuotata cartella {label}: {path} (file rimossi: {count})",
+        "msg_clear_dir": "Cartella {label} svuotata.\nFile rimossi: {count}",
+        "log_links_reset": "File youtube_links.txt ripristinato (vuoto).",
+        "msg_links_reset": "youtube_links.txt svuotato.",
+        "clear_all_confirm": "Vuoi svuotare input audio, output audio, output video e youtube_links.txt?",
+        "clear_all_done": "Pulizia completata.\nInput audio: {in_count}\nOutput audio: {out_count}\nOutput video: {video_count}",
+        "ffmpeg_missing_download_title": "ffmpeg non trovato",
+        "ffmpeg_missing_download_body": "ffmpeg serve per l'estrazione MP3.\nInstalla con: winget install Gyan.FFmpeg\noppure seleziona ffmpeg.exe.",
+        "ytdlp_missing_title": "yt-dlp non trovato",
+        "ytdlp_missing_body": "Installa yt-dlp:\npip install yt-dlp\noppure: winget install yt-dlp.yt-dlp",
+        "file_open_error_title": "Errore apertura file",
+        "file_open_error_body": "Impossibile aprire il file link.\n{error}",
+        "clear_links_error_body": "Impossibile svuotare il file links.\n{error}",
+        "log_clear_all": "Svuota tutto completato: input audio={in_count}, output audio={out_count}, output video={video_count}",
+        "log_clear_links_error": "Errore durante reset youtube_links: {error}",
+        "log_oauth_autodetected": "OAuth JSON rilevato automaticamente: {path}",
+        "oauth_missing_title": "OAuth JSON mancante",
+        "oauth_missing_body": "Seleziona il file OAuth client JSON scaricato da Google Cloud.",
+        "oauth_file_missing_title": "File OAuth mancante",
+        "oauth_file_missing_body": "Nessun file JSON valido selezionato.\nScegli il file credenziali OAuth Desktop prima di fare login.",
+    },
+    "en": {
+        "app_title": "Doomer Wave Generator",
+        "status_ready": "Ready",
+        "tab_general": "General",
+        "tab_download": "Download",
+        "tab_audio": "Audio",
+        "tab_video": "Video",
+        "tab_upload": "Upload",
+        "status_group": "Status",
+        "log_group": "Log",
+        "general_group_language": "Language",
+        "general_label_language": "UI language",
+        "general_group_maintenance": "Maintenance",
+        "general_btn_clear_audio_in": "Clear audio input",
+        "general_btn_clear_audio_out": "Clear audio output",
+        "general_btn_clear_video_out": "Clear video output",
+        "general_btn_clear_links": "Clear YouTube links",
+        "general_btn_clear_all": "Clear all",
+        "general_group_paths": "Paths",
+        "general_path_audio_in": "Audio input: {path}",
+        "general_path_audio_out": "Audio output: {path}",
+        "general_path_video_out": "Video output: {path}",
+        "general_path_links": "YouTube links: {path}",
+        "download_group": "YouTube",
+        "download_label_links_file": "Links file",
+        "download_btn_open_file": "Open file",
+        "download_btn_download_mp3": "Download MP3",
+        "download_hint_target": "Downloads are saved to: {path}",
+        "audio_group_folders": "Audio Folders",
+        "audio_label_input": "Input",
+        "audio_label_output": "Output",
+        "browse_btn": "Browse...",
+        "audio_group_tools": "Tools",
+        "audio_label_ffmpeg_optional": "ffmpeg.exe (optional)",
+        "audio_label_output_format": "Output format",
+        "audio_group_effects": "Audio Effects",
+        "audio_lbl_slowdown": "Slowdown (%)",
+        "audio_desc_slowdown": "Slows down and slightly lowers pitch.",
+        "audio_lbl_lowpass": "High-cut (%)",
+        "audio_desc_lowpass": "Reduces high frequencies.",
+        "audio_lbl_bass": "Bass boost (%)",
+        "audio_desc_bass": "Boosts low-frequency presence.",
+        "audio_lbl_vinyl": "Vinyl volume (%)",
+        "audio_desc_vinyl": "Mix level for random vinyl noise from resources/vinyls.",
+        "audio_lbl_reverb": "Reverb (%)",
+        "audio_desc_reverb": "Light atmospheric reverb.",
+        "audio_lbl_fade_in": "Audio fade in (seconds)",
+        "audio_desc_fade_in": "Fade-in duration.",
+        "audio_lbl_fade_out": "Audio fade out (seconds)",
+        "audio_desc_fade_out": "Fade-out duration.",
+        "audio_btn_convert": "Start batch conversion",
+        "audio_btn_reset": "Reset defaults",
+        "save_settings_btn": "Save settings",
+        "video_group_resources": "Video Resources",
+        "video_label_backgrounds": "Backgrounds",
+        "video_label_doomer_image": "Doomer image",
+        "video_group_folders": "Video Folders",
+        "video_label_audio_input": "Audio input",
+        "video_label_output": "Video output",
+        "video_label_encoder": "Video encoder",
+        "video_encoder_hint": "auto: tries NVENC/QSV/AMF and falls back to CPU if needed.",
+        "video_group_effects": "Video Effects",
+        "video_lbl_fade_in": "Video fade in (seconds)",
+        "video_desc_fade_in": "Fade-in applied to video + audio.",
+        "video_lbl_fade_out": "Video fade out (seconds)",
+        "video_desc_fade_out": "Fade-out applied to video + audio.",
+        "video_lbl_noise": "Video noise (%)",
+        "video_desc_noise": "Film grain/noise across the full frame.",
+        "video_lbl_distortion": "Distortion (%)",
+        "video_desc_distortion": "VHS-style jitter/instability across the full frame.",
+        "video_btn_generate": "Generate batch videos",
+        "upload_group_source": "Upload Source",
+        "upload_label_video_folder": "Video folder",
+        "upload_group_auth": "YouTube API Authentication",
+        "upload_label_oauth_client": "OAuth client JSON",
+        "upload_label_oauth_token": "OAuth token",
+        "upload_group_options": "Upload Options",
+        "upload_label_privacy": "Privacy",
+        "upload_label_category": "Category",
+        "upload_check_auto_tags": "Automatic tags (AI + smart fallback)",
+        "upload_label_extra_tags": "Extra tags (csv)",
+        "upload_label_openai_model": "OpenAI model",
+        "upload_label_openai_key": "OpenAI API key (optional)",
+        "upload_openai_hint": "If key is empty, OPENAI_API_KEY env var is used.",
+        "upload_group_description": "Description Template",
+        "upload_placeholder_hint": "Available placeholder: {title}",
+        "upload_btn_login": "YouTube login",
+        "upload_btn_upload": "Upload video/out",
+        "dialog_info_title": "Info",
+        "dialog_error_title": "Error",
+        "dialog_completed_title": "Completed",
+        "dialog_confirm_title": "Confirm",
+        "dialog_busy_message": "Wait for the current task to finish.",
+        "dialog_no_links_title": "No links",
+        "dialog_no_links_body": "The links file is empty.\nAdd at least one YouTube URL and try again.",
+        "dialog_no_valid_links_title": "No valid links",
+        "dialog_no_valid_links_body": "There are no valid download targets after link deduplication.",
+        "dialog_invalid_input_title": "Invalid input",
+        "dialog_invalid_audio_input_body": "Select a valid audio input folder.",
+        "dialog_invalid_video_folder_body": "Select a valid video folder.",
+        "dialog_invalid_folders_title": "Invalid folders",
+        "dialog_invalid_folders_body": "Audio input and output folders must be different.",
+        "dialog_invalid_category_title": "Invalid category",
+        "dialog_invalid_category_body": "Category ID must be numeric (e.g. 10).",
+        "progress_download_running": "Downloading MP3...",
+        "progress_audio_running": "Audio conversion in progress...",
+        "progress_video_running": "Video generation in progress...",
+        "progress_login_running": "YouTube login in progress...",
+        "progress_upload_running": "YouTube upload in progress...",
+        "progress_runtime_download_error": "Download error",
+        "progress_runtime_upload_error": "YouTube upload error",
+        "progress_login_done": "YouTube login completed",
+        "progress_login_error": "YouTube login error",
+        "progress_download_file": "Download in progress: {index}/{total} - {percent:.1f}% of link",
+        "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name})",
+        "progress_generic": "Progress: {done}/{total}",
+        "progress_download_done": "Download completed - OK: {ok}, Errors: {err}",
+        "progress_upload_done": "Upload completed - OK: {ok}, Errors: {err}",
+        "progress_audio_done": "Audio completed - OK: {ok}, Errors: {err}",
+        "progress_video_done": "Video completed - OK: {ok}, Errors: {err}",
+        "log_download_start": "Starting YouTube download ({total} unique targets)...",
+        "log_links_file": "Links file: {path}",
+        "log_destination": "Destination: {path}",
+        "log_duplicates_ignored": "Duplicate links ignored: {count}",
+        "log_audio_start": "Starting batch audio conversion...",
+        "log_ffmpeg_using": "Using ffmpeg: {path}",
+        "log_video_start": "Starting batch video generation...",
+        "log_input_audio": "Audio input: {path}",
+        "log_output_video": "Video output: {path}",
+        "log_upload_start": "Starting YouTube upload from: {path}",
+        "log_audio_defaults_reset": "Audio settings reset to defaults.",
+        "log_audio_settings_saved": "Audio settings saved to {file}.",
+        "log_video_settings_saved": "Video settings saved to {file}.",
+        "log_upload_settings_saved": "Upload settings saved to {file}.",
+        "log_settings_save_error": "Settings save error: {error}",
+        "log_download_finished": "YouTube download finished. Total: {total}, OK: {ok}, Errors: {err}",
+        "log_upload_finished": "YouTube upload finished. Total: {total}, OK: {ok}, Errors: {err}",
+        "log_audio_finished": "Audio conversion finished. Total: {total}, OK: {ok}, Errors: {err}",
+        "log_video_finished": "Video generation finished. Total: {total}, OK: {ok}, Errors: {err}",
+        "log_runtime_download_error": "Download runtime error: {detail}",
+        "log_runtime_upload_error": "Upload runtime error: {detail}",
+        "log_login_done": "YouTube login completed and token saved.",
+        "log_login_error": "YouTube login error: {detail}",
+        "log_clear_dir": "Cleared {label} folder: {path} (files removed: {count})",
+        "msg_clear_dir": "{label} folder cleared.\nFiles removed: {count}",
+        "log_links_reset": "youtube_links.txt reset (empty template).",
+        "msg_links_reset": "youtube_links.txt cleared.",
+        "clear_all_confirm": "Do you want to clear audio input, audio output, video output and youtube_links.txt?",
+        "clear_all_done": "Cleanup completed.\nAudio input: {in_count}\nAudio output: {out_count}\nVideo output: {video_count}",
+        "ffmpeg_missing_download_title": "ffmpeg not found",
+        "ffmpeg_missing_download_body": "ffmpeg is required to extract MP3.\nInstall with: winget install Gyan.FFmpeg\nor select ffmpeg.exe.",
+        "ytdlp_missing_title": "yt-dlp not found",
+        "ytdlp_missing_body": "Install yt-dlp:\npip install yt-dlp\nor: winget install yt-dlp.yt-dlp",
+        "file_open_error_title": "File open error",
+        "file_open_error_body": "Unable to open links file.\n{error}",
+        "clear_links_error_body": "Unable to clear links file.\n{error}",
+        "log_clear_all": "Clear all completed: audio input={in_count}, audio output={out_count}, video output={video_count}",
+        "log_clear_links_error": "Error while resetting youtube_links: {error}",
+        "log_oauth_autodetected": "OAuth JSON auto-detected: {path}",
+        "oauth_missing_title": "OAuth JSON missing",
+        "oauth_missing_body": "Select the OAuth client JSON file downloaded from Google Cloud.",
+        "oauth_file_missing_title": "OAuth file missing",
+        "oauth_file_missing_body": "No valid JSON file selected.\nChoose a Desktop OAuth credentials file before login.",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -112,6 +455,7 @@ class VideoSettings:
     fade_out_seconds: float = 3.0
     noise_percent: float = 65.0
     distortion_percent: float = 75.0
+    video_encoder: str = "auto"
 
     def build_filter_complex(self, audio_duration_seconds: float | None) -> str:
         noise_amount = round(5.0 + (self.noise_percent / 100.0) * 38.0, 2)
@@ -1005,6 +1349,8 @@ class DoomerVideoGenerator:
         self.backgrounds_dir = backgrounds_dir
         self.doomer_image = doomer_image
         self.log = log
+        self.available_video_encoders = self._detect_available_video_encoders()
+        self.failed_video_encoders: set[str] = set()
 
     def generate_from_audio_folder(
         self,
@@ -1028,6 +1374,12 @@ class DoomerVideoGenerator:
             self.log(f"Nessun background trovato in: {self.backgrounds_dir}")
             return VideoSummary(total=total, generated=0, failed=total)
 
+        resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
+        self.log(
+            "Encoder video attivo: "
+            f"{VIDEO_ENCODER_LABELS.get(resolved_encoder, resolved_encoder)}"
+        )
+
         generated = 0
         failed = 0
 
@@ -1040,7 +1392,7 @@ class DoomerVideoGenerator:
             self.log(f"[{index}/{total}] Video: {audio_file.name}")
             self.log(f"  Background: {background.name}")
 
-            if self._generate_single_video(audio_file, background, destination, settings):
+            if self._generate_single_video(audio_file, background, destination, settings, resolved_encoder):
                 generated += 1
                 self.log(f"  OK -> {destination.name}")
             else:
@@ -1057,12 +1409,60 @@ class DoomerVideoGenerator:
         background: Path,
         destination: Path,
         settings: VideoSettings,
+        resolved_encoder: str,
     ) -> bool:
         duration = self._probe_duration_seconds(audio_file)
         if duration is None:
             self.log("  Durata audio non rilevata: fade out video/audio disattivato per questo file.")
 
-        command = [
+        active_encoder = "cpu" if resolved_encoder in self.failed_video_encoders else resolved_encoder
+        command = self._build_video_render_command(
+            audio_file=audio_file,
+            background=background,
+            destination=destination,
+            settings=settings,
+            duration=duration,
+            encoder=active_encoder,
+        )
+
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            return True
+
+        if active_encoder != "cpu":
+            self.log("  Encoder GPU non disponibile/stabile su questo host. Fallback CPU...")
+            self.failed_video_encoders.add(active_encoder)
+            fallback_command = self._build_video_render_command(
+                audio_file=audio_file,
+                background=background,
+                destination=destination,
+                settings=settings,
+                duration=duration,
+                encoder="cpu",
+            )
+            fallback_result = subprocess.run(fallback_command, capture_output=True, text=True)
+            if fallback_result.returncode == 0:
+                return True
+            detail = _summarize_process_output(fallback_result.stdout, fallback_result.stderr)
+            if detail:
+                self.log(f"  ffmpeg: {detail}")
+            return False
+
+        detail = _summarize_process_output(result.stdout, result.stderr)
+        if detail:
+            self.log(f"  ffmpeg: {detail}")
+        return False
+
+    def _build_video_render_command(
+        self,
+        audio_file: Path,
+        background: Path,
+        destination: Path,
+        settings: VideoSettings,
+        duration: float | None,
+        encoder: str,
+    ) -> list[str]:
+        return [
             self.ffmpeg_bin,
             "-hide_banner",
             "-loglevel",
@@ -1084,12 +1484,7 @@ class DoomerVideoGenerator:
             "[vout]",
             "-map",
             "[aout]",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "medium",
-            "-crf",
-            "18",
+            *self._video_codec_flags(encoder),
             "-pix_fmt",
             "yuv420p",
             "-c:a",
@@ -1100,13 +1495,48 @@ class DoomerVideoGenerator:
             str(destination),
         ]
 
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode == 0:
-            return True
-        detail = _summarize_process_output(result.stdout, result.stderr)
-        if detail:
-            self.log(f"  ffmpeg: {detail}")
-        return False
+    def _detect_available_video_encoders(self) -> set[str]:
+        available = {"cpu"}
+        command = [self.ffmpeg_bin, "-hide_banner", "-encoders"]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True)
+        except OSError:
+            return available
+        if result.returncode != 0:
+            return available
+        text = f"{result.stdout}\n{result.stderr}".lower()
+        if "h264_nvenc" in text:
+            available.add("nvidia")
+        if "h264_qsv" in text:
+            available.add("intel")
+        if "h264_amf" in text:
+            available.add("amd")
+        return available
+
+    def _resolve_video_encoder(self, requested: str) -> str:
+        normalized = requested.strip().lower()
+        if normalized not in VIDEO_ENCODER_OPTIONS:
+            normalized = "auto"
+
+        if normalized == "auto":
+            for encoder in ("nvidia", "intel", "amd", "cpu"):
+                if encoder in self.available_video_encoders:
+                    return encoder
+            return "cpu"
+
+        if normalized in self.available_video_encoders:
+            return normalized
+        return "cpu"
+
+    @staticmethod
+    def _video_codec_flags(encoder: str) -> list[str]:
+        if encoder == "nvidia":
+            return ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "22", "-b:v", "0"]
+        if encoder == "intel":
+            return ["-c:v", "h264_qsv", "-global_quality", "23"]
+        if encoder == "amd":
+            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "22", "-qp_p", "24"]
+        return ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
 
     def _probe_duration_seconds(self, audio_file: Path) -> float | None:
         if not self.ffprobe_bin:
@@ -1151,7 +1581,8 @@ class DoomerVideoGenerator:
 class DoomerGeneratorApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Doomer Wave Generator")
+        self.current_language = "it"
+        self.main_frame: ttk.Frame | None = None
         self.root.geometry("1200x900")
         self.root.minsize(980, 760)
 
@@ -1208,6 +1639,7 @@ class DoomerGeneratorApp:
         self.video_fade_out_var = tk.DoubleVar(value=self.default_video_settings.fade_out_seconds)
         self.video_noise_var = tk.DoubleVar(value=self.default_video_settings.noise_percent)
         self.video_distortion_var = tk.DoubleVar(value=self.default_video_settings.distortion_percent)
+        self.video_encoder_var = tk.StringVar(value=self.default_video_settings.video_encoder)
         self.upload_video_input_var = tk.StringVar(value=str(self.video_output_dir))
         self.youtube_client_secret_var = tk.StringVar(value=str(self.youtube_client_secret_path))
         self.youtube_token_var = tk.StringVar(value=str(self.youtube_token_path))
@@ -1217,16 +1649,79 @@ class DoomerGeneratorApp:
         self.youtube_smart_tags_var = tk.BooleanVar(value=self.default_upload_settings.smart_tags_enabled)
         self.youtube_openai_model_var = tk.StringVar(value=self.default_upload_settings.openai_model)
         self.youtube_openai_key_var = tk.StringVar(value="")
+        self.youtube_description_text = self.default_upload_settings.description_template
+        self.language_var = tk.StringVar(value=LANGUAGE_CODE_TO_LABEL[self.current_language])
 
         self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress_text = tk.StringVar(value="Pronto")
+        self.progress_text = tk.StringVar(value=self._t("status_ready"))
 
         self._load_persisted_app_settings()
+        self.progress_text.set(self._t("status_ready"))
         self._build_ui()
         self.root.after(100, self._poll_events)
 
+    def _t(self, key: str, **kwargs: object) -> str:
+        table = UI_TEXTS.get(self.current_language, UI_TEXTS["it"])
+        template = table.get(key) or UI_TEXTS["it"].get(key) or key
+        if kwargs:
+            try:
+                return template.format(**kwargs)
+            except Exception:
+                return template
+        return template
+
+    def _persist_general_language(self) -> None:
+        payload = self._read_persisted_app_settings()
+        general = payload.get("general")
+        if not isinstance(general, dict):
+            general = {}
+        general["language"] = self.current_language
+        payload["general"] = general
+        self._write_persisted_app_settings(payload)
+
+    def _on_language_changed(self, _event=None) -> None:
+        selected_label = self.language_var.get().strip()
+        selected_code = LANGUAGE_LABEL_TO_CODE.get(selected_label, self.current_language)
+        if selected_code == self.current_language:
+            return
+        if self._is_busy():
+            self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "Italiano"))
+            messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
+            return
+        self.current_language = selected_code
+        self._persist_general_language()
+        self._rebuild_ui()
+
+    def _rebuild_ui(self) -> None:
+        previous_logs = ""
+        if hasattr(self, "log_widget"):
+            try:
+                previous_logs = self.log_widget.get("1.0", tk.END)
+            except Exception:
+                previous_logs = ""
+        if hasattr(self, "youtube_description_widget"):
+            try:
+                text = self.youtube_description_widget.get("1.0", tk.END).strip()
+                if text:
+                    self.youtube_description_text = text
+            except Exception:
+                pass
+        self._build_ui()
+        if previous_logs.strip():
+            self.log_widget.configure(state=tk.NORMAL)
+            self.log_widget.insert(tk.END, previous_logs)
+            self.log_widget.see(tk.END)
+            self.log_widget.configure(state=tk.DISABLED)
+        if not self._is_busy():
+            self.progress_text.set(self._t("status_ready"))
+
     def _build_ui(self) -> None:
+        if self.main_frame is not None:
+            self.main_frame.destroy()
+        self.root.title(self._t("app_title"))
+
         main = ttk.Frame(self.root, padding=12)
+        self.main_frame = main
         main.pack(fill=tk.BOTH, expand=True)
 
         notebook = ttk.Notebook(main)
@@ -1237,11 +1732,11 @@ class DoomerGeneratorApp:
         audio_tab = ttk.Frame(notebook, padding=10)
         video_tab = ttk.Frame(notebook, padding=10)
         upload_tab = ttk.Frame(notebook, padding=10)
-        notebook.add(general_tab, text="General")
-        notebook.add(download_tab, text="Download")
-        notebook.add(audio_tab, text="Audio")
-        notebook.add(video_tab, text="Video")
-        notebook.add(upload_tab, text="Upload")
+        notebook.add(general_tab, text=self._t("tab_general"))
+        notebook.add(download_tab, text=self._t("tab_download"))
+        notebook.add(audio_tab, text=self._t("tab_audio"))
+        notebook.add(video_tab, text=self._t("tab_video"))
+        notebook.add(upload_tab, text=self._t("tab_upload"))
 
         self._build_general_tab(general_tab)
         self._build_download_tab(download_tab)
@@ -1249,12 +1744,12 @@ class DoomerGeneratorApp:
         self._build_video_tab(video_tab)
         self._build_upload_tab(upload_tab)
 
-        progress_box = ttk.LabelFrame(main, text="Stato", padding=8)
+        progress_box = ttk.LabelFrame(main, text=self._t("status_group"), padding=8)
         progress_box.pack(fill=tk.X, pady=(10, 8))
         ttk.Progressbar(progress_box, variable=self.progress_var, maximum=100).pack(fill=tk.X)
         ttk.Label(progress_box, textvariable=self.progress_text).pack(anchor="w", pady=(6, 0))
 
-        logs_frame = ttk.LabelFrame(main, text="Log", padding=8)
+        logs_frame = ttk.LabelFrame(main, text=self._t("log_group"), padding=8)
         logs_frame.pack(fill=tk.BOTH, expand=True)
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(0, weight=1)
@@ -1266,105 +1761,121 @@ class DoomerGeneratorApp:
         self.log_widget.configure(yscrollcommand=scrollbar.set)
 
     def _build_general_tab(self, parent: ttk.Frame) -> None:
-        actions = ttk.LabelFrame(parent, text="Manutenzione", padding=8)
+        language_box = ttk.LabelFrame(parent, text=self._t("general_group_language"), padding=8)
+        language_box.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(language_box, text=self._t("general_label_language")).grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.language_combo = ttk.Combobox(
+            language_box,
+            textvariable=self.language_var,
+            values=list(LANGUAGE_LABEL_TO_CODE.keys()),
+            state="readonly",
+            width=14,
+        )
+        self.language_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
+        self.language_combo.bind("<<ComboboxSelected>>", self._on_language_changed)
+        self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "Italiano"))
+
+        actions = ttk.LabelFrame(parent, text=self._t("general_group_maintenance"), padding=8)
         actions.pack(fill=tk.X)
 
         self.clear_audio_input_button = ttk.Button(
             actions,
-            text="Svuota input audio",
+            text=self._t("general_btn_clear_audio_in"),
             command=lambda: self._clear_directory_action(self.audio_input_var.get(), "input audio"),
         )
         self.clear_audio_input_button.grid(row=0, column=0, padx=6, pady=6, sticky="w")
 
         self.clear_audio_output_button = ttk.Button(
             actions,
-            text="Svuota output audio",
+            text=self._t("general_btn_clear_audio_out"),
             command=lambda: self._clear_directory_action(self.audio_output_var.get(), "output audio"),
         )
         self.clear_audio_output_button.grid(row=0, column=1, padx=6, pady=6, sticky="w")
 
         self.clear_video_output_button = ttk.Button(
             actions,
-            text="Svuota output video",
+            text=self._t("general_btn_clear_video_out"),
             command=lambda: self._clear_directory_action(self.video_output_var.get(), "output video"),
         )
         self.clear_video_output_button.grid(row=1, column=0, padx=6, pady=6, sticky="w")
 
         self.clear_links_button = ttk.Button(
             actions,
-            text="Svuota Youtube links",
+            text=self._t("general_btn_clear_links"),
             command=self._clear_youtube_links,
         )
         self.clear_links_button.grid(row=1, column=1, padx=6, pady=6, sticky="w")
 
-        self.clear_all_button = ttk.Button(actions, text="Svuota tutto", command=self._clear_all_outputs)
+        self.clear_all_button = ttk.Button(actions, text=self._t("general_btn_clear_all"), command=self._clear_all_outputs)
         self.clear_all_button.grid(row=2, column=0, padx=6, pady=6, sticky="w")
 
-        info = ttk.LabelFrame(parent, text="Percorsi", padding=8)
+        info = ttk.LabelFrame(parent, text=self._t("general_group_paths"), padding=8)
         info.pack(fill=tk.X, pady=(10, 0))
-        ttk.Label(info, text=f"Audio input: {self.audio_input_dir}").pack(anchor="w", pady=2)
-        ttk.Label(info, text=f"Audio output: {self.audio_output_dir}").pack(anchor="w", pady=2)
-        ttk.Label(info, text=f"Video output: {self.video_output_dir}").pack(anchor="w", pady=2)
-        ttk.Label(info, text=f"YouTube links: {self.links_file}").pack(anchor="w", pady=2)
+        ttk.Label(info, text=self._t("general_path_audio_in", path=self.audio_input_dir)).pack(anchor="w", pady=2)
+        ttk.Label(info, text=self._t("general_path_audio_out", path=self.audio_output_dir)).pack(anchor="w", pady=2)
+        ttk.Label(info, text=self._t("general_path_video_out", path=self.video_output_dir)).pack(anchor="w", pady=2)
+        ttk.Label(info, text=self._t("general_path_links", path=self.links_file)).pack(anchor="w", pady=2)
 
     def _build_download_tab(self, parent: ttk.Frame) -> None:
-        box = ttk.LabelFrame(parent, text="YouTube", padding=8)
+        box = ttk.LabelFrame(parent, text=self._t("download_group"), padding=8)
         box.pack(fill=tk.X)
         box.columnconfigure(1, weight=1)
 
-        ttk.Label(box, text="File link").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(box, text=self._t("download_label_links_file")).grid(row=0, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(box, textvariable=self.links_file_var, state="readonly").grid(
             row=0, column=1, padx=6, pady=6, sticky="ew"
         )
-        self.open_links_button = ttk.Button(box, text="Apri file", command=self._open_links_file)
+        self.open_links_button = ttk.Button(box, text=self._t("download_btn_open_file"), command=self._open_links_file)
         self.open_links_button.grid(row=0, column=2, padx=6, pady=6)
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X, pady=(10, 0))
-        self.download_button = ttk.Button(actions, text="Scarica Mp3", command=self._start_download)
+        self.download_button = ttk.Button(actions, text=self._t("download_btn_download_mp3"), command=self._start_download)
         self.download_button.pack(side=tk.LEFT)
 
         ttk.Label(
             parent,
-            text=f"I download vengono salvati in: {self.audio_input_dir}",
+            text=self._t("download_hint_target", path=self.audio_input_dir),
         ).pack(anchor="w", pady=(10, 0))
 
     def _build_audio_tab(self, parent: ttk.Frame) -> None:
-        paths = ttk.LabelFrame(parent, text="Cartelle Audio", padding=8)
+        paths = ttk.LabelFrame(parent, text=self._t("audio_group_folders"), padding=8)
         paths.pack(fill=tk.X, pady=(0, 8))
         paths.columnconfigure(1, weight=1)
 
-        ttk.Label(paths, text="Input").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(paths, text=self._t("audio_label_input")).grid(row=0, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(paths, textvariable=self.audio_input_var).grid(
             row=0, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_audio_input).grid(
+        ttk.Button(paths, text=self._t("browse_btn"), command=self._pick_audio_input).grid(
             row=0, column=2, padx=6, pady=6
         )
 
-        ttk.Label(paths, text="Output").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(paths, text=self._t("audio_label_output")).grid(row=1, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(paths, textvariable=self.audio_output_var).grid(
             row=1, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_audio_output).grid(
+        ttk.Button(paths, text=self._t("browse_btn"), command=self._pick_audio_output).grid(
             row=1, column=2, padx=6, pady=6
         )
 
-        tools = ttk.LabelFrame(parent, text="Strumenti", padding=8)
+        tools = ttk.LabelFrame(parent, text=self._t("audio_group_tools"), padding=8)
         tools.pack(fill=tk.X, pady=(0, 8))
         tools.columnconfigure(1, weight=1)
 
-        ttk.Label(tools, text="ffmpeg.exe (opzionale)").grid(
+        ttk.Label(tools, text=self._t("audio_label_ffmpeg_optional")).grid(
             row=0, column=0, padx=6, pady=6, sticky="w"
         )
         ttk.Entry(tools, textvariable=self.ffmpeg_var).grid(
             row=0, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Button(tools, text="Sfoglia...", command=self._pick_ffmpeg).grid(
+        ttk.Button(tools, text=self._t("browse_btn"), command=self._pick_ffmpeg).grid(
             row=0, column=2, padx=6, pady=6
         )
 
-        ttk.Label(tools, text="Formato output").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(tools, text=self._t("audio_label_output_format")).grid(row=1, column=0, padx=6, pady=6, sticky="w")
         ttk.Combobox(
             tools,
             textvariable=self.audio_format_var,
@@ -1373,72 +1884,72 @@ class DoomerGeneratorApp:
             width=10,
         ).grid(row=1, column=1, padx=6, pady=6, sticky="w")
 
-        effects = ttk.LabelFrame(parent, text="Effetti Audio", padding=8)
+        effects = ttk.LabelFrame(parent, text=self._t("audio_group_effects"), padding=8)
         effects.pack(fill=tk.X, pady=(0, 8))
 
         self._add_slider(
             effects,
-            label="Rallentamento (%)",
+            label=self._t("audio_lbl_slowdown"),
             variable=self.slowdown_var,
             minimum=0,
             maximum=45,
             row=0,
-            description="Rallenta e abbassa leggermente il pitch.",
+            description=self._t("audio_desc_slowdown"),
         )
         self._add_slider(
             effects,
-            label="Taglio alte frequenze (%)",
+            label=self._t("audio_lbl_lowpass"),
             variable=self.lowpass_var,
             minimum=0,
             maximum=100,
             row=1,
-            description="Riduce le alte frequenze.",
+            description=self._t("audio_desc_lowpass"),
         )
         self._add_slider(
             effects,
-            label="Bass boost (%)",
+            label=self._t("audio_lbl_bass"),
             variable=self.bass_var,
             minimum=0,
             maximum=100,
             row=2,
-            description="Aumenta la presenza delle frequenze basse.",
+            description=self._t("audio_desc_bass"),
         )
         self._add_slider(
             effects,
-            label="Volume vinile (%)",
+            label=self._t("audio_lbl_vinyl"),
             variable=self.vinyl_var,
             minimum=0,
             maximum=100,
             row=3,
-            description="Mix del vinile casuale da resources/vinyls.",
+            description=self._t("audio_desc_vinyl"),
         )
         self._add_slider(
             effects,
-            label="Reverb (%)",
+            label=self._t("audio_lbl_reverb"),
             variable=self.reverb_var,
             minimum=0,
             maximum=100,
             row=4,
-            description="Riverbero leggero atmosferico.",
+            description=self._t("audio_desc_reverb"),
         )
         self._add_slider(
             effects,
-            label="Fade in audio (secondi)",
+            label=self._t("audio_lbl_fade_in"),
             variable=self.audio_fade_in_var,
             minimum=0,
             maximum=8,
             row=5,
-            description="Durata dissolvenza in ingresso.",
+            description=self._t("audio_desc_fade_in"),
             resolution=0.1,
         )
         self._add_slider(
             effects,
-            label="Fade out audio (secondi)",
+            label=self._t("audio_lbl_fade_out"),
             variable=self.audio_fade_out_var,
             minimum=0,
             maximum=8,
             row=6,
-            description="Durata dissolvenza in uscita.",
+            description=self._t("audio_desc_fade_out"),
             resolution=0.1,
         )
 
@@ -1446,29 +1957,29 @@ class DoomerGeneratorApp:
         actions.pack(fill=tk.X)
         self.audio_convert_button = ttk.Button(
             actions,
-            text="Avvia conversione batch",
+            text=self._t("audio_btn_convert"),
             command=self._start_audio_conversion,
         )
         self.audio_convert_button.pack(side=tk.LEFT)
         self.audio_reset_button = ttk.Button(
             actions,
-            text="Reset default",
+            text=self._t("audio_btn_reset"),
             command=self._reset_audio_defaults,
         )
         self.audio_reset_button.pack(side=tk.LEFT, padx=8)
         self.audio_save_button = ttk.Button(
             actions,
-            text="Salva impostazioni",
+            text=self._t("save_settings_btn"),
             command=self._save_audio_settings,
         )
         self.audio_save_button.pack(side=tk.LEFT, padx=8)
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
-        resources_box = ttk.LabelFrame(parent, text="Risorse Video", padding=8)
+        resources_box = ttk.LabelFrame(parent, text=self._t("video_group_resources"), padding=8)
         resources_box.pack(fill=tk.X, pady=(0, 8))
         resources_box.columnconfigure(1, weight=1)
 
-        ttk.Label(resources_box, text="Backgrounds").grid(
+        ttk.Label(resources_box, text=self._t("video_label_backgrounds")).grid(
             row=0, column=0, padx=6, pady=6, sticky="w"
         )
         ttk.Entry(
@@ -1477,113 +1988,127 @@ class DoomerGeneratorApp:
             state="readonly",
         ).grid(row=0, column=1, padx=6, pady=6, sticky="ew")
 
-        ttk.Label(resources_box, text="Doomer image").grid(
+        ttk.Label(resources_box, text=self._t("video_label_doomer_image")).grid(
             row=1, column=0, padx=6, pady=6, sticky="w"
         )
         ttk.Entry(resources_box, textvariable=self.video_doomer_var, state="readonly").grid(
             row=1, column=1, padx=6, pady=6, sticky="ew"
         )
 
-        paths = ttk.LabelFrame(parent, text="Cartelle Video", padding=8)
+        paths = ttk.LabelFrame(parent, text=self._t("video_group_folders"), padding=8)
         paths.pack(fill=tk.X, pady=(0, 8))
         paths.columnconfigure(1, weight=1)
 
-        ttk.Label(paths, text="Input audio").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(paths, text=self._t("video_label_audio_input")).grid(row=0, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(paths, textvariable=self.video_audio_input_var).grid(
             row=0, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_video_audio_input).grid(
+        ttk.Button(paths, text=self._t("browse_btn"), command=self._pick_video_audio_input).grid(
             row=0, column=2, padx=6, pady=6
         )
 
-        ttk.Label(paths, text="Output video").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(paths, text=self._t("video_label_output")).grid(row=1, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(paths, textvariable=self.video_output_var).grid(
             row=1, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_video_output).grid(
+        ttk.Button(paths, text=self._t("browse_btn"), command=self._pick_video_output).grid(
             row=1, column=2, padx=6, pady=6
         )
 
-        effects = ttk.LabelFrame(parent, text="Effetti Video", padding=8)
+        ttk.Label(paths, text=self._t("video_label_encoder")).grid(row=2, column=0, padx=6, pady=6, sticky="w")
+        self.video_encoder_combo = ttk.Combobox(
+            paths,
+            textvariable=self.video_encoder_var,
+            values=["auto", "cpu", "nvidia", "intel", "amd"],
+            state="readonly",
+            width=20,
+        )
+        self.video_encoder_combo.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+        ttk.Label(
+            paths,
+            text=self._t("video_encoder_hint"),
+        ).grid(row=3, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="w")
+
+        effects = ttk.LabelFrame(parent, text=self._t("video_group_effects"), padding=8)
         effects.pack(fill=tk.X, pady=(0, 8))
 
         self._add_slider(
             effects,
-            label="Fade in video (secondi)",
+            label=self._t("video_lbl_fade_in"),
             variable=self.video_fade_in_var,
             minimum=0,
             maximum=8,
             row=0,
-            description="Dissolvenza in ingresso su video + audio.",
+            description=self._t("video_desc_fade_in"),
             resolution=0.1,
         )
         self._add_slider(
             effects,
-            label="Fade out video (secondi)",
+            label=self._t("video_lbl_fade_out"),
             variable=self.video_fade_out_var,
             minimum=0,
             maximum=8,
             row=1,
-            description="Dissolvenza in uscita su video + audio.",
+            description=self._t("video_desc_fade_out"),
             resolution=0.1,
         )
         self._add_slider(
             effects,
-            label="Rumore video (%)",
+            label=self._t("video_lbl_noise"),
             variable=self.video_noise_var,
             minimum=0,
             maximum=100,
             row=2,
-            description="Grana/noise su tutto il frame.",
+            description=self._t("video_desc_noise"),
         )
         self._add_slider(
             effects,
-            label="Distorsione (%)",
+            label=self._t("video_lbl_distortion"),
             variable=self.video_distortion_var,
             minimum=0,
             maximum=100,
             row=3,
-            description="Jitter/instabilita stile VHS su tutto il frame.",
+            description=self._t("video_desc_distortion"),
         )
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X)
         self.video_generate_button = ttk.Button(
             actions,
-            text="Genera video batch",
+            text=self._t("video_btn_generate"),
             command=self._start_video_generation,
         )
         self.video_generate_button.pack(side=tk.LEFT)
         self.video_save_button = ttk.Button(
             actions,
-            text="Salva impostazioni",
+            text=self._t("save_settings_btn"),
             command=self._save_video_settings,
         )
         self.video_save_button.pack(side=tk.LEFT, padx=8)
 
     def _build_upload_tab(self, parent: ttk.Frame) -> None:
-        source_box = ttk.LabelFrame(parent, text="Sorgente Upload", padding=8)
+        source_box = ttk.LabelFrame(parent, text=self._t("upload_group_source"), padding=8)
         source_box.pack(fill=tk.X, pady=(0, 8))
         source_box.columnconfigure(1, weight=1)
 
-        ttk.Label(source_box, text="Cartella video").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(source_box, text=self._t("upload_label_video_folder")).grid(row=0, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(source_box, textvariable=self.upload_video_input_var).grid(
             row=0, column=1, padx=6, pady=6, sticky="ew"
         )
         self.pick_upload_video_button = ttk.Button(
             source_box,
-            text="Sfoglia...",
+            text=self._t("browse_btn"),
             command=self._pick_upload_video_input,
         )
         self.pick_upload_video_button.grid(
             row=0, column=2, padx=6, pady=6
         )
 
-        auth_box = ttk.LabelFrame(parent, text="Autenticazione YouTube API", padding=8)
+        auth_box = ttk.LabelFrame(parent, text=self._t("upload_group_auth"), padding=8)
         auth_box.pack(fill=tk.X, pady=(0, 8))
         auth_box.columnconfigure(1, weight=1)
 
-        ttk.Label(auth_box, text="OAuth client JSON").grid(
+        ttk.Label(auth_box, text=self._t("upload_label_oauth_client")).grid(
             row=0, column=0, padx=6, pady=6, sticky="w"
         )
         ttk.Entry(auth_box, textvariable=self.youtube_client_secret_var).grid(
@@ -1591,21 +2116,21 @@ class DoomerGeneratorApp:
         )
         self.pick_client_secret_button = ttk.Button(
             auth_box,
-            text="Sfoglia...",
+            text=self._t("browse_btn"),
             command=self._pick_youtube_client_secret,
         )
         self.pick_client_secret_button.grid(row=0, column=2, padx=6, pady=6)
 
-        ttk.Label(auth_box, text="Token OAuth").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(auth_box, text=self._t("upload_label_oauth_token")).grid(row=1, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(auth_box, textvariable=self.youtube_token_var, state="readonly").grid(
             row=1, column=1, padx=6, pady=6, sticky="ew"
         )
 
-        options_box = ttk.LabelFrame(parent, text="Opzioni Upload", padding=8)
+        options_box = ttk.LabelFrame(parent, text=self._t("upload_group_options"), padding=8)
         options_box.pack(fill=tk.X, pady=(0, 8))
         options_box.columnconfigure(3, weight=1)
 
-        ttk.Label(options_box, text="Privacy").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_privacy")).grid(row=0, column=0, padx=6, pady=6, sticky="w")
         ttk.Combobox(
             options_box,
             textvariable=self.youtube_privacy_var,
@@ -1614,24 +2139,24 @@ class DoomerGeneratorApp:
             width=12,
         ).grid(row=0, column=1, padx=6, pady=6, sticky="w")
 
-        ttk.Label(options_box, text="Categoria").grid(row=0, column=2, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_category")).grid(row=0, column=2, padx=6, pady=6, sticky="w")
         ttk.Entry(options_box, textvariable=self.youtube_category_var, width=8).grid(
             row=0, column=3, padx=6, pady=6, sticky="w"
         )
 
         self.youtube_smart_tags_check = ttk.Checkbutton(
             options_box,
-            text="Tag automatici (AI + fallback smart)",
+            text=self._t("upload_check_auto_tags"),
             variable=self.youtube_smart_tags_var,
         )
         self.youtube_smart_tags_check.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
 
-        ttk.Label(options_box, text="Tag extra (csv)").grid(row=1, column=2, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_extra_tags")).grid(row=1, column=2, padx=6, pady=6, sticky="w")
         ttk.Entry(options_box, textvariable=self.youtube_extra_tags_var).grid(
             row=1, column=3, padx=6, pady=6, sticky="ew"
         )
 
-        ttk.Label(options_box, text="OpenAI model").grid(row=2, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=2, column=0, padx=6, pady=6, sticky="w")
         self.youtube_openai_model_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_model_var,
@@ -1639,7 +2164,7 @@ class DoomerGeneratorApp:
         )
         self.youtube_openai_model_entry.grid(row=2, column=1, padx=6, pady=6, sticky="w")
 
-        ttk.Label(options_box, text="OpenAI API key (opzionale)").grid(
+        ttk.Label(options_box, text=self._t("upload_label_openai_key")).grid(
             row=2, column=2, padx=6, pady=6, sticky="w"
         )
         self.youtube_openai_key_entry = ttk.Entry(
@@ -1651,31 +2176,37 @@ class DoomerGeneratorApp:
 
         ttk.Label(
             options_box,
-            text="Se la key e vuota, viene usata la variabile ambiente OPENAI_API_KEY.",
+            text=self._t("upload_openai_hint"),
         ).grid(row=3, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
-        desc_box = ttk.LabelFrame(parent, text="Template Descrizione", padding=8)
+        desc_box = ttk.LabelFrame(parent, text=self._t("upload_group_description"), padding=8)
         desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
-        ttk.Label(desc_box, text="Placeholder disponibile: {title}").pack(anchor="w", pady=(0, 4))
+        ttk.Label(desc_box, text=self._t("upload_placeholder_hint")).pack(anchor="w", pady=(0, 4))
         self.youtube_description_widget = tk.Text(desc_box, height=5, wrap=tk.WORD)
         self.youtube_description_widget.pack(fill=tk.BOTH, expand=True)
-        self.youtube_description_widget.insert(tk.END, self.default_upload_settings.description_template)
+        self.youtube_description_widget.insert(tk.END, self.youtube_description_text)
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X)
         self.youtube_login_button = ttk.Button(
             actions,
-            text="Login YouTube",
+            text=self._t("upload_btn_login"),
             command=self._start_youtube_login,
         )
         self.youtube_login_button.pack(side=tk.LEFT)
 
         self.youtube_upload_button = ttk.Button(
             actions,
-            text="Upload video/out",
+            text=self._t("upload_btn_upload"),
             command=self._start_youtube_upload,
         )
         self.youtube_upload_button.pack(side=tk.LEFT, padx=8)
+        self.upload_save_button = ttk.Button(
+            actions,
+            text=self._t("save_settings_btn"),
+            command=self._save_upload_settings,
+        )
+        self.upload_save_button.pack(side=tk.LEFT, padx=8)
 
     def _add_slider(
         self,
@@ -1768,40 +2299,46 @@ class DoomerGeneratorApp:
                 return
             subprocess.Popen(["xdg-open", str(self.links_file)])
         except OSError as error:
-            messagebox.showerror("Errore apertura file", f"Impossibile aprire il file link.\n{error}")
+            messagebox.showerror(
+                self._t("file_open_error_title"),
+                self._t("file_open_error_body", error=error),
+            )
 
     def _clear_directory_action(self, raw_path: str, label: str) -> None:
         if self._is_busy():
-            messagebox.showinfo("Operazione non disponibile", "Attendi la fine dell'elaborazione corrente.")
+            messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
             return
 
         target = Path(raw_path.strip())
         removed = _clear_directory_contents(target)
-        self._log(f"Svuotata cartella {label}: {target} (file rimossi: {removed})")
-        messagebox.showinfo("Completato", f"Cartella {label} svuotata.\nFile rimossi: {removed}")
+        self._log(self._t("log_clear_dir", label=label, path=target, count=removed))
+        messagebox.showinfo(
+            self._t("dialog_completed_title"),
+            self._t("msg_clear_dir", label=label, count=removed),
+        )
 
     def _clear_youtube_links(self) -> None:
         if self._is_busy():
-            messagebox.showinfo("Operazione non disponibile", "Attendi la fine dell'elaborazione corrente.")
+            messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
             return
 
         try:
             self._write_links_template()
         except OSError as error:
-            messagebox.showerror("Errore", f"Impossibile svuotare il file links.\n{error}")
+            messagebox.showerror(self._t("dialog_error_title"), self._t("clear_links_error_body", error=error))
             return
 
-        self._log("File youtube_links.txt ripristinato (vuoto).")
-        messagebox.showinfo("Completato", "youtube_links.txt svuotato.")
+        self._log(self._t("log_links_reset"))
+        messagebox.showinfo(self._t("dialog_completed_title"), self._t("msg_links_reset"))
 
     def _clear_all_outputs(self) -> None:
         if self._is_busy():
-            messagebox.showinfo("Operazione non disponibile", "Attendi la fine dell'elaborazione corrente.")
+            messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
             return
 
         if not messagebox.askyesno(
-            "Conferma",
-            "Vuoi svuotare input audio, output audio, output video e youtube_links.txt?",
+            self._t("dialog_confirm_title"),
+            self._t("clear_all_confirm"),
         ):
             return
 
@@ -1811,18 +2348,24 @@ class DoomerGeneratorApp:
         try:
             self._write_links_template()
         except OSError as error:
-            self._log(f"Errore durante reset youtube_links: {error}")
+            self._log(self._t("log_clear_links_error", error=error))
 
         self._log(
-            "Svuota tutto completato: "
-            f"input audio={in_removed}, output audio={out_removed}, output video={video_removed}"
+            self._t(
+                "log_clear_all",
+                in_count=in_removed,
+                out_count=out_removed,
+                video_count=video_removed,
+            )
         )
         messagebox.showinfo(
-            "Completato",
-            "Pulizia completata.\n"
-            f"Input audio: {in_removed}\n"
-            f"Output audio: {out_removed}\n"
-            f"Output video: {video_removed}",
+            self._t("dialog_completed_title"),
+            self._t(
+                "clear_all_done",
+                in_count=in_removed,
+                out_count=out_removed,
+                video_count=video_removed,
+            ),
         )
 
     def _start_download(self) -> None:
@@ -1833,8 +2376,8 @@ class DoomerGeneratorApp:
         links = self._read_youtube_links()
         if not links:
             messagebox.showinfo(
-                "Nessun link",
-                "Il file dei link e vuoto.\nAggiungi almeno un URL YouTube e riprova.",
+                self._t("dialog_no_links_title"),
+                self._t("dialog_no_links_body"),
             )
             self._open_links_file()
             return
@@ -1852,28 +2395,24 @@ class DoomerGeneratorApp:
 
         if not targets:
             messagebox.showinfo(
-                "Nessun link valido",
-                "Non ci sono target validi da scaricare dopo la deduplica dei link.",
+                self._t("dialog_no_valid_links_title"),
+                self._t("dialog_no_valid_links_body"),
             )
             return
 
         ffmpeg_bin = self._resolve_ffmpeg()
         if not ffmpeg_bin:
             messagebox.showerror(
-                "ffmpeg non trovato",
-                "ffmpeg serve per l'estrazione MP3.\n"
-                "Installa con: winget install Gyan.FFmpeg\n"
-                "oppure seleziona ffmpeg.exe.",
+                self._t("ffmpeg_missing_download_title"),
+                self._t("ffmpeg_missing_download_body"),
             )
             return
 
         ytdlp_command = self._resolve_yt_dlp()
         if not ytdlp_command:
             messagebox.showerror(
-                "yt-dlp non trovato",
-                "Installa yt-dlp:\n"
-                "pip install yt-dlp\n"
-                "oppure: winget install yt-dlp.yt-dlp",
+                self._t("ytdlp_missing_title"),
+                self._t("ytdlp_missing_body"),
             )
             return
 
@@ -1883,12 +2422,12 @@ class DoomerGeneratorApp:
         self.downloading = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set("Download MP3 in corso...")
-        self._log(f"Avvio download YouTube ({len(targets)} target unici)...")
-        self._log(f"File link: {self.links_file}")
-        self._log(f"Destinazione: {target_input}")
+        self.progress_text.set(self._t("progress_download_running"))
+        self._log(self._t("log_download_start", total=len(targets)))
+        self._log(self._t("log_links_file", path=self.links_file))
+        self._log(self._t("log_destination", path=target_input))
         if duplicates > 0:
-            self._log(f"Link duplicati ignorati: {duplicates}")
+            self._log(self._t("log_duplicates_ignored", count=duplicates))
 
         thread = threading.Thread(
             target=self._run_download_batch,
@@ -1904,22 +2443,20 @@ class DoomerGeneratorApp:
         ffmpeg_bin = self._resolve_ffmpeg()
         if not ffmpeg_bin:
             messagebox.showerror(
-                "ffmpeg non trovato",
-                "ffmpeg non trovato.\n"
-                "Installa con: winget install Gyan.FFmpeg\n"
-                "oppure seleziona ffmpeg.exe.",
+                self._t("ffmpeg_missing_download_title"),
+                self._t("ffmpeg_missing_download_body"),
             )
             return
 
         input_dir = Path(self.audio_input_var.get().strip())
         output_dir = Path(self.audio_output_var.get().strip())
         if not input_dir.is_dir():
-            messagebox.showerror("Input non valido", "Seleziona una cartella input audio valida.")
+            messagebox.showerror(self._t("dialog_invalid_input_title"), self._t("dialog_invalid_audio_input_body"))
             return
         if input_dir.resolve() == output_dir.resolve():
             messagebox.showerror(
-                "Cartelle non valide",
-                "Input e output audio devono essere diversi.",
+                self._t("dialog_invalid_folders_title"),
+                self._t("dialog_invalid_folders_body"),
             )
             return
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1938,9 +2475,9 @@ class DoomerGeneratorApp:
         self.audio_processing = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set("Conversione audio in corso...")
-        self._log("Avvio conversione audio batch...")
-        self._log(f"Uso ffmpeg: {ffmpeg_bin}")
+        self.progress_text.set(self._t("progress_audio_running"))
+        self._log(self._t("log_audio_start"))
+        self._log(self._t("log_ffmpeg_using", path=ffmpeg_bin))
 
         thread = threading.Thread(
             target=self._run_audio_batch,
@@ -1956,17 +2493,15 @@ class DoomerGeneratorApp:
         ffmpeg_bin = self._resolve_ffmpeg()
         if not ffmpeg_bin:
             messagebox.showerror(
-                "ffmpeg non trovato",
-                "ffmpeg non trovato.\n"
-                "Installa con: winget install Gyan.FFmpeg\n"
-                "oppure seleziona ffmpeg.exe.",
+                self._t("ffmpeg_missing_download_title"),
+                self._t("ffmpeg_missing_download_body"),
             )
             return
 
         input_audio_dir = Path(self.video_audio_input_var.get().strip())
         output_video_dir = Path(self.video_output_var.get().strip())
         if not input_audio_dir.is_dir():
-            messagebox.showerror("Input non valido", "Seleziona una cartella input audio valida.")
+            messagebox.showerror(self._t("dialog_invalid_input_title"), self._t("dialog_invalid_audio_input_body"))
             return
         output_video_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1975,15 +2510,19 @@ class DoomerGeneratorApp:
             fade_out_seconds=self.video_fade_out_var.get(),
             noise_percent=self.video_noise_var.get(),
             distortion_percent=self.video_distortion_var.get(),
+            video_encoder=self._sanitize_video_encoder(
+                self.video_encoder_var.get(),
+                self.default_video_settings.video_encoder,
+            ),
         )
 
         self.video_processing = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set("Generazione video in corso...")
-        self._log("Avvio generazione video batch...")
-        self._log(f"Input audio: {input_audio_dir}")
-        self._log(f"Output video: {output_video_dir}")
+        self.progress_text.set(self._t("progress_video_running"))
+        self._log(self._t("log_video_start"))
+        self._log(self._t("log_input_audio", path=input_audio_dir))
+        self._log(self._t("log_output_video", path=output_video_dir))
 
         thread = threading.Thread(
             target=self._run_video_batch,
@@ -2002,7 +2541,7 @@ class DoomerGeneratorApp:
         self.youtube_authenticating = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set("Login YouTube in corso...")
+        self.progress_text.set(self._t("progress_login_running"))
 
         thread = threading.Thread(target=self._run_youtube_login, daemon=True)
         thread.start()
@@ -2016,20 +2555,20 @@ class DoomerGeneratorApp:
 
         video_dir = Path(self.upload_video_input_var.get().strip())
         if not video_dir.is_dir():
-            messagebox.showerror("Input non valido", "Seleziona una cartella video valida.")
+            messagebox.showerror(self._t("dialog_invalid_input_title"), self._t("dialog_invalid_video_folder_body"))
             return
 
         category_id = self.youtube_category_var.get().strip()
         if not category_id.isdigit():
-            messagebox.showerror("Categoria non valida", "Category ID deve essere numerico (es. 10).")
+            messagebox.showerror(self._t("dialog_invalid_category_title"), self._t("dialog_invalid_category_body"))
             return
 
         settings = self._collect_upload_settings()
         self.uploading = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set("Upload YouTube in corso...")
-        self._log(f"Avvio upload YouTube da: {video_dir}")
+        self.progress_text.set(self._t("progress_upload_running"))
+        self._log(self._t("log_upload_start", path=video_dir))
 
         thread = threading.Thread(
             target=self._run_youtube_upload_batch,
@@ -2200,7 +2739,7 @@ class DoomerGeneratorApp:
             self.events.put(
                 (
                     "download_finished",
-                    DownloadSummary(total=len(links), downloaded=0, failed=len(links)),
+                    DownloadSummary(total=len(targets), downloaded=0, failed=len(targets)),
                 )
             )
 
@@ -2304,7 +2843,7 @@ class DoomerGeneratorApp:
         self.audio_fade_in_var.set(defaults.fade_in_seconds)
         self.audio_fade_out_var.set(defaults.fade_out_seconds)
         self.audio_format_var.set(defaults.output_format)
-        self._log("Parametri audio ripristinati ai default.")
+        self._log(self._t("log_audio_defaults_reset"))
 
     @staticmethod
     def _coerce_float(
@@ -2322,6 +2861,22 @@ class DoomerGeneratorApp:
         if maximum is not None and value > maximum:
             value = maximum
         return value
+
+    @staticmethod
+    def _sanitize_video_encoder(raw_value: object, fallback: str = "auto") -> str:
+        if isinstance(raw_value, str):
+            normalized = raw_value.strip().lower()
+            if normalized in VIDEO_ENCODER_OPTIONS:
+                return normalized
+        return fallback
+
+    @staticmethod
+    def _sanitize_language_code(raw_value: object, fallback: str = "it") -> str:
+        if isinstance(raw_value, str):
+            normalized = raw_value.strip().lower()
+            if normalized in LANGUAGE_CODE_TO_LABEL:
+                return normalized
+        return fallback
 
     def _read_persisted_app_settings(self) -> dict[str, object]:
         if not self.app_settings_path.is_file():
@@ -2347,13 +2902,19 @@ class DoomerGeneratorApp:
             )
             return True
         except OSError as error:
-            self._log(f"Errore salvataggio impostazioni: {error}")
+            self._log(self._t("log_settings_save_error", error=error))
             return False
 
     def _load_persisted_app_settings(self) -> None:
         payload = self._read_persisted_app_settings()
         if not payload:
             return
+
+        general = payload.get("general")
+        if isinstance(general, dict):
+            language_code = self._sanitize_language_code(general.get("language"), self.current_language)
+            self.current_language = language_code
+            self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(language_code, "Italiano"))
 
         audio = payload.get("audio")
         if isinstance(audio, dict):
@@ -2472,6 +3033,54 @@ class DoomerGeneratorApp:
                     100.0,
                 )
             )
+            self.video_encoder_var.set(
+                self._sanitize_video_encoder(
+                    video.get("video_encoder"),
+                    self.default_video_settings.video_encoder,
+                )
+            )
+
+        upload = payload.get("upload")
+        if isinstance(upload, dict):
+            video_input_dir = upload.get("video_input_dir")
+            if isinstance(video_input_dir, str) and video_input_dir.strip():
+                self.upload_video_input_var.set(video_input_dir)
+
+            client_secret = upload.get("youtube_client_secret")
+            if isinstance(client_secret, str) and client_secret.strip():
+                self.youtube_client_secret_var.set(client_secret)
+
+            token_path = upload.get("youtube_token")
+            if isinstance(token_path, str) and token_path.strip():
+                self.youtube_token_var.set(token_path)
+
+            privacy = upload.get("privacy_status")
+            if isinstance(privacy, str) and privacy in {"private", "unlisted", "public"}:
+                self.youtube_privacy_var.set(privacy)
+
+            category = upload.get("category_id")
+            if isinstance(category, str) and category.strip():
+                self.youtube_category_var.set(category.strip())
+
+            extra_tags = upload.get("extra_tags_csv")
+            if isinstance(extra_tags, str):
+                self.youtube_extra_tags_var.set(extra_tags)
+
+            smart_tags = upload.get("smart_tags_enabled")
+            if isinstance(smart_tags, bool):
+                self.youtube_smart_tags_var.set(smart_tags)
+
+            openai_model = upload.get("openai_model")
+            if isinstance(openai_model, str) and openai_model.strip():
+                self.youtube_openai_model_var.set(openai_model.strip())
+
+            openai_key = upload.get("openai_api_key")
+            if isinstance(openai_key, str):
+                self.youtube_openai_key_var.set(openai_key)
+
+            description_template = upload.get("description_template")
+            if isinstance(description_template, str) and description_template.strip():
+                self.youtube_description_text = description_template
 
     def _save_audio_settings(self) -> None:
         payload = self._read_persisted_app_settings()
@@ -2489,7 +3098,7 @@ class DoomerGeneratorApp:
             "fade_out_seconds": self.audio_fade_out_var.get(),
         }
         if self._write_persisted_app_settings(payload):
-            self._log(f"Impostazioni audio salvate in {self.app_settings_path.name}.")
+            self._log(self._t("log_audio_settings_saved", file=self.app_settings_path.name))
 
     def _save_video_settings(self) -> None:
         payload = self._read_persisted_app_settings()
@@ -2500,9 +3109,34 @@ class DoomerGeneratorApp:
             "fade_out_seconds": self.video_fade_out_var.get(),
             "noise_percent": self.video_noise_var.get(),
             "distortion_percent": self.video_distortion_var.get(),
+            "video_encoder": self._sanitize_video_encoder(
+                self.video_encoder_var.get(),
+                self.default_video_settings.video_encoder,
+            ),
         }
         if self._write_persisted_app_settings(payload):
-            self._log(f"Impostazioni video salvate in {self.app_settings_path.name}.")
+            self._log(self._t("log_video_settings_saved", file=self.app_settings_path.name))
+
+    def _save_upload_settings(self) -> None:
+        payload = self._read_persisted_app_settings()
+        description_template = self.youtube_description_widget.get("1.0", tk.END).strip()
+        if not description_template:
+            description_template = self.default_upload_settings.description_template
+
+        payload["upload"] = {
+            "video_input_dir": self.upload_video_input_var.get().strip(),
+            "youtube_client_secret": self.youtube_client_secret_var.get().strip(),
+            "youtube_token": self.youtube_token_var.get().strip(),
+            "privacy_status": self.youtube_privacy_var.get().strip(),
+            "category_id": self.youtube_category_var.get().strip(),
+            "extra_tags_csv": self.youtube_extra_tags_var.get().strip(),
+            "smart_tags_enabled": bool(self.youtube_smart_tags_var.get()),
+            "openai_model": self.youtube_openai_model_var.get().strip(),
+            "openai_api_key": self.youtube_openai_key_var.get().strip(),
+            "description_template": description_template,
+        }
+        if self._write_persisted_app_settings(payload):
+            self._log(self._t("log_upload_settings_saved", file=self.app_settings_path.name))
 
     def _is_busy(self) -> bool:
         return (
@@ -2521,8 +3155,10 @@ class DoomerGeneratorApp:
         self.audio_save_button.configure(state=state)
         self.video_generate_button.configure(state=state)
         self.video_save_button.configure(state=state)
+        self.video_encoder_combo.configure(state="readonly" if enabled else "disabled")
         self.youtube_login_button.configure(state=state)
         self.youtube_upload_button.configure(state=state)
+        self.upload_save_button.configure(state=state)
         self.pick_upload_video_button.configure(state=state)
         self.pick_client_secret_button.configure(state=state)
         self.youtube_smart_tags_check.configure(state=state)
@@ -2534,6 +3170,7 @@ class DoomerGeneratorApp:
         self.clear_video_output_button.configure(state=state)
         self.clear_links_button.configure(state=state)
         self.clear_all_button.configure(state=state)
+        self.language_combo.configure(state="readonly" if enabled else "disabled")
 
     def _poll_events(self) -> None:
         while True:
@@ -2548,47 +3185,62 @@ class DoomerGeneratorApp:
                 percent, index, total, link_percent = payload  # type: ignore[misc]
                 self.progress_var.set(percent)
                 self.progress_text.set(
-                    f"Download in corso: {index}/{total} - {link_percent:.1f}% del link"
+                    self._t(
+                        "progress_download_file",
+                        index=index,
+                        total=total,
+                        percent=link_percent,
+                    )
                 )
             elif event == "upload_progress":
                 percent, index, total, file_percent, file_name = payload  # type: ignore[misc]
                 self.progress_var.set(percent)
                 self.progress_text.set(
-                    f"Upload {index}/{total} - {file_percent:.1f}% ({file_name})"
+                    self._t(
+                        "progress_upload_file",
+                        index=index,
+                        total=total,
+                        percent=file_percent,
+                        name=file_name,
+                    )
                 )
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
                 self.progress_var.set(percent)
-                self.progress_text.set(f"Progress: {done}/{total}")
+                self.progress_text.set(self._t("progress_generic", done=done, total=total))
             elif event == "download_finished":
                 summary: DownloadSummary = payload  # type: ignore[assignment]
                 self.downloading = False
                 self._set_action_buttons_enabled(True)
                 self.progress_var.set(100 if summary.total else 0)
                 self.progress_text.set(
-                    f"Download completato - OK: {summary.downloaded}, Errori: {summary.failed}"
+                    self._t("progress_download_done", ok=summary.downloaded, err=summary.failed)
                 )
                 self._log(
-                    "Fine download YouTube. "
-                    f"Totale: {summary.total}, OK: {summary.downloaded}, Errori: {summary.failed}"
+                    self._t(
+                        "log_download_finished",
+                        total=summary.total,
+                        ok=summary.downloaded,
+                        err=summary.failed,
+                    )
                 )
             elif event == "download_runtime_error":
                 detail = str(payload)
-                self._log(f"Errore runtime download: {detail}")
-                self.progress_text.set("Errore durante il download")
+                self._log(self._t("log_runtime_download_error", detail=detail))
+                self.progress_text.set(self._t("progress_runtime_download_error"))
             elif event == "youtube_login_ok":
                 self.youtube_authenticating = False
                 self._set_action_buttons_enabled(True)
                 self.progress_var.set(100)
-                self.progress_text.set("Login YouTube completato")
-                self._log("Login YouTube completato e token salvato.")
+                self.progress_text.set(self._t("progress_login_done"))
+                self._log(self._t("log_login_done"))
             elif event == "youtube_login_error":
                 self.youtube_authenticating = False
                 self._set_action_buttons_enabled(True)
                 detail = str(payload)
-                self.progress_text.set("Errore login YouTube")
-                self._log(f"Errore login YouTube: {detail}")
+                self.progress_text.set(self._t("progress_login_error"))
+                self._log(self._t("log_login_error", detail=detail))
             elif event == "upload_finished":
                 summary: UploadSummary = payload  # type: ignore[assignment]
                 self.uploading = False
@@ -2596,27 +3248,35 @@ class DoomerGeneratorApp:
                     self._set_action_buttons_enabled(True)
                 self.progress_var.set(100 if summary.total else 0)
                 self.progress_text.set(
-                    f"Upload completato - OK: {summary.uploaded}, Errori: {summary.failed}"
+                    self._t("progress_upload_done", ok=summary.uploaded, err=summary.failed)
                 )
                 self._log(
-                    "Fine upload YouTube. "
-                    f"Totale: {summary.total}, OK: {summary.uploaded}, Errori: {summary.failed}"
+                    self._t(
+                        "log_upload_finished",
+                        total=summary.total,
+                        ok=summary.uploaded,
+                        err=summary.failed,
+                    )
                 )
             elif event == "upload_runtime_error":
                 detail = str(payload)
-                self._log(f"Errore runtime upload: {detail}")
-                self.progress_text.set("Errore durante upload YouTube")
+                self._log(self._t("log_runtime_upload_error", detail=detail))
+                self.progress_text.set(self._t("progress_runtime_upload_error"))
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
                 self._set_action_buttons_enabled(True)
                 self.progress_var.set(100 if summary.total else 0)
                 self.progress_text.set(
-                    f"Audio completato - OK: {summary.converted}, Errori: {summary.failed}"
+                    self._t("progress_audio_done", ok=summary.converted, err=summary.failed)
                 )
                 self._log(
-                    "Fine conversione audio. "
-                    f"Totale: {summary.total}, OK: {summary.converted}, Errori: {summary.failed}"
+                    self._t(
+                        "log_audio_finished",
+                        total=summary.total,
+                        ok=summary.converted,
+                        err=summary.failed,
+                    )
                 )
             elif event == "video_finished":
                 summary: VideoSummary = payload  # type: ignore[assignment]
@@ -2624,11 +3284,15 @@ class DoomerGeneratorApp:
                 self._set_action_buttons_enabled(True)
                 self.progress_var.set(100 if summary.total else 0)
                 self.progress_text.set(
-                    f"Video completato - OK: {summary.generated}, Errori: {summary.failed}"
+                    self._t("progress_video_done", ok=summary.generated, err=summary.failed)
                 )
                 self._log(
-                    "Fine generazione video. "
-                    f"Totale: {summary.total}, OK: {summary.generated}, Errori: {summary.failed}"
+                    self._t(
+                        "log_video_finished",
+                        total=summary.total,
+                        ok=summary.generated,
+                        err=summary.failed,
+                    )
                 )
 
         self.root.after(120, self._poll_events)
@@ -2641,12 +3305,12 @@ class DoomerGeneratorApp:
         guessed = self._guess_youtube_client_secret_path()
         if guessed:
             self.youtube_client_secret_var.set(str(guessed))
-            self._log(f"OAuth JSON rilevato automaticamente: {guessed}")
+            self._log(self._t("log_oauth_autodetected", path=guessed))
             return True
 
         messagebox.showinfo(
-            "OAuth JSON mancante",
-            "Seleziona il file OAuth client JSON scaricato da Google Cloud.",
+            self._t("oauth_missing_title"),
+            self._t("oauth_missing_body"),
         )
         self._pick_youtube_client_secret()
         selected = Path(self.youtube_client_secret_var.get().strip())
@@ -2654,9 +3318,8 @@ class DoomerGeneratorApp:
             return True
 
         messagebox.showerror(
-            "File OAuth mancante",
-            "Nessun file JSON valido selezionato.\n"
-            "Scegli il file credenziali OAuth Desktop prima di fare login.",
+            self._t("oauth_file_missing_title"),
+            self._t("oauth_file_missing_body"),
         )
         return False
 

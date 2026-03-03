@@ -1,75 +1,82 @@
-# DoomerGenerator
+﻿# DoomerGenerator
 
-Generatore Doomer Wave con GUI a tab:
-- download MP3 da YouTube
-- conversione audio batch con effetti
-- generazione video Full HD batch
-- upload batch su YouTube con API ufficiali
+Doomer Wave batch generator with a desktop GUI.
 
-## Struttura cartelle
+It supports:
+- YouTube to MP3 batch download
+- Batch audio conversion with Doomer effects
+- Batch Full HD video generation
+- Batch YouTube upload with official APIs
 
-L'app usa:
+## Folder Structure
+
+The app uses these folders:
 - `audio/in`
 - `audio/out`
 - `video/out`
 
-Risorse richieste:
+Required assets:
 - `resources/vinyls`
 - `resources/backgrounds`
-- `resources/Doomer_Guy.png` (fallback automatico su `.jpg/.jpeg/.webp`)
+- `resources/Doomer_Guy.png` (automatic fallback to `.jpg/.jpeg/.webp`)
 
-## Tab GUI
+## GUI Tabs
 
 ### 1) General
-- svuota input audio
-- svuota output audio
-- svuota output video
-- svuota youtube links
-- svuota tutto
+- Clear audio input
+- Clear audio output
+- Clear video output
+- Clear YouTube links
+- Clear all
+- Language selector (Italian / English)
 
 ### 2) Download
-- legge link da `youtube_links.txt`
-- pulsante `Scarica Mp3`
-- output in `audio/in`
+- Reads links from `youtube_links.txt`
+- `Download MP3` button
+- Output to `audio/in`
 
 ### 3) Audio
-- conversione batch da `audio/in` a `audio/out`
-- effetti doomer + fade in/out audio
-- output con suffisso ` (Doomer Wave)`
+- Batch conversion from `audio/in` to `audio/out`
+- Doomer effects + audio fade in/out
+- Output name suffix: ` (Doomer Wave)`
+- Save/restore settings via `app_settings.json`
 
 ### 4) Video
-- genera MP4 Full HD da file audio
-- output in `video/out`
-- stesso nome base del file audio
+- Generates Full HD MP4 from audio files
+- Output to `video/out`
+- Keeps the same base filename as source audio
+- Supports CPU/GPU video encoding modes (`auto`, `cpu`, `nvidia`, `intel`, `amd`)
+- Save/restore settings via `app_settings.json`
 
 ### 5) Upload
-- upload batch di tutti i video in `video/out` (o cartella scelta)
-- login OAuth Google (`Login YouTube`)
-- metadata:
-  - titolo = nome file
+- Batch upload of all videos in `video/out` (or selected folder)
+- Google OAuth login (`YouTube login`)
+- Metadata:
+  - title = filename
   - privacy (`private/unlisted/public`, default `public`)
-  - categoria YouTube
-  - descrizione template (`{title}` disponibile)
-  - tag smart automatici + tag extra CSV
+  - YouTube category
+  - description template (`{title}` placeholder)
+  - automatic tags (AI + smart fallback) + optional CSV tags
+- Save/restore settings via `app_settings.json`
 
-## Setup Upload YouTube (API ufficiali)
+## YouTube Upload Setup (Official API)
 
-1. Crea un progetto su Google Cloud.
-2. Abilita **YouTube Data API v3**.
-3. Crea credenziali OAuth tipo **Desktop app**.
-4. Scarica il JSON e mettilo nel progetto come `youtube_client_secret.json`
-   (oppure selezionalo dal tab `Upload`).
-5. Premi `Login YouTube` nel tab `Upload`.
-6. Dopo il login viene creato `youtube_token.json`.
+1. Create a project in Google Cloud.
+2. Enable **YouTube Data API v3**.
+3. Create OAuth credentials of type **Desktop app**.
+4. Download the JSON and place it in the project as `youtube_client_secret.json`
+   (or select it in the `Upload` tab).
+5. Click `YouTube login` in the `Upload` tab.
+6. After login, `youtube_token.json` will be created.
 
-## Requisiti
+## Requirements
 
 - Python 3.10+
 - `ffmpeg`
 - `yt-dlp`
-- librerie Python in `requirements.txt`
+- Python packages listed in `requirements.txt`
 
-Installazione rapida su Windows:
+Quick install on Windows:
 
 ```powershell
 winget install Gyan.FFmpeg
@@ -77,8 +84,13 @@ winget install yt-dlp.yt-dlp
 pip install -r requirements.txt
 ```
 
-## Avvio
+## Run
 
 ```bash
 python doomer_generator.py
 ```
+
+## Notes
+
+- `app_settings.json` stores local GUI settings and is gitignored.
+- `.gitkeep` files are preserved when clearing output folders.
