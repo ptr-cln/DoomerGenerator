@@ -99,8 +99,8 @@ class AudioSettings:
 class VideoSettings:
     fade_in_seconds: float = 1.0
     fade_out_seconds: float = 1.0
-    noise_percent: float = 55.0
-    distortion_percent: float = 65.0
+    noise_percent: float = 65.0
+    distortion_percent: float = 75.0
 
     def build_filter_complex(self, audio_duration_seconds: float | None) -> str:
         noise_amount = round(5.0 + (self.noise_percent / 100.0) * 38.0, 2)
@@ -187,7 +187,6 @@ class UploadSettings:
     category_id: str = "10"
     description_template: str = (
         "{title}\n\n"
-        "Generated with DoomerGenerator.\n"
         "#doomerwave #slowed #reverb"
     )
     extra_tags_csv: str = ""
