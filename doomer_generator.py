@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import queue
 import random
@@ -8,6 +9,8 @@ import shutil
 import subprocess
 import sys
 import threading
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -38,6 +41,8 @@ VIDEO_FRAME_HEIGHT = 1080
 DOOMER_OVERLAY_WIDTH = 760
 DOOMER_OVERLAY_HEIGHT = 980
 DOOMER_OVERLAY_LEFT = 36
+APP_SETTINGS_FILE = "app_settings.json"
+AUDIO_OUTPUT_FORMATS = {"mp3", "wav", "flac", "ogg"}
 
 
 @dataclass(frozen=True)
@@ -198,6 +203,9 @@ class UploadSettings:
     )
     extra_tags_csv: str = ""
     smart_tags_enabled: bool = True
+    openai_model: str = "gpt-4o-mini"
+    openai_api_key: str = ""
+    openai_timeout_seconds: float = 20.0
 
 
 @dataclass
@@ -485,6 +493,179 @@ def _sanitize_tag(tag: str) -> str:
     return normalized
 
 
+def _extract_ai_content_text(content: object) -> str:
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            text_value = item.get("text")
+            if isinstance(text_value, str):
+                parts.append(text_value)
+        return "\n".join(parts).strip()
+
+    if isinstance(content, dict):
+        text_value = content.get("text")
+        if isinstance(text_value, str):
+            return text_value.strip()
+    return ""
+
+
+def _extract_tags_from_ai_text(raw_text: str) -> list[str]:
+    text = raw_text.strip()
+    if not text:
+        return []
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines:
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    def _sanitize_many(values: list[str]) -> list[str]:
+        sanitized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            item = re.sub(r"^[#\-\d\.\)\s]+", "", value.strip())
+            item = item.lstrip("#").strip()
+            cleaned = _sanitize_tag(item)
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            sanitized.append(cleaned)
+        return sanitized
+
+    parsed_values: list[str] | None = None
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            parsed_values = [str(item) for item in parsed]
+        elif isinstance(parsed, dict):
+            tags_field = parsed.get("tags")
+            if isinstance(tags_field, list):
+                parsed_values = [str(item) for item in tags_field]
+    except json.JSONDecodeError:
+        parsed_values = None
+
+    if parsed_values is None:
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end > start:
+            snippet = text[start : end + 1]
+            try:
+                parsed = json.loads(snippet)
+                if isinstance(parsed, list):
+                    parsed_values = [str(item) for item in parsed]
+            except json.JSONDecodeError:
+                parsed_values = None
+
+    if parsed_values is None:
+        parsed_values = re.split(r"[\n,;]+", text)
+
+    return _sanitize_many(parsed_values)
+
+
+def _build_ai_tags(
+    title: str,
+    settings: UploadSettings,
+    log: Callable[[str], None] | None = None,
+) -> list[str]:
+    api_key = settings.openai_api_key.strip() or os.getenv("OPENAI_API_KEY", "").strip()
+    model = settings.openai_model.strip()
+    if not api_key or not model:
+        return []
+
+    prompt = (
+        "Genera tag YouTube pertinenti per un video musicale in stile doomer wave / slowed reverb.\n"
+        "Rispondi SOLO con JSON array di stringhe (senza markdown, senza commenti).\n"
+        "Vincoli: massimo 20 tag, niente hashtag, niente duplicati, ogni tag <= 30 caratteri.\n"
+        f"Titolo video: {title}"
+    )
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Sei un esperto SEO YouTube per musica doomer wave.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "temperature": 0.4,
+        "max_tokens": 260,
+    }
+
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    timeout = max(5.0, float(settings.openai_timeout_seconds))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        detail = ""
+        try:
+            detail = error.read().decode("utf-8", errors="replace")
+        except Exception:
+            detail = ""
+        if log:
+            tail = _summarize_process_output("", detail)
+            if tail:
+                log(f"  Tag AI non disponibili (HTTP {error.code}): {tail}")
+            else:
+                log(f"  Tag AI non disponibili (HTTP {error.code}).")
+        return []
+    except Exception as error:
+        if log:
+            log(f"  Tag AI non disponibili: {error}")
+        return []
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        if log:
+            log("  Tag AI non disponibili: risposta JSON non valida.")
+        return []
+
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        if log:
+            log("  Tag AI non disponibili: risposta senza choices.")
+        return []
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        return []
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        return []
+
+    content_text = _extract_ai_content_text(message.get("content"))
+    tags = _extract_tags_from_ai_text(content_text)
+    return tags[:20]
+
+
 def _build_smart_tags(title: str) -> list[str]:
     base_tags = [
         "doomer wave",
@@ -537,10 +718,23 @@ def _build_smart_tags(title: str) -> list[str]:
     return ordered[:25]
 
 
-def _compose_youtube_tags(title: str, settings: UploadSettings) -> list[str]:
+def _compose_youtube_tags(
+    title: str,
+    settings: UploadSettings,
+    log: Callable[[str], None] | None = None,
+) -> list[str]:
     tags: list[str] = []
     if settings.smart_tags_enabled:
-        tags.extend(_build_smart_tags(title))
+        ai_tags = _build_ai_tags(title, settings, log=log)
+        if ai_tags:
+            tags.extend(ai_tags)
+            if log:
+                log(f"  Tag AI generati: {len(ai_tags)}")
+        else:
+            fallback_tags = _build_smart_tags(title)
+            tags.extend(fallback_tags)
+            if log:
+                log("  Tag fallback smart locali attivati.")
     tags.extend(_parse_csv_tags(settings.extra_tags_csv))
 
     unique: list[str] = []
@@ -610,7 +804,7 @@ class YouTubeUploader:
                     description = settings.description_template.format(title=title)
                 except Exception:
                     description = f"{title}\n\n{settings.description_template}"
-                tags = _compose_youtube_tags(title, settings)
+                tags = _compose_youtube_tags(title, settings, log=self.log)
 
                 request_body = {
                     "snippet": {
@@ -975,6 +1169,7 @@ class DoomerGeneratorApp:
         self.video_output_dir = self.video_root / "out"
         self.youtube_client_secret_path = self.project_dir / "youtube_client_secret.json"
         self.youtube_token_path = self.project_dir / "youtube_token.json"
+        self.app_settings_path = self.project_dir / APP_SETTINGS_FILE
 
         self.default_audio_settings = AudioSettings()
         self.default_video_settings = VideoSettings()
@@ -1020,10 +1215,13 @@ class DoomerGeneratorApp:
         self.youtube_category_var = tk.StringVar(value=self.default_upload_settings.category_id)
         self.youtube_extra_tags_var = tk.StringVar(value=self.default_upload_settings.extra_tags_csv)
         self.youtube_smart_tags_var = tk.BooleanVar(value=self.default_upload_settings.smart_tags_enabled)
+        self.youtube_openai_model_var = tk.StringVar(value=self.default_upload_settings.openai_model)
+        self.youtube_openai_key_var = tk.StringVar(value="")
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value="Pronto")
 
+        self._load_persisted_app_settings()
         self._build_ui()
         self.root.after(100, self._poll_events)
 
@@ -1258,6 +1456,12 @@ class DoomerGeneratorApp:
             command=self._reset_audio_defaults,
         )
         self.audio_reset_button.pack(side=tk.LEFT, padx=8)
+        self.audio_save_button = ttk.Button(
+            actions,
+            text="Salva impostazioni",
+            command=self._save_audio_settings,
+        )
+        self.audio_save_button.pack(side=tk.LEFT, padx=8)
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
         resources_box = ttk.LabelFrame(parent, text="Risorse Video", padding=8)
@@ -1350,6 +1554,12 @@ class DoomerGeneratorApp:
             command=self._start_video_generation,
         )
         self.video_generate_button.pack(side=tk.LEFT)
+        self.video_save_button = ttk.Button(
+            actions,
+            text="Salva impostazioni",
+            command=self._save_video_settings,
+        )
+        self.video_save_button.pack(side=tk.LEFT, padx=8)
 
     def _build_upload_tab(self, parent: ttk.Frame) -> None:
         source_box = ttk.LabelFrame(parent, text="Sorgente Upload", padding=8)
@@ -1411,7 +1621,7 @@ class DoomerGeneratorApp:
 
         self.youtube_smart_tags_check = ttk.Checkbutton(
             options_box,
-            text="Tag smart automatici (AI-like)",
+            text="Tag automatici (AI + fallback smart)",
             variable=self.youtube_smart_tags_var,
         )
         self.youtube_smart_tags_check.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
@@ -1420,6 +1630,29 @@ class DoomerGeneratorApp:
         ttk.Entry(options_box, textvariable=self.youtube_extra_tags_var).grid(
             row=1, column=3, padx=6, pady=6, sticky="ew"
         )
+
+        ttk.Label(options_box, text="OpenAI model").grid(row=2, column=0, padx=6, pady=6, sticky="w")
+        self.youtube_openai_model_entry = ttk.Entry(
+            options_box,
+            textvariable=self.youtube_openai_model_var,
+            width=16,
+        )
+        self.youtube_openai_model_entry.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Label(options_box, text="OpenAI API key (opzionale)").grid(
+            row=2, column=2, padx=6, pady=6, sticky="w"
+        )
+        self.youtube_openai_key_entry = ttk.Entry(
+            options_box,
+            textvariable=self.youtube_openai_key_var,
+            show="*",
+        )
+        self.youtube_openai_key_entry.grid(row=2, column=3, padx=6, pady=6, sticky="ew")
+
+        ttk.Label(
+            options_box,
+            text="Se la key e vuota, viene usata la variabile ambiente OPENAI_API_KEY.",
+        ).grid(row=3, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
         desc_box = ttk.LabelFrame(parent, text="Template Descrizione", padding=8)
         desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
@@ -1815,6 +2048,8 @@ class DoomerGeneratorApp:
             description_template=description_template,
             extra_tags_csv=self.youtube_extra_tags_var.get().strip(),
             smart_tags_enabled=bool(self.youtube_smart_tags_var.get()),
+            openai_model=self.youtube_openai_model_var.get().strip(),
+            openai_api_key=self.youtube_openai_key_var.get().strip(),
         )
 
     def _run_youtube_login(self) -> None:
@@ -2071,6 +2306,204 @@ class DoomerGeneratorApp:
         self.audio_format_var.set(defaults.output_format)
         self._log("Parametri audio ripristinati ai default.")
 
+    @staticmethod
+    def _coerce_float(
+        raw_value: object,
+        fallback: float,
+        minimum: float | None = None,
+        maximum: float | None = None,
+    ) -> float:
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            value = fallback
+        if minimum is not None and value < minimum:
+            value = minimum
+        if maximum is not None and value > maximum:
+            value = maximum
+        return value
+
+    def _read_persisted_app_settings(self) -> dict[str, object]:
+        if not self.app_settings_path.is_file():
+            return {}
+        try:
+            raw = self.app_settings_path.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return parsed
+
+    def _write_persisted_app_settings(self, payload: dict[str, object]) -> bool:
+        try:
+            self.app_settings_path.parent.mkdir(parents=True, exist_ok=True)
+            self.app_settings_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            return True
+        except OSError as error:
+            self._log(f"Errore salvataggio impostazioni: {error}")
+            return False
+
+    def _load_persisted_app_settings(self) -> None:
+        payload = self._read_persisted_app_settings()
+        if not payload:
+            return
+
+        audio = payload.get("audio")
+        if isinstance(audio, dict):
+            audio_input = audio.get("input_dir")
+            if isinstance(audio_input, str) and audio_input.strip():
+                self.audio_input_var.set(audio_input)
+
+            audio_output = audio.get("output_dir")
+            if isinstance(audio_output, str) and audio_output.strip():
+                self.audio_output_var.set(audio_output)
+
+            ffmpeg_path = audio.get("ffmpeg_path")
+            if isinstance(ffmpeg_path, str):
+                self.ffmpeg_var.set(ffmpeg_path)
+
+            output_format = audio.get("output_format")
+            if isinstance(output_format, str) and output_format in AUDIO_OUTPUT_FORMATS:
+                self.audio_format_var.set(output_format)
+
+            self.slowdown_var.set(
+                self._coerce_float(
+                    audio.get("slowdown_percent"),
+                    self.default_audio_settings.slowdown_percent,
+                    0.0,
+                    45.0,
+                )
+            )
+            self.lowpass_var.set(
+                self._coerce_float(
+                    audio.get("lowpass_strength"),
+                    self.default_audio_settings.lowpass_strength,
+                    0.0,
+                    100.0,
+                )
+            )
+            self.bass_var.set(
+                self._coerce_float(
+                    audio.get("bass_boost_percent"),
+                    self.default_audio_settings.bass_boost_percent,
+                    0.0,
+                    100.0,
+                )
+            )
+            self.vinyl_var.set(
+                self._coerce_float(
+                    audio.get("vinyl_volume_percent"),
+                    self.default_audio_settings.vinyl_volume_percent,
+                    0.0,
+                    100.0,
+                )
+            )
+            self.reverb_var.set(
+                self._coerce_float(
+                    audio.get("reverb_percent"),
+                    self.default_audio_settings.reverb_percent,
+                    0.0,
+                    100.0,
+                )
+            )
+            self.audio_fade_in_var.set(
+                self._coerce_float(
+                    audio.get("fade_in_seconds"),
+                    self.default_audio_settings.fade_in_seconds,
+                    0.0,
+                    8.0,
+                )
+            )
+            self.audio_fade_out_var.set(
+                self._coerce_float(
+                    audio.get("fade_out_seconds"),
+                    self.default_audio_settings.fade_out_seconds,
+                    0.0,
+                    8.0,
+                )
+            )
+
+        video = payload.get("video")
+        if isinstance(video, dict):
+            video_audio_input = video.get("audio_input_dir")
+            if isinstance(video_audio_input, str) and video_audio_input.strip():
+                self.video_audio_input_var.set(video_audio_input)
+
+            video_output = video.get("output_dir")
+            if isinstance(video_output, str) and video_output.strip():
+                self.video_output_var.set(video_output)
+
+            self.video_fade_in_var.set(
+                self._coerce_float(
+                    video.get("fade_in_seconds"),
+                    self.default_video_settings.fade_in_seconds,
+                    0.0,
+                    8.0,
+                )
+            )
+            self.video_fade_out_var.set(
+                self._coerce_float(
+                    video.get("fade_out_seconds"),
+                    self.default_video_settings.fade_out_seconds,
+                    0.0,
+                    8.0,
+                )
+            )
+            self.video_noise_var.set(
+                self._coerce_float(
+                    video.get("noise_percent"),
+                    self.default_video_settings.noise_percent,
+                    0.0,
+                    100.0,
+                )
+            )
+            self.video_distortion_var.set(
+                self._coerce_float(
+                    video.get("distortion_percent"),
+                    self.default_video_settings.distortion_percent,
+                    0.0,
+                    100.0,
+                )
+            )
+
+    def _save_audio_settings(self) -> None:
+        payload = self._read_persisted_app_settings()
+        payload["audio"] = {
+            "input_dir": self.audio_input_var.get().strip(),
+            "output_dir": self.audio_output_var.get().strip(),
+            "ffmpeg_path": self.ffmpeg_var.get().strip(),
+            "output_format": self.audio_format_var.get().strip(),
+            "slowdown_percent": self.slowdown_var.get(),
+            "lowpass_strength": self.lowpass_var.get(),
+            "bass_boost_percent": self.bass_var.get(),
+            "vinyl_volume_percent": self.vinyl_var.get(),
+            "reverb_percent": self.reverb_var.get(),
+            "fade_in_seconds": self.audio_fade_in_var.get(),
+            "fade_out_seconds": self.audio_fade_out_var.get(),
+        }
+        if self._write_persisted_app_settings(payload):
+            self._log(f"Impostazioni audio salvate in {self.app_settings_path.name}.")
+
+    def _save_video_settings(self) -> None:
+        payload = self._read_persisted_app_settings()
+        payload["video"] = {
+            "audio_input_dir": self.video_audio_input_var.get().strip(),
+            "output_dir": self.video_output_var.get().strip(),
+            "fade_in_seconds": self.video_fade_in_var.get(),
+            "fade_out_seconds": self.video_fade_out_var.get(),
+            "noise_percent": self.video_noise_var.get(),
+            "distortion_percent": self.video_distortion_var.get(),
+        }
+        if self._write_persisted_app_settings(payload):
+            self._log(f"Impostazioni video salvate in {self.app_settings_path.name}.")
+
     def _is_busy(self) -> bool:
         return (
             self.downloading
@@ -2085,12 +2518,16 @@ class DoomerGeneratorApp:
         self.download_button.configure(state=state)
         self.audio_convert_button.configure(state=state)
         self.audio_reset_button.configure(state=state)
+        self.audio_save_button.configure(state=state)
         self.video_generate_button.configure(state=state)
+        self.video_save_button.configure(state=state)
         self.youtube_login_button.configure(state=state)
         self.youtube_upload_button.configure(state=state)
         self.pick_upload_video_button.configure(state=state)
         self.pick_client_secret_button.configure(state=state)
         self.youtube_smart_tags_check.configure(state=state)
+        self.youtube_openai_model_entry.configure(state=state)
+        self.youtube_openai_key_entry.configure(state=state)
         self.open_links_button.configure(state=state)
         self.clear_audio_input_button.configure(state=state)
         self.clear_audio_output_button.configure(state=state)
