@@ -211,7 +211,7 @@ UI_TEXTS = {
         "log_video_finished": "Fine generazione video. Totale: {total}, OK: {ok}, Errori: {err}",
         "log_runtime_download_error": "Errore runtime download: {detail}",
         "log_runtime_upload_error": "Errore runtime upload: {detail}",
-        "log_shutdown_scheduled": "Spegnimento pianificato tra 60 secondi. Annulla con: {cancel}",
+        "log_shutdown_scheduled": "Spegnimento forzato pianificato tra 60 secondi. Annulla con: {cancel}",
         "log_shutdown_skipped_errors": "Spegnimento non pianificato: upload non completato per tutti i file.",
         "log_shutdown_unsupported": "Spegnimento automatico non supportato su questo sistema.",
         "log_shutdown_error": "Errore pianificazione spegnimento: {detail}",
@@ -393,7 +393,7 @@ UI_TEXTS = {
         "log_video_finished": "Video generation finished. Total: {total}, OK: {ok}, Errors: {err}",
         "log_runtime_download_error": "Download runtime error: {detail}",
         "log_runtime_upload_error": "Upload runtime error: {detail}",
-        "log_shutdown_scheduled": "Shutdown scheduled in 60 seconds. Cancel with: {cancel}",
+        "log_shutdown_scheduled": "Forced shutdown scheduled in 60 seconds. Cancel with: {cancel}",
         "log_shutdown_skipped_errors": "Shutdown not scheduled: upload did not complete for all files.",
         "log_shutdown_unsupported": "Automatic shutdown is not supported on this system.",
         "log_shutdown_error": "Shutdown schedule error: {detail}",
@@ -3240,7 +3240,9 @@ class DoomerGeneratorApp:
 
     def _schedule_shutdown_after_upload(self) -> None:
         if os.name == "nt":
-            command = ["shutdown", "/s", "/t", "60"]
+            # Best-effort clear of any previous scheduled shutdown before scheduling a new one.
+            subprocess.run(["shutdown", "/a"], capture_output=True, text=True)
+            command = ["shutdown", "/s", "/f", "/t", "60"]
             cancel_hint = "shutdown /a"
         elif sys.platform.startswith("linux"):
             command = ["shutdown", "-h", "+1"]
@@ -3724,10 +3726,7 @@ class DoomerGeneratorApp:
                     )
                 )
                 if self.shutdown_after_upload_requested:
-                    if summary.total > 0 and summary.failed == 0 and summary.uploaded == summary.total:
-                        self._schedule_shutdown_after_upload()
-                    else:
-                        self._log(self._t("log_shutdown_skipped_errors"))
+                    self._schedule_shutdown_after_upload()
                     self.shutdown_after_upload_requested = False
             elif event == "upload_runtime_error":
                 detail = str(payload)
