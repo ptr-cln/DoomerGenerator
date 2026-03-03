@@ -11,6 +11,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import parse_qs, urlparse
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -206,6 +207,15 @@ class UploadSummary:
     failed: int
 
 
+@dataclass(frozen=True)
+class DownloadTarget:
+    source_url: str
+    request_url: str
+    dedupe_key: str
+    playlist_id: str | None = None
+    playlist_index: str | None = None
+
+
 def _safe_mtime(path: Path) -> float:
     try:
         return path.stat().st_mtime
@@ -229,6 +239,63 @@ def _summarize_process_output(stdout: str, stderr: str) -> str:
         if lines:
             return lines[-1]
     return ""
+
+
+def _extract_youtube_video_id(parsed_url) -> str | None:
+    host = parsed_url.netloc.lower()
+    path = parsed_url.path.strip("/")
+
+    if host.endswith("youtu.be"):
+        return path.split("/")[0] if path else None
+
+    query = parse_qs(parsed_url.query)
+    video_id = (query.get("v") or [None])[0]
+    if video_id:
+        return video_id
+
+    if path.startswith("shorts/"):
+        short_id = path.split("/", 1)[1]
+        return short_id or None
+    return None
+
+
+def _build_download_target(link: str) -> DownloadTarget:
+    source_url = link.strip()
+    if not source_url:
+        return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key="empty")
+
+    try:
+        parsed = urlparse(source_url)
+    except ValueError:
+        return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}")
+
+    query = parse_qs(parsed.query)
+    playlist_id = (query.get("list") or [None])[0]
+    playlist_index_raw = (query.get("index") or [None])[0]
+    video_id = _extract_youtube_video_id(parsed)
+
+    if playlist_id and playlist_index_raw:
+        match = re.search(r"\d+", playlist_index_raw)
+        if match:
+            playlist_index = match.group(0)
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            return DownloadTarget(
+                source_url=source_url,
+                request_url=playlist_url,
+                dedupe_key=f"playlist:{playlist_id}:{playlist_index}",
+                playlist_id=playlist_id,
+                playlist_index=playlist_index,
+            )
+
+    if video_id:
+        canonical_video = f"https://www.youtube.com/watch?v={video_id}"
+        return DownloadTarget(
+            source_url=source_url,
+            request_url=canonical_video,
+            dedupe_key=f"video:{video_id}",
+        )
+
+    return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}")
 
 
 def _with_doomer_suffix(stem: str) -> str:
@@ -1537,6 +1604,24 @@ class DoomerGeneratorApp:
             self._open_links_file()
             return
 
+        targets: list[DownloadTarget] = []
+        seen_keys: set[str] = set()
+        duplicates = 0
+        for link in links:
+            target = _build_download_target(link)
+            if target.dedupe_key in seen_keys:
+                duplicates += 1
+                continue
+            seen_keys.add(target.dedupe_key)
+            targets.append(target)
+
+        if not targets:
+            messagebox.showinfo(
+                "Nessun link valido",
+                "Non ci sono target validi da scaricare dopo la deduplica dei link.",
+            )
+            return
+
         ffmpeg_bin = self._resolve_ffmpeg()
         if not ffmpeg_bin:
             messagebox.showerror(
@@ -1564,13 +1649,15 @@ class DoomerGeneratorApp:
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
         self.progress_text.set("Download MP3 in corso...")
-        self._log(f"Avvio download YouTube ({len(links)} link)...")
+        self._log(f"Avvio download YouTube ({len(targets)} target unici)...")
         self._log(f"File link: {self.links_file}")
         self._log(f"Destinazione: {target_input}")
+        if duplicates > 0:
+            self._log(f"Link duplicati ignorati: {duplicates}")
 
         thread = threading.Thread(
             target=self._run_download_batch,
-            args=(ytdlp_command, ffmpeg_bin, links, target_input),
+            args=(ytdlp_command, ffmpeg_bin, targets, target_input),
             daemon=True,
         )
         thread.start()
@@ -1754,21 +1841,27 @@ class DoomerGeneratorApp:
         self,
         ytdlp_command: list[str],
         ffmpeg_bin: str,
-        links: list[str],
+        targets: list[DownloadTarget],
         target_dir: Path,
     ) -> None:
         try:
-            total = len(links)
+            total = len(targets)
             downloaded = 0
             failed = 0
             ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
             percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
 
-            for index, link in enumerate(links, start=1):
-                self.events.put(("log", f"[{index}/{total}] Download: {link}"))
+            for index, target in enumerate(targets, start=1):
+                self.events.put(("log", f"[{index}/{total}] Download: {target.source_url}"))
+                if target.playlist_id and target.playlist_index:
+                    self.events.put(
+                        (
+                            "log",
+                            f"  Playlist mode: list={target.playlist_id} item={target.playlist_index}",
+                        )
+                    )
                 command = [
                     *ytdlp_command,
-                    "--no-playlist",
                     "--newline",
                     "--retries",
                     "8",
@@ -1776,7 +1869,6 @@ class DoomerGeneratorApp:
                     "8",
                     "--extractor-retries",
                     "3",
-                    "--force-overwrites",
                     "--extract-audio",
                     "--audio-format",
                     "mp3",
@@ -1792,8 +1884,12 @@ class DoomerGeneratorApp:
                     str(target_dir),
                     "--output",
                     "%(title)s.%(ext)s",
-                    link,
                 ]
+                if target.playlist_id and target.playlist_index:
+                    command.extend(["--yes-playlist", "--playlist-items", target.playlist_index])
+                else:
+                    command.append("--no-playlist")
+                command.append(target.request_url)
 
                 process = subprocess.Popen(
                     command,
