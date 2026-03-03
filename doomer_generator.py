@@ -1762,10 +1762,13 @@ class DoomerGeneratorApp:
         main = ttk.Frame(self.root, padding=12)
         self.main_frame = main
         main.pack(fill=tk.BOTH, expand=True)
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(0, weight=4)
+        main.rowconfigure(2, weight=1)
 
         notebook = ttk.Notebook(main)
         self.notebook_widget = notebook
-        notebook.pack(fill=tk.BOTH, expand=False)
+        notebook.grid(row=0, column=0, sticky="nsew")
 
         general_tab_container, general_tab = self._create_scrollable_tab(notebook)
         download_tab_container, download_tab = self._create_scrollable_tab(notebook)
@@ -1788,16 +1791,16 @@ class DoomerGeneratorApp:
         self._build_upload_tab(upload_tab)
 
         progress_box = ttk.LabelFrame(main, text=self._t("status_group"), padding=8)
-        progress_box.pack(fill=tk.X, pady=(10, 8))
+        progress_box.grid(row=1, column=0, sticky="ew", pady=(10, 8))
         ttk.Progressbar(progress_box, variable=self.progress_var, maximum=100).pack(fill=tk.X)
         ttk.Label(progress_box, textvariable=self.progress_text).pack(anchor="w", pady=(6, 0))
 
         logs_frame = ttk.LabelFrame(main, text=self._t("log_group"), padding=8)
-        logs_frame.pack(fill=tk.BOTH, expand=True)
+        logs_frame.grid(row=2, column=0, sticky="nsew")
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(0, weight=1)
 
-        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=10, state=tk.DISABLED)
+        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
         self.log_widget.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
