@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import queue
+import random
 import shutil
 import subprocess
 import sys
@@ -14,7 +15,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 
-SUPPORTED_EXTENSIONS = {
+AUDIO_EXTENSIONS = {
     ".mp3",
     ".wav",
     ".flac",
@@ -25,50 +26,141 @@ SUPPORTED_EXTENSIONS = {
     ".aiff",
 }
 
+VINYL_EXTENSIONS = AUDIO_EXTENSIONS
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+
 
 @dataclass(frozen=True)
-class DoomerSettings:
+class AudioSettings:
     slowdown_percent: float = 20.0
     lowpass_strength: float = 75.0
     bass_boost_percent: float = 50.0
     vinyl_volume_percent: float = 65.0
     reverb_percent: float = 15.0
+    fade_in_seconds: float = 1.0
+    fade_out_seconds: float = 1.0
     output_format: str = "mp3"
 
-    def build_filter_complex(self) -> str:
+    def build_filter_complex(self, include_vinyl: bool) -> str:
         speed = max(0.50, min(1.00, 1.0 - (self.slowdown_percent / 100.0)))
         cutoff_hz = int(16000 - (self.lowpass_strength / 100.0) * 13800)
         bass_gain = round((self.bass_boost_percent / 100.0) * 12.0, 2)
-        vinyl_intensity = max(0.0, min(1.0, self.vinyl_volume_percent / 100.0))
-        vinyl_weight = round(vinyl_intensity * 1.9, 3)
-        hiss_amplitude = round(0.001 + vinyl_intensity * 0.014, 4)
-        crackle_amplitude = round(0.015 + vinyl_intensity * 0.095, 4)
         reverb_decay = round(0.10 + (self.reverb_percent / 100.0) * 0.35, 3)
+        vinyl_intensity = max(0.0, min(1.0, self.vinyl_volume_percent / 100.0))
+        vinyl_gain = round(0.25 + vinyl_intensity * 2.4, 3)
+        fade_in = max(0.0, self.fade_in_seconds)
+        fade_out = max(0.0, self.fade_out_seconds)
 
-        return (
+        parts = [
             "[0:a]"
             "aformat=sample_rates=44100:channel_layouts=stereo,"
             f"asetrate=44100*{speed},aresample=44100,"
             f"lowpass=f={cutoff_hz},"
             f"bass=g={bass_gain}:f=120:w=0.9,"
-            f"aecho=0.8:0.7:60|120:{reverb_decay}|{reverb_decay * 0.7},"
+            f"aecho=0.8:0.7:60|120:{reverb_decay}|{round(reverb_decay * 0.7, 3)},"
             "acompressor=threshold=-17dB:ratio=2.3:attack=20:release=180"
-            "[main];"
-            f"anoisesrc=color=pink:amplitude={hiss_amplitude},"
-            "aformat=sample_rates=44100:channel_layouts=stereo,"
-            "highpass=f=1000,lowpass=f=8500"
-            "[hiss];"
-            f"anoisesrc=color=white:amplitude={crackle_amplitude},"
-            "aformat=sample_rates=44100:channel_layouts=stereo,"
-            "highpass=f=2600,lowpass=f=11000,"
-            "agate=threshold=0.15:ratio=20:attack=0.5:release=8"
-            "[crackle];"
-            "[hiss][crackle]amix=inputs=2:weights='1 1.25':normalize=0,"
-            "alimiter=limit=0.92"
-            "[vinyl];"
-            f"[main][vinyl]amix=inputs=2:weights='1 {vinyl_weight}':duration=first:normalize=0"
-            "[out]"
+            "[main]"
+        ]
+
+        if include_vinyl:
+            parts.append(
+                "[1:a]"
+                "aformat=sample_rates=44100:channel_layouts=stereo,"
+                "highpass=f=950,lowpass=f=9200,"
+                "acompressor=threshold=-26dB:ratio=2.0:attack=8:release=90,"
+                f"volume={vinyl_gain}"
+                "[vinyl]"
+            )
+            parts.append(
+                "[main][vinyl]"
+                "amix=inputs=2:weights='1 1':duration=first:normalize=0"
+                "[mixed]"
+            )
+        else:
+            parts.append("[main]anull[mixed]")
+
+        cursor = "mixed"
+        if fade_in > 0:
+            parts.append(f"[{cursor}]afade=t=in:st=0:d={fade_in:.2f}[fadin]")
+            cursor = "fadin"
+        if fade_out > 0:
+            parts.append(f"[{cursor}]areverse,afade=t=in:st=0:d={fade_out:.2f},areverse[fadout]")
+            cursor = "fadout"
+
+        parts.append(f"[{cursor}]alimiter=limit=0.96[out]")
+        return ";".join(parts)
+
+
+@dataclass(frozen=True)
+class VideoSettings:
+    fade_in_seconds: float = 1.0
+    fade_out_seconds: float = 1.0
+    noise_percent: float = 35.0
+    distortion_percent: float = 28.0
+
+    def build_filter_complex(self, audio_duration_seconds: float | None) -> str:
+        noise_amount = round((self.noise_percent / 100.0) * 26.0, 2)
+        distortion_px = int(round((self.distortion_percent / 100.0) * 16.0))
+        fade_in = max(0.0, self.fade_in_seconds)
+        fade_out = max(0.0, self.fade_out_seconds)
+        fade_out_start = None
+        if audio_duration_seconds is not None and audio_duration_seconds > fade_out:
+            fade_out_start = max(0.0, audio_duration_seconds - fade_out)
+
+        parts = [
+            "[0:v]"
+            "scale=1920:1080:force_original_aspect_ratio=increase,"
+            "crop=1920:1080,setsar=1"
+            "[bg]",
+            "[1:v]"
+            "format=rgba,colorkey=0xFFFFFF:0.30:0.12,"
+            "scale=920:-1"
+            "[doomer]",
+            "[bg][doomer]overlay=x=70:y=H-h-24:format=auto[scene]",
+        ]
+
+        cursor = "scene"
+        if distortion_px > 0:
+            crop_margin = distortion_px * 2
+            parts.append(
+                f"[{cursor}]"
+                f"crop=iw-{crop_margin}:ih-{crop_margin}:"
+                f"x={distortion_px}+sin(n/9)*{distortion_px}:"
+                f"y={distortion_px}+cos(n/11)*{distortion_px},"
+                "scale=1920:1080"
+                "[jitter]"
+            )
+            cursor = "jitter"
+
+        parts.append(
+            f"[{cursor}]"
+            "fps=30,"
+            "eq=contrast=1.12:saturation=0.82:brightness=-0.035,"
+            f"noise=alls={noise_amount}:allf=t+u,"
+            "vignette=PI/4,gblur=sigma=0.35"
+            "[vfx]"
         )
+        cursor = "vfx"
+
+        if fade_in > 0:
+            parts.append(f"[{cursor}]fade=t=in:st=0:d={fade_in:.2f}[vfi]")
+            cursor = "vfi"
+        if fade_out > 0 and fade_out_start is not None:
+            parts.append(f"[{cursor}]fade=t=out:st={fade_out_start:.3f}:d={fade_out:.2f}[vfo]")
+            cursor = "vfo"
+        parts.append(f"[{cursor}]format=yuv420p[vout]")
+
+        parts.append("[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_base]")
+        a_cursor = "a_base"
+        if fade_in > 0:
+            parts.append(f"[{a_cursor}]afade=t=in:st=0:d={fade_in:.2f}[a_fi]")
+            a_cursor = "a_fi"
+        if fade_out > 0 and fade_out_start is not None:
+            parts.append(f"[{a_cursor}]afade=t=out:st={fade_out_start:.3f}:d={fade_out:.2f}[a_fo]")
+            a_cursor = "a_fo"
+        parts.append(f"[{a_cursor}]alimiter=limit=0.96[aout]")
+
+        return ";".join(parts)
 
 
 @dataclass
@@ -85,28 +177,60 @@ class DownloadSummary:
     failed: int
 
 
+@dataclass
+class VideoSummary:
+    total: int
+    generated: int
+    failed: int
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _collect_files(base_dir: Path, extensions: set[str]) -> list[Path]:
+    if not base_dir.is_dir():
+        return []
+    return sorted(
+        file
+        for file in base_dir.rglob("*")
+        if file.is_file() and file.suffix.lower() in extensions
+    )
+
+
+def _summarize_process_output(stdout: str, stderr: str) -> str:
+    for text in (stderr, stdout):
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if lines:
+            return lines[-1]
+    return ""
+
+
 class DoomerBatchConverter:
-    def __init__(self, ffmpeg_bin: str, log: Callable[[str], None]):
+    def __init__(self, ffmpeg_bin: str, vinyls_dir: Path, log: Callable[[str], None]):
         self.ffmpeg_bin = ffmpeg_bin
+        self.vinyls_dir = vinyls_dir
         self.log = log
 
     def convert_folder(
         self,
         input_dir: Path,
         output_dir: Path,
-        settings: DoomerSettings,
+        settings: AudioSettings,
         progress: Callable[[int, int], None],
     ) -> ConversionSummary:
-        files = sorted(
-            file
-            for file in input_dir.rglob("*")
-            if file.is_file() and file.suffix.lower() in SUPPORTED_EXTENSIONS
-        )
+        files = _collect_files(input_dir, AUDIO_EXTENSIONS)
         total = len(files)
-
         if total == 0:
             self.log("Nessun file audio trovato nella cartella di input.")
             return ConversionSummary(total=0, converted=0, failed=0)
+
+        vinyl_files = _collect_files(self.vinyls_dir, VINYL_EXTENSIONS)
+        if settings.vinyl_volume_percent > 0 and not vinyl_files:
+            self.log("Attenzione: nessun file vinile in resources/vinyls. Procedo senza overlay vinile.")
 
         converted = 0
         failed = 0
@@ -118,8 +242,15 @@ class DoomerBatchConverter:
             destination = destination.with_suffix(output_suffix)
             destination.parent.mkdir(parents=True, exist_ok=True)
 
-            self.log(f"[{index}/{total}] Elaboro: {source_file.name}")
-            if self._convert_file(source_file, destination, settings):
+            vinyl_file = None
+            if vinyl_files and settings.vinyl_volume_percent > 0:
+                vinyl_file = random.choice(vinyl_files)
+
+            self.log(f"[{index}/{total}] Audio: {source_file.name}")
+            if vinyl_file:
+                self.log(f"  Vinile: {vinyl_file.name}")
+
+            if self._convert_file(source_file, destination, settings, vinyl_file):
                 converted += 1
                 self.log(f"  OK -> {destination.name}")
             else:
@@ -130,7 +261,13 @@ class DoomerBatchConverter:
 
         return ConversionSummary(total=total, converted=converted, failed=failed)
 
-    def _convert_file(self, source: Path, destination: Path, settings: DoomerSettings) -> bool:
+    def _convert_file(
+        self,
+        source: Path,
+        destination: Path,
+        settings: AudioSettings,
+        vinyl_file: Path | None,
+    ) -> bool:
         command = [
             self.ffmpeg_bin,
             "-hide_banner",
@@ -139,22 +276,30 @@ class DoomerBatchConverter:
             "-y",
             "-i",
             str(source),
-            "-filter_complex",
-            settings.build_filter_complex(),
-            "-map",
-            "[out]",
-            "-vn",
         ]
+
+        include_vinyl = vinyl_file is not None
+        if include_vinyl and vinyl_file:
+            command.extend(["-stream_loop", "-1", "-i", str(vinyl_file)])
+
+        command.extend(
+            [
+                "-filter_complex",
+                settings.build_filter_complex(include_vinyl=include_vinyl),
+                "-map",
+                "[out]",
+                "-vn",
+            ]
+        )
         command.extend(self._codec_flags(settings.output_format.lower()))
         command.append(str(destination))
 
         result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode == 0:
             return True
-
-        stderr_text = result.stderr.strip()
-        if stderr_text:
-            self.log(f"  ffmpeg: {stderr_text}")
+        detail = _summarize_process_output(result.stdout, result.stderr)
+        if detail:
+            self.log(f"  ffmpeg: {detail}")
         return False
 
     @staticmethod
@@ -168,37 +313,216 @@ class DoomerBatchConverter:
         return ["-c:a", "libmp3lame", "-b:a", "192k"]
 
 
+class DoomerVideoGenerator:
+    def __init__(
+        self,
+        ffmpeg_bin: str,
+        backgrounds_dir: Path,
+        doomer_image: Path,
+        log: Callable[[str], None],
+    ):
+        self.ffmpeg_bin = ffmpeg_bin
+        self.ffprobe_bin = self._resolve_ffprobe(ffmpeg_bin)
+        self.backgrounds_dir = backgrounds_dir
+        self.doomer_image = doomer_image
+        self.log = log
+
+    def generate_from_audio_folder(
+        self,
+        audio_input_dir: Path,
+        video_output_dir: Path,
+        settings: VideoSettings,
+        progress: Callable[[int, int], None],
+    ) -> VideoSummary:
+        audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
+        total = len(audio_files)
+        if total == 0:
+            self.log("Nessun file audio disponibile per creare video.")
+            return VideoSummary(total=0, generated=0, failed=0)
+
+        if not self.doomer_image.is_file():
+            self.log(f"Doomer image mancante: {self.doomer_image}")
+            return VideoSummary(total=total, generated=0, failed=total)
+
+        backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+        if not backgrounds:
+            self.log(f"Nessun background trovato in: {self.backgrounds_dir}")
+            return VideoSummary(total=total, generated=0, failed=total)
+
+        generated = 0
+        failed = 0
+
+        for index, audio_file in enumerate(audio_files, start=1):
+            relative = audio_file.relative_to(audio_input_dir)
+            destination = (video_output_dir / relative).with_suffix(".mp4")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            background = random.choice(backgrounds)
+
+            self.log(f"[{index}/{total}] Video: {audio_file.name}")
+            self.log(f"  Background: {background.name}")
+
+            if self._generate_single_video(audio_file, background, destination, settings):
+                generated += 1
+                self.log(f"  OK -> {destination.name}")
+            else:
+                failed += 1
+                self.log(f"  ERRORE -> {audio_file.name}")
+
+            progress(index, total)
+
+        return VideoSummary(total=total, generated=generated, failed=failed)
+
+    def _generate_single_video(
+        self,
+        audio_file: Path,
+        background: Path,
+        destination: Path,
+        settings: VideoSettings,
+    ) -> bool:
+        duration = self._probe_duration_seconds(audio_file)
+        if duration is None:
+            self.log("  Durata audio non rilevata: fade out video/audio disattivato per questo file.")
+
+        command = [
+            self.ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            str(background),
+            "-loop",
+            "1",
+            "-i",
+            str(self.doomer_image),
+            "-i",
+            str(audio_file),
+            "-filter_complex",
+            settings.build_filter_complex(audio_duration_seconds=duration),
+            "-map",
+            "[vout]",
+            "-map",
+            "[aout]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            str(destination),
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            return True
+        detail = _summarize_process_output(result.stdout, result.stderr)
+        if detail:
+            self.log(f"  ffmpeg: {detail}")
+        return False
+
+    def _probe_duration_seconds(self, audio_file: Path) -> float | None:
+        if not self.ffprobe_bin:
+            return None
+        command = [
+            self.ffprobe_bin,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(audio_file),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        text = result.stdout.strip()
+        if not text:
+            return None
+        try:
+            value = float(text)
+        except ValueError:
+            return None
+        if value <= 0:
+            return None
+        return value
+
+    @staticmethod
+    def _resolve_ffprobe(ffmpeg_bin: str) -> str | None:
+        ffmpeg_path = Path(ffmpeg_bin)
+        sibling = ffmpeg_path.with_name("ffprobe.exe")
+        if sibling.is_file():
+            return str(sibling)
+        sibling_no_ext = ffmpeg_path.with_name("ffprobe")
+        if sibling_no_ext.is_file():
+            return str(sibling_no_ext)
+        lookup = shutil.which("ffprobe")
+        return lookup
+
+
 class DoomerGeneratorApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Doomer Wave Generator")
-        self.root.geometry("1024x900")
-        self.root.minsize(920, 760)
+        self.root.geometry("1200x900")
+        self.root.minsize(980, 760)
+
         self.project_dir = Path(__file__).resolve().parent
+        self.resources_dir = self.project_dir / "resources"
+        self.vinyls_dir = self.resources_dir / "vinyls"
+        self.backgrounds_dir = self.resources_dir / "backgrounds"
+        self.doomer_image_path = self.resources_dir / "Doomer_Guy.jpg"
         self.links_file = self.project_dir / "youtube_links.txt"
-        self.default_settings = DoomerSettings()
+
+        self.audio_root = self.project_dir / "audio"
+        self.video_root = self.project_dir / "video"
+        self.audio_input_dir = self.audio_root / "in"
+        self.audio_output_dir = self.audio_root / "out"
+        self.video_output_dir = self.video_root / "out"
+
+        self.default_audio_settings = AudioSettings()
+        self.default_video_settings = VideoSettings()
 
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
-        self.processing = False
         self.downloading = False
+        self.audio_processing = False
+        self.video_processing = False
 
-        default_input = self.project_dir / "in"
-        default_output = self.project_dir / "out"
-        default_input.mkdir(parents=True, exist_ok=True)
-        default_output.mkdir(parents=True, exist_ok=True)
+        self._ensure_default_filesystem()
         self._ensure_links_file()
 
-        self.input_var = tk.StringVar(value=str(default_input))
-        self.output_var = tk.StringVar(value=str(default_output))
-        self.ffmpeg_var = tk.StringVar(value=self._default_ffmpeg_path())
         self.links_file_var = tk.StringVar(value=str(self.links_file))
-        self.format_var = tk.StringVar(value=self.default_settings.output_format)
+        self.ffmpeg_var = tk.StringVar(value=self._default_ffmpeg_path())
 
-        self.slowdown_var = tk.DoubleVar(value=self.default_settings.slowdown_percent)
-        self.lowpass_var = tk.DoubleVar(value=self.default_settings.lowpass_strength)
-        self.bass_var = tk.DoubleVar(value=self.default_settings.bass_boost_percent)
-        self.vinyl_var = tk.DoubleVar(value=self.default_settings.vinyl_volume_percent)
-        self.reverb_var = tk.DoubleVar(value=self.default_settings.reverb_percent)
+        self.audio_input_var = tk.StringVar(value=str(self.audio_input_dir))
+        self.audio_output_var = tk.StringVar(value=str(self.audio_output_dir))
+        self.audio_format_var = tk.StringVar(value=self.default_audio_settings.output_format)
+
+        self.slowdown_var = tk.DoubleVar(value=self.default_audio_settings.slowdown_percent)
+        self.lowpass_var = tk.DoubleVar(value=self.default_audio_settings.lowpass_strength)
+        self.bass_var = tk.DoubleVar(value=self.default_audio_settings.bass_boost_percent)
+        self.vinyl_var = tk.DoubleVar(value=self.default_audio_settings.vinyl_volume_percent)
+        self.reverb_var = tk.DoubleVar(value=self.default_audio_settings.reverb_percent)
+        self.audio_fade_in_var = tk.DoubleVar(value=self.default_audio_settings.fade_in_seconds)
+        self.audio_fade_out_var = tk.DoubleVar(value=self.default_audio_settings.fade_out_seconds)
+
+        self.video_audio_input_var = tk.StringVar(value=str(self.audio_output_dir))
+        self.video_output_var = tk.StringVar(value=str(self.video_output_dir))
+        self.video_backgrounds_var = tk.StringVar(value=str(self.backgrounds_dir))
+        self.video_doomer_var = tk.StringVar(value=str(self.doomer_image_path))
+        self.video_fade_in_var = tk.DoubleVar(value=self.default_video_settings.fade_in_seconds)
+        self.video_fade_out_var = tk.DoubleVar(value=self.default_video_settings.fade_out_seconds)
+        self.video_noise_var = tk.DoubleVar(value=self.default_video_settings.noise_percent)
+        self.video_distortion_var = tk.DoubleVar(value=self.default_video_settings.distortion_percent)
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value="Pronto")
@@ -207,64 +531,107 @@ class DoomerGeneratorApp:
         self.root.after(100, self._poll_events)
 
     def _build_ui(self) -> None:
-        main = ttk.Frame(self.root, padding=14)
+        main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
-        paths = ttk.LabelFrame(main, text="Cartelle")
-        paths.pack(fill=tk.X, pady=(0, 10))
+        notebook = ttk.Notebook(main)
+        notebook.pack(fill=tk.BOTH, expand=False)
+
+        download_tab = ttk.Frame(notebook, padding=10)
+        audio_tab = ttk.Frame(notebook, padding=10)
+        video_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(download_tab, text="Download")
+        notebook.add(audio_tab, text="Audio")
+        notebook.add(video_tab, text="Video")
+
+        self._build_download_tab(download_tab)
+        self._build_audio_tab(audio_tab)
+        self._build_video_tab(video_tab)
+
+        progress_box = ttk.LabelFrame(main, text="Stato", padding=8)
+        progress_box.pack(fill=tk.X, pady=(10, 8))
+        ttk.Progressbar(progress_box, variable=self.progress_var, maximum=100).pack(fill=tk.X)
+        ttk.Label(progress_box, textvariable=self.progress_text).pack(anchor="w", pady=(6, 0))
+
+        logs_frame = ttk.LabelFrame(main, text="Log", padding=8)
+        logs_frame.pack(fill=tk.BOTH, expand=True)
+        logs_frame.columnconfigure(0, weight=1)
+        logs_frame.rowconfigure(0, weight=1)
+
+        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=10, state=tk.DISABLED)
+        self.log_widget.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.log_widget.configure(yscrollcommand=scrollbar.set)
+
+    def _build_download_tab(self, parent: ttk.Frame) -> None:
+        box = ttk.LabelFrame(parent, text="YouTube", padding=8)
+        box.pack(fill=tk.X)
+        box.columnconfigure(1, weight=1)
+
+        ttk.Label(box, text="File link").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(box, textvariable=self.links_file_var, state="readonly").grid(
+            row=0, column=1, padx=6, pady=6, sticky="ew"
+        )
+        self.open_links_button = ttk.Button(box, text="Apri file", command=self._open_links_file)
+        self.open_links_button.grid(row=0, column=2, padx=6, pady=6)
+
+        actions = ttk.Frame(parent)
+        actions.pack(fill=tk.X, pady=(10, 0))
+        self.download_button = ttk.Button(actions, text="Scarica Mp3", command=self._start_download)
+        self.download_button.pack(side=tk.LEFT)
+
+        ttk.Label(
+            parent,
+            text=f"I download vengono salvati in: {self.audio_input_dir}",
+        ).pack(anchor="w", pady=(10, 0))
+
+    def _build_audio_tab(self, parent: ttk.Frame) -> None:
+        paths = ttk.LabelFrame(parent, text="Cartelle Audio", padding=8)
+        paths.pack(fill=tk.X, pady=(0, 8))
         paths.columnconfigure(1, weight=1)
 
-        ttk.Label(paths, text="Input").grid(row=0, column=0, padx=8, pady=8, sticky="w")
-        ttk.Entry(paths, textvariable=self.input_var).grid(
-            row=0, column=1, padx=8, pady=8, sticky="ew"
+        ttk.Label(paths, text="Input").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(paths, textvariable=self.audio_input_var).grid(
+            row=0, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_input).grid(
-            row=0, column=2, padx=8, pady=8
-        )
-
-        ttk.Label(paths, text="Output").grid(row=1, column=0, padx=8, pady=8, sticky="w")
-        ttk.Entry(paths, textvariable=self.output_var).grid(
-            row=1, column=1, padx=8, pady=8, sticky="ew"
-        )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_output).grid(
-            row=1, column=2, padx=8, pady=8
+        ttk.Button(paths, text="Sfoglia...", command=self._pick_audio_input).grid(
+            row=0, column=2, padx=6, pady=6
         )
 
-        ttk.Label(paths, text="ffmpeg.exe (opzionale)").grid(
-            row=2, column=0, padx=8, pady=8, sticky="w"
+        ttk.Label(paths, text="Output").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(paths, textvariable=self.audio_output_var).grid(
+            row=1, column=1, padx=6, pady=6, sticky="ew"
         )
-        ttk.Entry(paths, textvariable=self.ffmpeg_var).grid(
-            row=2, column=1, padx=8, pady=8, sticky="ew"
-        )
-        ttk.Button(paths, text="Sfoglia...", command=self._pick_ffmpeg).grid(
-            row=2, column=2, padx=8, pady=8
+        ttk.Button(paths, text="Sfoglia...", command=self._pick_audio_output).grid(
+            row=1, column=2, padx=6, pady=6
         )
 
-        ttk.Label(paths, text="Formato output").grid(row=3, column=0, padx=8, pady=8, sticky="w")
-        format_combo = ttk.Combobox(
-            paths,
-            textvariable=self.format_var,
+        tools = ttk.LabelFrame(parent, text="Strumenti", padding=8)
+        tools.pack(fill=tk.X, pady=(0, 8))
+        tools.columnconfigure(1, weight=1)
+
+        ttk.Label(tools, text="ffmpeg.exe (opzionale)").grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        ttk.Entry(tools, textvariable=self.ffmpeg_var).grid(
+            row=0, column=1, padx=6, pady=6, sticky="ew"
+        )
+        ttk.Button(tools, text="Sfoglia...", command=self._pick_ffmpeg).grid(
+            row=0, column=2, padx=6, pady=6
+        )
+
+        ttk.Label(tools, text="Formato output").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Combobox(
+            tools,
+            textvariable=self.audio_format_var,
             values=["mp3", "wav", "flac", "ogg"],
             state="readonly",
             width=10,
-        )
-        format_combo.grid(row=3, column=1, padx=8, pady=8, sticky="w")
-        format_combo.current(0)
+        ).grid(row=1, column=1, padx=6, pady=6, sticky="w")
 
-        youtube_box = ttk.LabelFrame(main, text="YouTube")
-        youtube_box.pack(fill=tk.X, pady=(0, 10))
-        youtube_box.columnconfigure(1, weight=1)
-        ttk.Label(youtube_box, text="File link").grid(row=0, column=0, padx=8, pady=8, sticky="w")
-        ttk.Entry(youtube_box, textvariable=self.links_file_var, state="readonly").grid(
-            row=0, column=1, padx=8, pady=8, sticky="ew"
-        )
-        self.open_links_button = ttk.Button(
-            youtube_box, text="Apri file", command=self._open_links_file
-        )
-        self.open_links_button.grid(row=0, column=2, padx=8, pady=8)
-
-        effects = ttk.LabelFrame(main, text="Effetti Doomer Wave")
-        effects.pack(fill=tk.X, pady=(0, 10))
+        effects = ttk.LabelFrame(parent, text="Effetti Audio", padding=8)
+        effects.pack(fill=tk.X, pady=(0, 8))
 
         self._add_slider(
             effects,
@@ -282,7 +649,7 @@ class DoomerGeneratorApp:
             minimum=0,
             maximum=100,
             row=1,
-            description="Riduce le alte frequenze (low-pass).",
+            description="Riduce le alte frequenze.",
         )
         self._add_slider(
             effects,
@@ -300,7 +667,7 @@ class DoomerGeneratorApp:
             minimum=0,
             maximum=100,
             row=3,
-            description="Intensita del rumore di fondo in stile vinile.",
+            description="Mix del vinile casuale da resources/vinyls.",
         )
         self._add_slider(
             effects,
@@ -309,68 +676,190 @@ class DoomerGeneratorApp:
             minimum=0,
             maximum=100,
             row=4,
-            description="Riverbero leggero per profondita atmosferica.",
+            description="Riverbero leggero atmosferico.",
+        )
+        self._add_slider(
+            effects,
+            label="Fade in audio (secondi)",
+            variable=self.audio_fade_in_var,
+            minimum=0,
+            maximum=8,
+            row=5,
+            description="Durata dissolvenza in ingresso.",
+            resolution=0.1,
+        )
+        self._add_slider(
+            effects,
+            label="Fade out audio (secondi)",
+            variable=self.audio_fade_out_var,
+            minimum=0,
+            maximum=8,
+            row=6,
+            description="Durata dissolvenza in uscita.",
+            resolution=0.1,
         )
 
-        controls = ttk.Frame(main)
-        controls.pack(fill=tk.X, pady=(0, 8))
-        self.download_button = ttk.Button(controls, text="Scarica Mp3", command=self._start_download)
-        self.download_button.pack(side=tk.LEFT)
-        self.start_button = ttk.Button(controls, text="Avvia conversione batch", command=self._start)
-        self.start_button.pack(side=tk.LEFT, padx=8)
-        self.reset_button = ttk.Button(controls, text="Reset default", command=self._reset_defaults)
-        self.reset_button.pack(side=tk.LEFT, padx=8)
+        actions = ttk.Frame(parent)
+        actions.pack(fill=tk.X)
+        self.audio_convert_button = ttk.Button(
+            actions,
+            text="Avvia conversione batch",
+            command=self._start_audio_conversion,
+        )
+        self.audio_convert_button.pack(side=tk.LEFT)
+        self.audio_reset_button = ttk.Button(
+            actions,
+            text="Reset default",
+            command=self._reset_audio_defaults,
+        )
+        self.audio_reset_button.pack(side=tk.LEFT, padx=8)
 
-        progress = ttk.Frame(main)
-        progress.pack(fill=tk.X, pady=(0, 8))
-        ttk.Progressbar(progress, variable=self.progress_var, maximum=100).pack(fill=tk.X)
-        ttk.Label(progress, textvariable=self.progress_text).pack(anchor="w", pady=(5, 0))
+    def _build_video_tab(self, parent: ttk.Frame) -> None:
+        resources_box = ttk.LabelFrame(parent, text="Risorse Video", padding=8)
+        resources_box.pack(fill=tk.X, pady=(0, 8))
+        resources_box.columnconfigure(1, weight=1)
 
-        logs_frame = ttk.LabelFrame(main, text="Log")
-        logs_frame.pack(fill=tk.BOTH, expand=True)
-        logs_frame.columnconfigure(0, weight=1)
-        logs_frame.rowconfigure(0, weight=1)
+        ttk.Label(resources_box, text="Backgrounds").grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        ttk.Entry(
+            resources_box,
+            textvariable=self.video_backgrounds_var,
+            state="readonly",
+        ).grid(row=0, column=1, padx=6, pady=6, sticky="ew")
 
-        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
-        self.log_widget.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.log_widget.configure(yscrollcommand=scrollbar.set)
+        ttk.Label(resources_box, text="Doomer image").grid(
+            row=1, column=0, padx=6, pady=6, sticky="w"
+        )
+        ttk.Entry(resources_box, textvariable=self.video_doomer_var, state="readonly").grid(
+            row=1, column=1, padx=6, pady=6, sticky="ew"
+        )
+
+        paths = ttk.LabelFrame(parent, text="Cartelle Video", padding=8)
+        paths.pack(fill=tk.X, pady=(0, 8))
+        paths.columnconfigure(1, weight=1)
+
+        ttk.Label(paths, text="Input audio").grid(row=0, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(paths, textvariable=self.video_audio_input_var).grid(
+            row=0, column=1, padx=6, pady=6, sticky="ew"
+        )
+        ttk.Button(paths, text="Sfoglia...", command=self._pick_video_audio_input).grid(
+            row=0, column=2, padx=6, pady=6
+        )
+
+        ttk.Label(paths, text="Output video").grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        ttk.Entry(paths, textvariable=self.video_output_var).grid(
+            row=1, column=1, padx=6, pady=6, sticky="ew"
+        )
+        ttk.Button(paths, text="Sfoglia...", command=self._pick_video_output).grid(
+            row=1, column=2, padx=6, pady=6
+        )
+
+        effects = ttk.LabelFrame(parent, text="Effetti Video", padding=8)
+        effects.pack(fill=tk.X, pady=(0, 8))
+
+        self._add_slider(
+            effects,
+            label="Fade in video (secondi)",
+            variable=self.video_fade_in_var,
+            minimum=0,
+            maximum=8,
+            row=0,
+            description="Dissolvenza in ingresso su video + audio.",
+            resolution=0.1,
+        )
+        self._add_slider(
+            effects,
+            label="Fade out video (secondi)",
+            variable=self.video_fade_out_var,
+            minimum=0,
+            maximum=8,
+            row=1,
+            description="Dissolvenza in uscita su video + audio.",
+            resolution=0.1,
+        )
+        self._add_slider(
+            effects,
+            label="Rumore video (%)",
+            variable=self.video_noise_var,
+            minimum=0,
+            maximum=100,
+            row=2,
+            description="Grana/noise su tutto il frame.",
+        )
+        self._add_slider(
+            effects,
+            label="Distorsione (%)",
+            variable=self.video_distortion_var,
+            minimum=0,
+            maximum=100,
+            row=3,
+            description="Jitter/instabilita stile VHS su tutto il frame.",
+        )
+
+        actions = ttk.Frame(parent)
+        actions.pack(fill=tk.X)
+        self.video_generate_button = ttk.Button(
+            actions,
+            text="Genera video batch",
+            command=self._start_video_generation,
+        )
+        self.video_generate_button.pack(side=tk.LEFT)
 
     def _add_slider(
         self,
         parent: ttk.LabelFrame,
         label: str,
         variable: tk.DoubleVar,
-        minimum: int,
-        maximum: int,
+        minimum: float,
+        maximum: float,
         row: int,
         description: str,
+        resolution: float = 1.0,
     ) -> None:
-        ttk.Label(parent, text=label).grid(row=row * 2, column=0, sticky="w", padx=8, pady=(8, 2))
+        ttk.Label(parent, text=label).grid(
+            row=row * 2, column=0, sticky="w", padx=6, pady=(6, 2)
+        )
         scale = tk.Scale(
             parent,
             variable=variable,
             from_=minimum,
             to=maximum,
             orient=tk.HORIZONTAL,
-            resolution=1,
+            resolution=resolution,
             showvalue=True,
-            length=380,
+            length=520,
         )
-        scale.grid(row=row * 2, column=1, sticky="ew", padx=8, pady=(8, 2))
-        ttk.Label(parent, text=description).grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w", padx=8)
+        scale.grid(row=row * 2, column=1, sticky="ew", padx=6, pady=(6, 2))
+        ttk.Label(parent, text=description).grid(
+            row=row * 2 + 1,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            padx=6,
+            pady=(0, 4),
+        )
         parent.columnconfigure(1, weight=1)
 
-    def _pick_input(self) -> None:
-        selected = filedialog.askdirectory(title="Seleziona cartella input")
+    def _pick_audio_input(self) -> None:
+        selected = filedialog.askdirectory(title="Seleziona cartella input audio")
         if selected:
-            self.input_var.set(selected)
+            self.audio_input_var.set(selected)
 
-    def _pick_output(self) -> None:
-        selected = filedialog.askdirectory(title="Seleziona cartella output")
+    def _pick_audio_output(self) -> None:
+        selected = filedialog.askdirectory(title="Seleziona cartella output audio")
         if selected:
-            self.output_var.set(selected)
+            self.audio_output_var.set(selected)
+
+    def _pick_video_audio_input(self) -> None:
+        selected = filedialog.askdirectory(title="Seleziona cartella input audio per video")
+        if selected:
+            self.video_audio_input_var.set(selected)
+
+    def _pick_video_output(self) -> None:
+        selected = filedialog.askdirectory(title="Seleziona cartella output video")
+        if selected:
+            self.video_output_var.set(selected)
 
     def _pick_ffmpeg(self) -> None:
         selected = filedialog.askopenfilename(
@@ -386,79 +875,19 @@ class DoomerGeneratorApp:
 
     def _open_links_file(self) -> None:
         self._ensure_links_file()
-        file_path = self.links_file
         try:
             if hasattr(os, "startfile"):
-                os.startfile(str(file_path))
+                os.startfile(str(self.links_file))
                 return
             if sys.platform == "darwin":
-                subprocess.Popen(["open", str(file_path)])
+                subprocess.Popen(["open", str(self.links_file)])
                 return
-            subprocess.Popen(["xdg-open", str(file_path)])
+            subprocess.Popen(["xdg-open", str(self.links_file)])
         except OSError as error:
             messagebox.showerror("Errore apertura file", f"Impossibile aprire il file link.\n{error}")
 
-    def _reset_defaults(self) -> None:
-        self.slowdown_var.set(self.default_settings.slowdown_percent)
-        self.lowpass_var.set(self.default_settings.lowpass_strength)
-        self.bass_var.set(self.default_settings.bass_boost_percent)
-        self.vinyl_var.set(self.default_settings.vinyl_volume_percent)
-        self.reverb_var.set(self.default_settings.reverb_percent)
-        self.format_var.set(self.default_settings.output_format)
-        self._log("Parametri ripristinati ai valori di default.")
-
-    def _start(self) -> None:
-        if self.processing or self.downloading:
-            return
-
-        ffmpeg_bin = self._resolve_ffmpeg()
-        if not ffmpeg_bin:
-            messagebox.showerror(
-                "ffmpeg non trovato",
-                "ffmpeg non trovato.\n\n"
-                "Opzioni:\n"
-                "1) Installa con: winget install Gyan.FFmpeg\n"
-                "2) Oppure seleziona ffmpeg.exe nel campo dedicato e riprova.",
-            )
-            return
-
-        input_dir = Path(self.input_var.get().strip())
-        output_dir = Path(self.output_var.get().strip())
-        if not input_dir.is_dir():
-            messagebox.showerror("Input non valido", "Seleziona una cartella input valida.")
-            return
-        if input_dir.resolve() == output_dir.resolve():
-            messagebox.showerror(
-                "Cartelle non valide", "Input e output devono essere cartelle diverse."
-            )
-            return
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        settings = DoomerSettings(
-            slowdown_percent=self.slowdown_var.get(),
-            lowpass_strength=self.lowpass_var.get(),
-            bass_boost_percent=self.bass_var.get(),
-            vinyl_volume_percent=self.vinyl_var.get(),
-            reverb_percent=self.reverb_var.get(),
-            output_format=self.format_var.get(),
-        )
-
-        self.processing = True
-        self._set_action_buttons_enabled(False)
-        self.progress_var.set(0)
-        self.progress_text.set("Conversione in corso...")
-        self._log("Avvio conversione batch...")
-        self._log(f"Uso ffmpeg: {ffmpeg_bin}")
-
-        thread = threading.Thread(
-            target=self._run_batch,
-            args=(ffmpeg_bin, input_dir, output_dir, settings),
-            daemon=True,
-        )
-        thread.start()
-
     def _start_download(self) -> None:
-        if self.processing or self.downloading:
+        if self._is_busy():
             return
 
         self._ensure_links_file()
@@ -475,9 +904,9 @@ class DoomerGeneratorApp:
         if not ffmpeg_bin:
             messagebox.showerror(
                 "ffmpeg non trovato",
-                "ffmpeg serve anche per l'estrazione MP3.\n"
+                "ffmpeg serve per l'estrazione MP3.\n"
                 "Installa con: winget install Gyan.FFmpeg\n"
-                "oppure seleziona ffmpeg.exe nel campo dedicato.",
+                "oppure seleziona ffmpeg.exe.",
             )
             return
 
@@ -485,15 +914,14 @@ class DoomerGeneratorApp:
         if not ytdlp_command:
             messagebox.showerror(
                 "yt-dlp non trovato",
-                "Per scaricare da YouTube installa yt-dlp:\n"
+                "Installa yt-dlp:\n"
                 "pip install yt-dlp\n"
                 "oppure: winget install yt-dlp.yt-dlp",
             )
             return
 
-        target_input = self.project_dir / "in"
+        target_input = Path(self.audio_input_var.get().strip())
         target_input.mkdir(parents=True, exist_ok=True)
-        self.input_var.set(str(target_input))
 
         self.downloading = True
         self._set_action_buttons_enabled(False)
@@ -501,8 +929,7 @@ class DoomerGeneratorApp:
         self.progress_text.set("Download MP3 in corso...")
         self._log(f"Avvio download YouTube ({len(links)} link)...")
         self._log(f"File link: {self.links_file}")
-        self._log(f"Cartella destinazione: {target_input}")
-        self._log(f"Uso ffmpeg: {ffmpeg_bin}")
+        self._log(f"Destinazione: {target_input}")
 
         thread = threading.Thread(
             target=self._run_download_batch,
@@ -511,27 +938,100 @@ class DoomerGeneratorApp:
         )
         thread.start()
 
-    def _run_batch(
-        self,
-        ffmpeg_bin: str,
-        input_dir: Path,
-        output_dir: Path,
-        settings: DoomerSettings,
-    ) -> None:
-        def log_callback(message: str) -> None:
-            self.events.put(("log", message))
+    def _start_audio_conversion(self) -> None:
+        if self._is_busy():
+            return
 
-        def progress_callback(done: int, total: int) -> None:
-            self.events.put(("progress", (done, total)))
+        ffmpeg_bin = self._resolve_ffmpeg()
+        if not ffmpeg_bin:
+            messagebox.showerror(
+                "ffmpeg non trovato",
+                "ffmpeg non trovato.\n"
+                "Installa con: winget install Gyan.FFmpeg\n"
+                "oppure seleziona ffmpeg.exe.",
+            )
+            return
 
-        converter = DoomerBatchConverter(ffmpeg_bin=ffmpeg_bin, log=log_callback)
-        summary = converter.convert_folder(
-            input_dir=input_dir,
-            output_dir=output_dir,
-            settings=settings,
-            progress=progress_callback,
+        input_dir = Path(self.audio_input_var.get().strip())
+        output_dir = Path(self.audio_output_var.get().strip())
+        if not input_dir.is_dir():
+            messagebox.showerror("Input non valido", "Seleziona una cartella input audio valida.")
+            return
+        if input_dir.resolve() == output_dir.resolve():
+            messagebox.showerror(
+                "Cartelle non valide",
+                "Input e output audio devono essere diversi.",
+            )
+            return
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        settings = AudioSettings(
+            slowdown_percent=self.slowdown_var.get(),
+            lowpass_strength=self.lowpass_var.get(),
+            bass_boost_percent=self.bass_var.get(),
+            vinyl_volume_percent=self.vinyl_var.get(),
+            reverb_percent=self.reverb_var.get(),
+            fade_in_seconds=self.audio_fade_in_var.get(),
+            fade_out_seconds=self.audio_fade_out_var.get(),
+            output_format=self.audio_format_var.get(),
         )
-        self.events.put(("convert_finished", summary))
+
+        self.audio_processing = True
+        self._set_action_buttons_enabled(False)
+        self.progress_var.set(0)
+        self.progress_text.set("Conversione audio in corso...")
+        self._log("Avvio conversione audio batch...")
+        self._log(f"Uso ffmpeg: {ffmpeg_bin}")
+
+        thread = threading.Thread(
+            target=self._run_audio_batch,
+            args=(ffmpeg_bin, input_dir, output_dir, settings),
+            daemon=True,
+        )
+        thread.start()
+
+    def _start_video_generation(self) -> None:
+        if self._is_busy():
+            return
+
+        ffmpeg_bin = self._resolve_ffmpeg()
+        if not ffmpeg_bin:
+            messagebox.showerror(
+                "ffmpeg non trovato",
+                "ffmpeg non trovato.\n"
+                "Installa con: winget install Gyan.FFmpeg\n"
+                "oppure seleziona ffmpeg.exe.",
+            )
+            return
+
+        input_audio_dir = Path(self.video_audio_input_var.get().strip())
+        output_video_dir = Path(self.video_output_var.get().strip())
+        if not input_audio_dir.is_dir():
+            messagebox.showerror("Input non valido", "Seleziona una cartella input audio valida.")
+            return
+        output_video_dir.mkdir(parents=True, exist_ok=True)
+
+        settings = VideoSettings(
+            fade_in_seconds=self.video_fade_in_var.get(),
+            fade_out_seconds=self.video_fade_out_var.get(),
+            noise_percent=self.video_noise_var.get(),
+            distortion_percent=self.video_distortion_var.get(),
+        )
+
+        self.video_processing = True
+        self._set_action_buttons_enabled(False)
+        self.progress_var.set(0)
+        self.progress_text.set("Generazione video in corso...")
+        self._log("Avvio generazione video batch...")
+        self._log(f"Input audio: {input_audio_dir}")
+        self._log(f"Output video: {output_video_dir}")
+
+        thread = threading.Thread(
+            target=self._run_video_batch,
+            args=(ffmpeg_bin, input_audio_dir, output_video_dir, settings),
+            daemon=True,
+        )
+        thread.start()
 
     def _run_download_batch(
         self,
@@ -574,7 +1074,7 @@ class DoomerGeneratorApp:
                 self.events.put(("log", "  OK"))
             else:
                 failed += 1
-                detail = self._summarize_process_output(result.stdout, result.stderr)
+                detail = _summarize_process_output(result.stdout, result.stderr)
                 if detail:
                     self.events.put(("log", f"  yt-dlp: {detail}"))
                 self.events.put(("log", "  ERRORE"))
@@ -588,6 +1088,125 @@ class DoomerGeneratorApp:
             )
         )
 
+    def _run_audio_batch(
+        self,
+        ffmpeg_bin: str,
+        input_dir: Path,
+        output_dir: Path,
+        settings: AudioSettings,
+    ) -> None:
+        converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self._queue_log)
+        summary = converter.convert_folder(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            settings=settings,
+            progress=self._queue_progress,
+        )
+        self.events.put(("audio_finished", summary))
+
+    def _run_video_batch(
+        self,
+        ffmpeg_bin: str,
+        input_audio_dir: Path,
+        output_video_dir: Path,
+        settings: VideoSettings,
+    ) -> None:
+        generator = DoomerVideoGenerator(
+            ffmpeg_bin=ffmpeg_bin,
+            backgrounds_dir=self.backgrounds_dir,
+            doomer_image=self.doomer_image_path,
+            log=self._queue_log,
+        )
+        summary = generator.generate_from_audio_folder(
+            audio_input_dir=input_audio_dir,
+            video_output_dir=output_video_dir,
+            settings=settings,
+            progress=self._queue_progress,
+        )
+        self.events.put(("video_finished", summary))
+
+    def _queue_log(self, message: str) -> None:
+        self.events.put(("log", message))
+
+    def _queue_progress(self, done: int, total: int) -> None:
+        self.events.put(("progress", (done, total)))
+
+    def _reset_audio_defaults(self) -> None:
+        defaults = self.default_audio_settings
+        self.slowdown_var.set(defaults.slowdown_percent)
+        self.lowpass_var.set(defaults.lowpass_strength)
+        self.bass_var.set(defaults.bass_boost_percent)
+        self.vinyl_var.set(defaults.vinyl_volume_percent)
+        self.reverb_var.set(defaults.reverb_percent)
+        self.audio_fade_in_var.set(defaults.fade_in_seconds)
+        self.audio_fade_out_var.set(defaults.fade_out_seconds)
+        self.audio_format_var.set(defaults.output_format)
+        self._log("Parametri audio ripristinati ai default.")
+
+    def _is_busy(self) -> bool:
+        return self.downloading or self.audio_processing or self.video_processing
+
+    def _set_action_buttons_enabled(self, enabled: bool) -> None:
+        state = tk.NORMAL if enabled else tk.DISABLED
+        self.download_button.configure(state=state)
+        self.audio_convert_button.configure(state=state)
+        self.audio_reset_button.configure(state=state)
+        self.video_generate_button.configure(state=state)
+        self.open_links_button.configure(state=state)
+
+    def _poll_events(self) -> None:
+        while True:
+            try:
+                event, payload = self.events.get_nowait()
+            except queue.Empty:
+                break
+
+            if event == "log":
+                self._log(str(payload))
+            elif event == "progress":
+                done, total = payload  # type: ignore[misc]
+                percent = 0 if total == 0 else (done / total) * 100
+                self.progress_var.set(percent)
+                self.progress_text.set(f"Progress: {done}/{total}")
+            elif event == "download_finished":
+                summary: DownloadSummary = payload  # type: ignore[assignment]
+                self.downloading = False
+                self._set_action_buttons_enabled(True)
+                self.progress_var.set(100 if summary.total else 0)
+                self.progress_text.set(
+                    f"Download completato - OK: {summary.downloaded}, Errori: {summary.failed}"
+                )
+                self._log(
+                    "Fine download YouTube. "
+                    f"Totale: {summary.total}, OK: {summary.downloaded}, Errori: {summary.failed}"
+                )
+            elif event == "audio_finished":
+                summary: ConversionSummary = payload  # type: ignore[assignment]
+                self.audio_processing = False
+                self._set_action_buttons_enabled(True)
+                self.progress_var.set(100 if summary.total else 0)
+                self.progress_text.set(
+                    f"Audio completato - OK: {summary.converted}, Errori: {summary.failed}"
+                )
+                self._log(
+                    "Fine conversione audio. "
+                    f"Totale: {summary.total}, OK: {summary.converted}, Errori: {summary.failed}"
+                )
+            elif event == "video_finished":
+                summary: VideoSummary = payload  # type: ignore[assignment]
+                self.video_processing = False
+                self._set_action_buttons_enabled(True)
+                self.progress_var.set(100 if summary.total else 0)
+                self.progress_text.set(
+                    f"Video completato - OK: {summary.generated}, Errori: {summary.failed}"
+                )
+                self._log(
+                    "Fine generazione video. "
+                    f"Totale: {summary.total}, OK: {summary.generated}, Errori: {summary.failed}"
+                )
+
+        self.root.after(120, self._poll_events)
+
     def _resolve_yt_dlp(self) -> list[str] | None:
         executable = shutil.which("yt-dlp")
         if executable:
@@ -600,7 +1219,6 @@ class DoomerGeneratorApp:
         )
         if probe.returncode == 0:
             return [sys.executable, "-m", "yt_dlp"]
-
         return None
 
     def _resolve_ffmpeg(self) -> str | None:
@@ -609,7 +1227,6 @@ class DoomerGeneratorApp:
             manual_path = Path(manual)
             if manual_path.is_file():
                 return str(manual_path)
-
             lookup = shutil.which(manual)
             if lookup:
                 return lookup
@@ -622,26 +1239,21 @@ class DoomerGeneratorApp:
             if candidate.is_file():
                 self.ffmpeg_var.set(str(candidate))
                 return str(candidate)
-
         for candidate in self._local_ffmpeg_candidates():
             if candidate.is_file():
                 self.ffmpeg_var.set(str(candidate))
                 return str(candidate)
-
         return None
 
     def _default_ffmpeg_path(self) -> str:
         for candidate in self._winget_ffmpeg_candidates():
             return str(candidate)
-
         system_ffmpeg = shutil.which("ffmpeg")
         if system_ffmpeg:
             return system_ffmpeg
-
         for candidate in self._local_ffmpeg_candidates():
             if candidate.is_file():
                 return str(candidate)
-
         return ""
 
     @staticmethod
@@ -649,23 +1261,14 @@ class DoomerGeneratorApp:
         local_app_data = os.environ.get("LOCALAPPDATA")
         if not local_app_data:
             return []
-
         winget_packages = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
         if not winget_packages.is_dir():
             return []
-
         try:
             candidates = [path for path in winget_packages.rglob("ffmpeg.exe") if path.is_file()]
         except OSError:
             return []
-
-        def _mtime_or_zero(path: Path) -> float:
-            try:
-                return path.stat().st_mtime
-            except OSError:
-                return 0.0
-
-        candidates.sort(key=_mtime_or_zero, reverse=True)
+        candidates.sort(key=lambda path: _safe_mtime(path), reverse=True)
         return candidates
 
     @staticmethod
@@ -682,10 +1285,14 @@ class DoomerGeneratorApp:
             Path.cwd() / "bin" / "ffmpeg",
         ]
 
+    def _ensure_default_filesystem(self) -> None:
+        self.audio_input_dir.mkdir(parents=True, exist_ok=True)
+        self.audio_output_dir.mkdir(parents=True, exist_ok=True)
+        self.video_output_dir.mkdir(parents=True, exist_ok=True)
+
     def _ensure_links_file(self) -> None:
         if self.links_file.is_file():
             return
-
         self.links_file.write_text(
             "# Inserisci un link YouTube per riga.\n"
             "# Le righe vuote o con # all'inizio vengono ignorate.\n"
@@ -699,7 +1306,6 @@ class DoomerGeneratorApp:
             text = self.links_file.read_text(encoding="utf-8")
         except OSError:
             return []
-
         links: list[str] = []
         for raw_line in text.splitlines():
             line = raw_line.strip()
@@ -707,70 +1313,6 @@ class DoomerGeneratorApp:
                 continue
             links.append(line)
         return links
-
-    def _set_action_buttons_enabled(self, enabled: bool) -> None:
-        state = tk.NORMAL if enabled else tk.DISABLED
-        self.start_button.configure(state=state)
-        self.download_button.configure(state=state)
-        self.reset_button.configure(state=state)
-        self.open_links_button.configure(state=state)
-
-    @staticmethod
-    def _summarize_process_output(stdout: str, stderr: str) -> str:
-        for text in (stderr, stdout):
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            if lines:
-                return lines[-1]
-        return ""
-
-    def _poll_events(self) -> None:
-        while True:
-            try:
-                event, payload = self.events.get_nowait()
-            except queue.Empty:
-                break
-
-            if event == "log":
-                self._log(str(payload))
-            elif event == "progress":
-                done, total = payload  # type: ignore[misc]
-                percent = 0 if total == 0 else (done / total) * 100
-                self.progress_var.set(percent)
-                self.progress_text.set(f"Progress: {done}/{total}")
-            elif event == "convert_finished":
-                summary: ConversionSummary = payload  # type: ignore[assignment]
-                self.processing = False
-                if not self.downloading:
-                    self._set_action_buttons_enabled(True)
-                if summary.total == 0:
-                    self.progress_text.set("Nessun file trovato")
-                else:
-                    self.progress_var.set(100)
-                    self.progress_text.set(
-                        f"Completato - Convertiti: {summary.converted}, Errori: {summary.failed}"
-                    )
-                self._log(
-                    "Fine conversione. "
-                    f"Totale: {summary.total}, OK: {summary.converted}, Errori: {summary.failed}"
-                )
-            elif event == "download_finished":
-                summary: DownloadSummary = payload  # type: ignore[assignment]
-                self.downloading = False
-                if not self.processing:
-                    self._set_action_buttons_enabled(True)
-                if summary.total == 0:
-                    self.progress_text.set("Nessun link da scaricare")
-                else:
-                    self.progress_var.set(100)
-                    self.progress_text.set(
-                        f"Download completato - OK: {summary.downloaded}, Errori: {summary.failed}"
-                    )
-                self._log(
-                    "Fine download YouTube. "
-                    f"Totale: {summary.total}, OK: {summary.downloaded}, Errori: {summary.failed}"
-                )
-
-        self.root.after(120, self._poll_events)
 
     def _log(self, message: str) -> None:
         self.log_widget.configure(state=tk.NORMAL)
