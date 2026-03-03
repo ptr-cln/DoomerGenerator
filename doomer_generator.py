@@ -231,6 +231,138 @@ def _with_doomer_suffix(stem: str) -> str:
     return f"{stem}{DOOMER_SUFFIX}"
 
 
+def _strip_doomer_suffix(stem: str) -> str:
+    if stem.lower().endswith(DOOMER_SUFFIX.lower()):
+        return stem[: -len(DOOMER_SUFFIX)].rstrip()
+    return stem
+
+
+def _try_remove_file(path: Path) -> bool:
+    try:
+        if path.is_file() or path.is_symlink():
+            path.unlink()
+            return True
+    except OSError:
+        return False
+    return False
+
+
+def _remove_matching_files(
+    root_dir: Path,
+    stems: set[str],
+    extensions: set[str],
+    parent_hint: Path | None = None,
+    recursive: bool = False,
+) -> list[Path]:
+    removed: list[Path] = []
+    if not root_dir.is_dir():
+        return removed
+
+    stems_norm = {stem for stem in stems if stem}
+    if not stems_norm:
+        return removed
+
+    if parent_hint is not None:
+        candidate_dir = root_dir / parent_hint
+        if not candidate_dir.is_dir():
+            return removed
+        iterator = candidate_dir.iterdir()
+    elif recursive:
+        iterator = root_dir.rglob("*")
+    else:
+        iterator = root_dir.iterdir()
+
+    for candidate in iterator:
+        if not candidate.is_file():
+            continue
+        if candidate.suffix.lower() not in extensions:
+            continue
+        if candidate.stem not in stems_norm:
+            continue
+        if _try_remove_file(candidate):
+            removed.append(candidate)
+    return removed
+
+
+def _cleanup_related_media_for_uploaded_video(
+    uploaded_video_path: Path,
+    upload_source_root: Path,
+    canonical_video_root: Path,
+    audio_input_root: Path,
+    audio_output_root: Path,
+) -> list[Path]:
+    removed: list[Path] = []
+    upload_stem = uploaded_video_path.stem
+    base_stem = _strip_doomer_suffix(upload_stem)
+    search_stems = {upload_stem, base_stem}
+
+    if _try_remove_file(uploaded_video_path):
+        removed.append(uploaded_video_path)
+
+    relative_path: Path | None = None
+    upload_resolved = uploaded_video_path.resolve(strict=False)
+    for root in (upload_source_root, canonical_video_root):
+        try:
+            relative_path = upload_resolved.relative_to(root.resolve(strict=False))
+            break
+        except ValueError:
+            continue
+
+    if relative_path is not None:
+        parent_hint = relative_path.parent
+        removed.extend(
+            _remove_matching_files(
+                root_dir=canonical_video_root,
+                stems={relative_path.stem},
+                extensions=VIDEO_EXTENSIONS,
+                parent_hint=parent_hint,
+            )
+        )
+        removed.extend(
+            _remove_matching_files(
+                root_dir=audio_output_root,
+                stems=search_stems,
+                extensions=AUDIO_EXTENSIONS,
+                parent_hint=parent_hint,
+            )
+        )
+        removed.extend(
+            _remove_matching_files(
+                root_dir=audio_input_root,
+                stems=search_stems,
+                extensions=AUDIO_EXTENSIONS,
+                parent_hint=parent_hint,
+            )
+        )
+        return removed
+
+    removed.extend(
+        _remove_matching_files(
+            root_dir=canonical_video_root,
+            stems={upload_stem},
+            extensions=VIDEO_EXTENSIONS,
+            recursive=True,
+        )
+    )
+    removed.extend(
+        _remove_matching_files(
+            root_dir=audio_output_root,
+            stems=search_stems,
+            extensions=AUDIO_EXTENSIONS,
+            recursive=True,
+        )
+    )
+    removed.extend(
+        _remove_matching_files(
+            root_dir=audio_input_root,
+            stems=search_stems,
+            extensions=AUDIO_EXTENSIONS,
+            recursive=True,
+        )
+    )
+    return removed
+
+
 def _clear_directory_contents(path: Path) -> int:
     path.mkdir(parents=True, exist_ok=True)
     removed_files = 0
@@ -381,6 +513,7 @@ class YouTubeUploader:
         video_dir: Path,
         settings: UploadSettings,
         progress: Callable[[float, int, int, float, str], None],
+        on_uploaded: Callable[[Path], None] | None = None,
     ) -> UploadSummary:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         total = len(files)
@@ -435,6 +568,11 @@ class YouTubeUploader:
                 uploaded += 1
                 video_id = response.get("id", "N/A")
                 self.log(f"  OK -> https://youtu.be/{video_id}")
+                if on_uploaded is not None:
+                    try:
+                        on_uploaded(video_file)
+                    except Exception as callback_error:  # noqa: BLE001
+                        self.log(f"  Cleanup warning: {callback_error}")
             except HttpError as error:
                 failed += 1
                 self.log(f"  HTTP error: {error}")
@@ -1599,6 +1737,7 @@ class DoomerGeneratorApp:
                 video_dir=video_dir,
                 settings=settings,
                 progress=self._queue_upload_progress,
+                on_uploaded=self._cleanup_after_successful_upload,
             )
             self.events.put(("upload_finished", summary))
         except Exception as error:  # noqa: BLE001
@@ -1788,6 +1927,33 @@ class DoomerGeneratorApp:
         client_secret = Path(self.youtube_client_secret_var.get().strip())
         token_path = Path(self.youtube_token_var.get().strip())
         return YouTubeUploader(client_secret_path=client_secret, token_path=token_path, log=self._queue_log)
+
+    def _cleanup_after_successful_upload(self, uploaded_video_path: Path) -> None:
+        upload_root = Path(self.upload_video_input_var.get().strip())
+        video_root = Path(self.video_output_var.get().strip())
+        audio_in_root = Path(self.audio_input_var.get().strip())
+        audio_out_root = Path(self.audio_output_var.get().strip())
+
+        removed = _cleanup_related_media_for_uploaded_video(
+            uploaded_video_path=uploaded_video_path,
+            upload_source_root=upload_root,
+            canonical_video_root=video_root,
+            audio_input_root=audio_in_root,
+            audio_output_root=audio_out_root,
+        )
+        if not removed:
+            self._queue_log("  Cleanup post-upload: nessun file correlato rimosso.")
+            return
+
+        self._queue_log(f"  Cleanup post-upload: rimossi {len(removed)} file correlati.")
+        for path in removed:
+            self._queue_log(f"    - {self._display_path(path)}")
+
+    def _display_path(self, path: Path) -> str:
+        try:
+            return str(path.resolve(strict=False).relative_to(self.project_dir.resolve(strict=False)))
+        except ValueError:
+            return str(path)
 
     def _reset_audio_defaults(self) -> None:
         defaults = self.default_audio_settings
