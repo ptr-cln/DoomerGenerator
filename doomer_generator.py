@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -43,6 +44,8 @@ DOOMER_OVERLAY_HEIGHT = 980
 DOOMER_OVERLAY_LEFT = 36
 APP_SETTINGS_FILE = "app_settings.json"
 AUDIO_OUTPUT_FORMATS = {"mp3", "wav", "flac", "ogg"}
+EQ_BAND_FREQUENCIES = (90, 250, 500, 1500, 3000, 5000, 8000)
+EQ_DEFAULT_GAINS = (4.0, 2.0, 1.0, 0.0, -2.5, -4.0, -5.5)
 VIDEO_ENCODER_OPTIONS = {"auto", "cpu", "nvidia", "intel", "amd"}
 VIDEO_ENCODER_LABELS = {
     "auto": "Auto (GPU se disponibile)",
@@ -95,10 +98,6 @@ UI_TEXTS = {
         "audio_group_effects": "Effetti Audio",
         "audio_lbl_slowdown": "Rallentamento (%)",
         "audio_desc_slowdown": "Rallenta e abbassa leggermente il pitch.",
-        "audio_lbl_lowpass": "Taglio alte frequenze (%)",
-        "audio_desc_lowpass": "Riduce le alte frequenze.",
-        "audio_lbl_bass": "Bass boost (%)",
-        "audio_desc_bass": "Aumenta la presenza delle frequenze basse.",
         "audio_lbl_vinyl": "Volume vinile (%)",
         "audio_desc_vinyl": "Mix del vinile casuale da resources/vinyls.",
         "audio_lbl_reverb": "Reverb (%)",
@@ -107,8 +106,14 @@ UI_TEXTS = {
         "audio_desc_fade_in": "Durata dissolvenza in ingresso.",
         "audio_lbl_fade_out": "Fade out audio (secondi)",
         "audio_desc_fade_out": "Durata dissolvenza in uscita.",
+        "audio_group_eq": "Mini Equalizzatore 7 Bande (dB)",
+        "audio_eq_low": "Taglia bassi",
+        "audio_eq_mid": "Neutro",
+        "audio_eq_high": "Aumenta alti",
         "audio_btn_convert": "Avvia conversione batch",
         "audio_btn_reset": "Reset default",
+        "audio_btn_play_test": "Play Test",
+        "audio_btn_stop_test": "Stop Test",
         "save_settings_btn": "Salva impostazioni",
         "video_group_resources": "Risorse Video",
         "video_label_backgrounds": "Backgrounds",
@@ -161,6 +166,10 @@ UI_TEXTS = {
         "dialog_invalid_folders_body": "Input e output audio devono essere diversi.",
         "dialog_invalid_category_title": "Categoria non valida",
         "dialog_invalid_category_body": "Category ID deve essere numerico (es. 10).",
+        "dialog_test_title": "Test audio",
+        "dialog_test_no_files": "Nessun file audio disponibile in input per il test.",
+        "dialog_test_ffplay_missing": "ffplay non trovato. Installa una build completa di ffmpeg (con ffplay).",
+        "dialog_test_error": "Errore durante test audio.\n{error}",
         "progress_download_running": "Download MP3 in corso...",
         "progress_audio_running": "Conversione audio in corso...",
         "progress_video_running": "Generazione video in corso...",
@@ -200,6 +209,11 @@ UI_TEXTS = {
         "log_runtime_upload_error": "Errore runtime upload: {detail}",
         "log_login_done": "Login YouTube completato e token salvato.",
         "log_login_error": "Errore login YouTube: {detail}",
+        "log_test_start": "Play test su file casuale: {name}",
+        "log_test_ready": "Test pronto, avvio riproduzione...",
+        "log_test_stopped": "Test audio fermato.",
+        "log_test_finished": "Test audio terminato.",
+        "log_test_ffmpeg_error": "Errore conversione test audio: {detail}",
         "log_clear_dir": "Svuotata cartella {label}: {path} (file rimossi: {count})",
         "msg_clear_dir": "Cartella {label} svuotata.\nFile rimossi: {count}",
         "log_links_reset": "File youtube_links.txt ripristinato (vuoto).",
@@ -259,10 +273,6 @@ UI_TEXTS = {
         "audio_group_effects": "Audio Effects",
         "audio_lbl_slowdown": "Slowdown (%)",
         "audio_desc_slowdown": "Slows down and slightly lowers pitch.",
-        "audio_lbl_lowpass": "High-cut (%)",
-        "audio_desc_lowpass": "Reduces high frequencies.",
-        "audio_lbl_bass": "Bass boost (%)",
-        "audio_desc_bass": "Boosts low-frequency presence.",
         "audio_lbl_vinyl": "Vinyl volume (%)",
         "audio_desc_vinyl": "Mix level for random vinyl noise from resources/vinyls.",
         "audio_lbl_reverb": "Reverb (%)",
@@ -271,8 +281,14 @@ UI_TEXTS = {
         "audio_desc_fade_in": "Fade-in duration.",
         "audio_lbl_fade_out": "Audio fade out (seconds)",
         "audio_desc_fade_out": "Fade-out duration.",
+        "audio_group_eq": "7-Band Mini Equalizer (dB)",
+        "audio_eq_low": "Cut lows",
+        "audio_eq_mid": "Flat",
+        "audio_eq_high": "Boost highs",
         "audio_btn_convert": "Start batch conversion",
         "audio_btn_reset": "Reset defaults",
+        "audio_btn_play_test": "Play Test",
+        "audio_btn_stop_test": "Stop Test",
         "save_settings_btn": "Save settings",
         "video_group_resources": "Video Resources",
         "video_label_backgrounds": "Backgrounds",
@@ -325,6 +341,10 @@ UI_TEXTS = {
         "dialog_invalid_folders_body": "Audio input and output folders must be different.",
         "dialog_invalid_category_title": "Invalid category",
         "dialog_invalid_category_body": "Category ID must be numeric (e.g. 10).",
+        "dialog_test_title": "Audio test",
+        "dialog_test_no_files": "No input audio files available for test playback.",
+        "dialog_test_ffplay_missing": "ffplay not found. Install a full ffmpeg build (with ffplay).",
+        "dialog_test_error": "Audio test error.\n{error}",
         "progress_download_running": "Downloading MP3...",
         "progress_audio_running": "Audio conversion in progress...",
         "progress_video_running": "Video generation in progress...",
@@ -364,6 +384,11 @@ UI_TEXTS = {
         "log_runtime_upload_error": "Upload runtime error: {detail}",
         "log_login_done": "YouTube login completed and token saved.",
         "log_login_error": "YouTube login error: {detail}",
+        "log_test_start": "Test playback on random file: {name}",
+        "log_test_ready": "Test render ready, starting playback...",
+        "log_test_stopped": "Audio test stopped.",
+        "log_test_finished": "Audio test finished.",
+        "log_test_ffmpeg_error": "Audio test conversion error: {detail}",
         "log_clear_dir": "Cleared {label} folder: {path} (files removed: {count})",
         "msg_clear_dir": "{label} folder cleared.\nFiles removed: {count}",
         "log_links_reset": "youtube_links.txt reset (empty template).",
@@ -391,8 +416,7 @@ UI_TEXTS = {
 @dataclass(frozen=True)
 class AudioSettings:
     slowdown_percent: float = 20.0
-    lowpass_strength: float = 75.0
-    bass_boost_percent: float = 50.0
+    eq_band_gains: tuple[float, float, float, float, float, float, float] = EQ_DEFAULT_GAINS
     vinyl_volume_percent: float = 10.0
     reverb_percent: float = 15.0
     fade_in_seconds: float = 1.0
@@ -401,8 +425,16 @@ class AudioSettings:
 
     def build_filter_complex(self, include_vinyl: bool) -> str:
         speed = max(0.50, min(1.00, 1.0 - (self.slowdown_percent / 100.0)))
-        cutoff_hz = int(16000 - (self.lowpass_strength / 100.0) * 13800)
-        bass_gain = round((self.bass_boost_percent / 100.0) * 12.0, 2)
+        eq_gains = list(self.eq_band_gains[: len(EQ_BAND_FREQUENCIES)])
+        while len(eq_gains) < len(EQ_BAND_FREQUENCIES):
+            eq_gains.append(0.0)
+        eq_chain_parts = []
+        for frequency, gain in zip(EQ_BAND_FREQUENCIES, eq_gains):
+            clamped_gain = max(-18.0, min(18.0, float(gain)))
+            eq_chain_parts.append(
+                f"equalizer=f={frequency}:t=q:w=1.1:g={clamped_gain:.2f}"
+            )
+        eq_chain = ",".join(eq_chain_parts)
         reverb_decay = round(0.10 + (self.reverb_percent / 100.0) * 0.35, 3)
         vinyl_intensity = max(0.0, min(1.0, self.vinyl_volume_percent / 100.0))
         vinyl_gain = round(0.25 + vinyl_intensity * 2.4, 3)
@@ -413,8 +445,7 @@ class AudioSettings:
             "[0:a]"
             "aformat=sample_rates=44100:channel_layouts=stereo,"
             f"asetrate=44100*{speed},aresample=44100,"
-            f"lowpass=f={cutoff_hz},"
-            f"bass=g={bass_gain}:f=120:w=0.9,"
+            f"{eq_chain},"
             f"aecho=0.8:0.7:60|120:{reverb_decay}|{round(reverb_decay * 0.7, 3)},"
             "acompressor=threshold=-17dB:ratio=2.3:attack=20:release=180"
             "[main]"
@@ -1624,12 +1655,15 @@ class DoomerGeneratorApp:
         self.audio_format_var = tk.StringVar(value=self.default_audio_settings.output_format)
 
         self.slowdown_var = tk.DoubleVar(value=self.default_audio_settings.slowdown_percent)
-        self.lowpass_var = tk.DoubleVar(value=self.default_audio_settings.lowpass_strength)
-        self.bass_var = tk.DoubleVar(value=self.default_audio_settings.bass_boost_percent)
         self.vinyl_var = tk.DoubleVar(value=self.default_audio_settings.vinyl_volume_percent)
         self.reverb_var = tk.DoubleVar(value=self.default_audio_settings.reverb_percent)
         self.audio_fade_in_var = tk.DoubleVar(value=self.default_audio_settings.fade_in_seconds)
         self.audio_fade_out_var = tk.DoubleVar(value=self.default_audio_settings.fade_out_seconds)
+        self.eq_band_vars: list[tk.DoubleVar] = [
+            tk.DoubleVar(value=gain) for gain in self.default_audio_settings.eq_band_gains
+        ]
+        self.audio_test_process: subprocess.Popen[str] | None = None
+        self.audio_test_temp_file: Path | None = None
 
         self.video_audio_input_var = tk.StringVar(value=str(self.audio_output_dir))
         self.video_output_var = tk.StringVar(value=str(self.video_output_dir))
@@ -1898,29 +1932,11 @@ class DoomerGeneratorApp:
         )
         self._add_slider(
             effects,
-            label=self._t("audio_lbl_lowpass"),
-            variable=self.lowpass_var,
-            minimum=0,
-            maximum=100,
-            row=1,
-            description=self._t("audio_desc_lowpass"),
-        )
-        self._add_slider(
-            effects,
-            label=self._t("audio_lbl_bass"),
-            variable=self.bass_var,
-            minimum=0,
-            maximum=100,
-            row=2,
-            description=self._t("audio_desc_bass"),
-        )
-        self._add_slider(
-            effects,
             label=self._t("audio_lbl_vinyl"),
             variable=self.vinyl_var,
             minimum=0,
             maximum=100,
-            row=3,
+            row=1,
             description=self._t("audio_desc_vinyl"),
         )
         self._add_slider(
@@ -1929,7 +1945,7 @@ class DoomerGeneratorApp:
             variable=self.reverb_var,
             minimum=0,
             maximum=100,
-            row=4,
+            row=2,
             description=self._t("audio_desc_reverb"),
         )
         self._add_slider(
@@ -1938,7 +1954,7 @@ class DoomerGeneratorApp:
             variable=self.audio_fade_in_var,
             minimum=0,
             maximum=8,
-            row=5,
+            row=3,
             description=self._t("audio_desc_fade_in"),
             resolution=0.1,
         )
@@ -1948,7 +1964,7 @@ class DoomerGeneratorApp:
             variable=self.audio_fade_out_var,
             minimum=0,
             maximum=8,
-            row=6,
+            row=4,
             description=self._t("audio_desc_fade_out"),
             resolution=0.1,
         )
@@ -1973,6 +1989,20 @@ class DoomerGeneratorApp:
             command=self._save_audio_settings,
         )
         self.audio_save_button.pack(side=tk.LEFT, padx=8)
+        self.audio_test_play_button = ttk.Button(
+            actions,
+            text=self._t("audio_btn_play_test"),
+            command=self._start_audio_test,
+        )
+        self.audio_test_play_button.pack(side=tk.LEFT, padx=8)
+        self.audio_test_stop_button = ttk.Button(
+            actions,
+            text=self._t("audio_btn_stop_test"),
+            command=self._stop_audio_test,
+        )
+        self.audio_test_stop_button.pack(side=tk.LEFT, padx=8)
+
+        self._build_audio_equalizer(parent)
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
         resources_box = ttk.LabelFrame(parent, text=self._t("video_group_resources"), padding=8)
@@ -2243,6 +2273,187 @@ class DoomerGeneratorApp:
         )
         parent.columnconfigure(1, weight=1)
 
+    def _build_audio_equalizer(self, parent: ttk.Frame) -> None:
+        eq_box = ttk.LabelFrame(parent, text=self._t("audio_group_eq"), padding=8)
+        eq_box.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Label(eq_box, text=self._t("audio_eq_low")).grid(row=0, column=0, padx=6, pady=(0, 6), sticky="w")
+        ttk.Label(eq_box, text=self._t("audio_eq_mid")).grid(row=0, column=3, padx=6, pady=(0, 6), sticky="w")
+        ttk.Label(eq_box, text=self._t("audio_eq_high")).grid(row=0, column=6, padx=6, pady=(0, 6), sticky="e")
+
+        for index, (frequency, variable) in enumerate(zip(EQ_BAND_FREQUENCIES, self.eq_band_vars, strict=True)):
+            band_frame = ttk.Frame(eq_box)
+            band_frame.grid(row=1, column=index, padx=4, sticky="n")
+            scale = tk.Scale(
+                band_frame,
+                variable=variable,
+                from_=12,
+                to=-12,
+                orient=tk.VERTICAL,
+                resolution=0.5,
+                showvalue=True,
+                length=220,
+                width=18,
+            )
+            scale.pack()
+            ttk.Label(band_frame, text=str(frequency)).pack(pady=(4, 0))
+            eq_box.columnconfigure(index, weight=1)
+
+    def _collect_eq_band_gains(self) -> tuple[float, float, float, float, float, float, float]:
+        values: list[float] = []
+        for variable in self.eq_band_vars:
+            values.append(max(-18.0, min(18.0, float(variable.get()))))
+        while len(values) < len(EQ_BAND_FREQUENCIES):
+            values.append(0.0)
+        return (
+            values[0],
+            values[1],
+            values[2],
+            values[3],
+            values[4],
+            values[5],
+            values[6],
+        )
+
+    def _set_eq_band_gains(self, raw_values: object) -> None:
+        if not isinstance(raw_values, (list, tuple)):
+            return
+        if len(raw_values) != len(EQ_BAND_FREQUENCIES):
+            return
+        for variable, raw_value in zip(self.eq_band_vars, raw_values, strict=True):
+            variable.set(self._coerce_float(raw_value, 0.0, -18.0, 18.0))
+
+    def _collect_audio_settings_from_ui(self) -> AudioSettings:
+        return AudioSettings(
+            slowdown_percent=self.slowdown_var.get(),
+            eq_band_gains=self._collect_eq_band_gains(),
+            vinyl_volume_percent=self.vinyl_var.get(),
+            reverb_percent=self.reverb_var.get(),
+            fade_in_seconds=self.audio_fade_in_var.get(),
+            fade_out_seconds=self.audio_fade_out_var.get(),
+            output_format=self.audio_format_var.get(),
+        )
+
+    def _resolve_ffplay(self, ffmpeg_bin: str) -> str | None:
+        ffmpeg_path = Path(ffmpeg_bin)
+        sibling = ffmpeg_path.with_name("ffplay.exe")
+        if sibling.is_file():
+            return str(sibling)
+        sibling_no_ext = ffmpeg_path.with_name("ffplay")
+        if sibling_no_ext.is_file():
+            return str(sibling_no_ext)
+        lookup = shutil.which("ffplay")
+        return lookup
+
+    def _start_audio_test(self) -> None:
+        if self._is_busy():
+            return
+
+        if self.audio_test_process and self.audio_test_process.poll() is None:
+            self._stop_audio_test(log_action=False)
+
+        input_dir = Path(self.audio_input_var.get().strip())
+        source_files = _collect_files(input_dir, AUDIO_EXTENSIONS)
+        if not source_files:
+            messagebox.showinfo(self._t("dialog_test_title"), self._t("dialog_test_no_files"))
+            return
+
+        ffmpeg_bin = self._resolve_ffmpeg()
+        if not ffmpeg_bin:
+            messagebox.showerror(self._t("ffmpeg_missing_download_title"), self._t("ffmpeg_missing_download_body"))
+            return
+        ffplay_bin = self._resolve_ffplay(ffmpeg_bin)
+        if not ffplay_bin:
+            messagebox.showerror(self._t("dialog_test_title"), self._t("dialog_test_ffplay_missing"))
+            return
+
+        source_file = random.choice(source_files)
+        settings = self._collect_audio_settings_from_ui()
+        vinyl_files = _collect_files(self.vinyls_dir, VINYL_EXTENSIONS)
+        vinyl_file = None
+        if settings.vinyl_volume_percent > 0 and vinyl_files:
+            vinyl_file = random.choice(vinyl_files)
+
+        tmp_dir = self.project_dir / "tmp_preview"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            suffix=".wav",
+            prefix="audio_test_",
+            dir=str(tmp_dir),
+            delete=False,
+        ) as tmp_file:
+            temp_output = Path(tmp_file.name)
+
+        command = [
+            ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source_file),
+        ]
+        if vinyl_file:
+            command.extend(["-stream_loop", "-1", "-i", str(vinyl_file)])
+        command.extend(
+            [
+                "-filter_complex",
+                settings.build_filter_complex(include_vinyl=vinyl_file is not None),
+                "-map",
+                "[out]",
+                "-vn",
+                "-c:a",
+                "pcm_s16le",
+                str(temp_output),
+            ]
+        )
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            detail = _summarize_process_output(result.stdout, result.stderr)
+            if temp_output.exists():
+                temp_output.unlink(missing_ok=True)
+            self._log(self._t("log_test_ffmpeg_error", detail=detail or "N/A"))
+            messagebox.showerror(
+                self._t("dialog_test_title"),
+                self._t("dialog_test_error", error=detail or "ffmpeg error"),
+            )
+            return
+
+        self.audio_test_temp_file = temp_output
+        self._log(self._t("log_test_start", name=source_file.name))
+        self._log(self._t("log_test_ready"))
+        self.audio_test_process = subprocess.Popen(
+            [ffplay_bin, "-nodisp", "-autoexit", "-loglevel", "error", str(temp_output)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        def _wait_test_end() -> None:
+            process = self.audio_test_process
+            if process is None:
+                return
+            process.wait()
+            self.events.put(("audio_test_finished", None))
+
+        threading.Thread(target=_wait_test_end, daemon=True).start()
+
+    def _stop_audio_test(self, log_action: bool = True) -> None:
+        process = self.audio_test_process
+        had_active = bool(process and process.poll() is None)
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=1.5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        self.audio_test_process = None
+        if self.audio_test_temp_file and self.audio_test_temp_file.exists():
+            self.audio_test_temp_file.unlink(missing_ok=True)
+        self.audio_test_temp_file = None
+        if log_action and had_active:
+            self._log(self._t("log_test_stopped"))
+
     def _pick_audio_input(self) -> None:
         selected = filedialog.askdirectory(title="Seleziona cartella input audio")
         if selected:
@@ -2461,16 +2672,8 @@ class DoomerGeneratorApp:
             return
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        settings = AudioSettings(
-            slowdown_percent=self.slowdown_var.get(),
-            lowpass_strength=self.lowpass_var.get(),
-            bass_boost_percent=self.bass_var.get(),
-            vinyl_volume_percent=self.vinyl_var.get(),
-            reverb_percent=self.reverb_var.get(),
-            fade_in_seconds=self.audio_fade_in_var.get(),
-            fade_out_seconds=self.audio_fade_out_var.get(),
-            output_format=self.audio_format_var.get(),
-        )
+        settings = self._collect_audio_settings_from_ui()
+        self._stop_audio_test(log_action=False)
 
         self.audio_processing = True
         self._set_action_buttons_enabled(False)
@@ -2836,13 +3039,12 @@ class DoomerGeneratorApp:
     def _reset_audio_defaults(self) -> None:
         defaults = self.default_audio_settings
         self.slowdown_var.set(defaults.slowdown_percent)
-        self.lowpass_var.set(defaults.lowpass_strength)
-        self.bass_var.set(defaults.bass_boost_percent)
         self.vinyl_var.set(defaults.vinyl_volume_percent)
         self.reverb_var.set(defaults.reverb_percent)
         self.audio_fade_in_var.set(defaults.fade_in_seconds)
         self.audio_fade_out_var.set(defaults.fade_out_seconds)
         self.audio_format_var.set(defaults.output_format)
+        self._set_eq_band_gains(defaults.eq_band_gains)
         self._log(self._t("log_audio_defaults_reset"))
 
     @staticmethod
@@ -2942,22 +3144,6 @@ class DoomerGeneratorApp:
                     45.0,
                 )
             )
-            self.lowpass_var.set(
-                self._coerce_float(
-                    audio.get("lowpass_strength"),
-                    self.default_audio_settings.lowpass_strength,
-                    0.0,
-                    100.0,
-                )
-            )
-            self.bass_var.set(
-                self._coerce_float(
-                    audio.get("bass_boost_percent"),
-                    self.default_audio_settings.bass_boost_percent,
-                    0.0,
-                    100.0,
-                )
-            )
             self.vinyl_var.set(
                 self._coerce_float(
                     audio.get("vinyl_volume_percent"),
@@ -2982,6 +3168,7 @@ class DoomerGeneratorApp:
                     8.0,
                 )
             )
+            self._set_eq_band_gains(audio.get("eq_band_gains"))
             self.audio_fade_out_var.set(
                 self._coerce_float(
                     audio.get("fade_out_seconds"),
@@ -3090,8 +3277,7 @@ class DoomerGeneratorApp:
             "ffmpeg_path": self.ffmpeg_var.get().strip(),
             "output_format": self.audio_format_var.get().strip(),
             "slowdown_percent": self.slowdown_var.get(),
-            "lowpass_strength": self.lowpass_var.get(),
-            "bass_boost_percent": self.bass_var.get(),
+            "eq_band_gains": list(self._collect_eq_band_gains()),
             "vinyl_volume_percent": self.vinyl_var.get(),
             "reverb_percent": self.reverb_var.get(),
             "fade_in_seconds": self.audio_fade_in_var.get(),
@@ -3153,6 +3339,8 @@ class DoomerGeneratorApp:
         self.audio_convert_button.configure(state=state)
         self.audio_reset_button.configure(state=state)
         self.audio_save_button.configure(state=state)
+        self.audio_test_play_button.configure(state=state)
+        self.audio_test_stop_button.configure(state=state)
         self.video_generate_button.configure(state=state)
         self.video_save_button.configure(state=state)
         self.video_encoder_combo.configure(state="readonly" if enabled else "disabled")
@@ -3181,6 +3369,14 @@ class DoomerGeneratorApp:
 
             if event == "log":
                 self._log(str(payload))
+            elif event == "audio_test_finished":
+                if self.audio_test_process is None and self.audio_test_temp_file is None:
+                    continue
+                self.audio_test_process = None
+                if self.audio_test_temp_file and self.audio_test_temp_file.exists():
+                    self.audio_test_temp_file.unlink(missing_ok=True)
+                self.audio_test_temp_file = None
+                self._log(self._t("log_test_finished"))
             elif event == "download_progress":
                 percent, index, total, link_percent = payload  # type: ignore[misc]
                 self.progress_var.set(percent)
