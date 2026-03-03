@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import queue
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,7 @@ AUDIO_EXTENSIONS = {
 
 VINYL_EXTENSIONS = AUDIO_EXTENSIONS
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+DOOMER_SUFFIX = " (Doomer Wave)"
 
 
 @dataclass(frozen=True)
@@ -209,6 +211,12 @@ def _summarize_process_output(stdout: str, stderr: str) -> str:
     return ""
 
 
+def _with_doomer_suffix(stem: str) -> str:
+    if stem.lower().endswith(DOOMER_SUFFIX.lower()):
+        return stem
+    return f"{stem}{DOOMER_SUFFIX}"
+
+
 class DoomerBatchConverter:
     def __init__(self, ffmpeg_bin: str, vinyls_dir: Path, log: Callable[[str], None]):
         self.ffmpeg_bin = ffmpeg_bin
@@ -238,8 +246,8 @@ class DoomerBatchConverter:
 
         for index, source_file in enumerate(files, start=1):
             relative = source_file.relative_to(input_dir)
-            destination = output_dir / relative
-            destination = destination.with_suffix(output_suffix)
+            output_name = f"{_with_doomer_suffix(relative.stem)}{output_suffix}"
+            destination = output_dir / relative.parent / output_name
             destination.parent.mkdir(parents=True, exist_ok=True)
 
             vinyl_file = None
@@ -354,7 +362,7 @@ class DoomerVideoGenerator:
 
         for index, audio_file in enumerate(audio_files, start=1):
             relative = audio_file.relative_to(audio_input_dir)
-            destination = (video_output_dir / relative).with_suffix(".mp4")
+            destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
             destination.parent.mkdir(parents=True, exist_ok=True)
             background = random.choice(backgrounds)
 
@@ -1044,6 +1052,7 @@ class DoomerGeneratorApp:
         downloaded = 0
         failed = 0
         ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
+        percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
 
         for index, link in enumerate(links, start=1):
             self.events.put(("log", f"[{index}/{total}] Download: {link}"))
@@ -1052,6 +1061,7 @@ class DoomerGeneratorApp:
                 "--no-playlist",
                 "--ignore-errors",
                 "--no-warnings",
+                "--newline",
                 "--extract-audio",
                 "--audio-format",
                 "mp3",
@@ -1068,15 +1078,51 @@ class DoomerGeneratorApp:
                 link,
             ]
 
-            result = subprocess.run(command, capture_output=True, text=True)
-            if result.returncode == 0:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            last_detail = ""
+
+            if process.stdout:
+                for raw_line in process.stdout:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+
+                    match = percent_pattern.search(line)
+                    if match:
+                        link_percent = float(match.group(1))
+                        link_percent = max(0.0, min(100.0, link_percent))
+                        overall = ((index - 1) + (link_percent / 100.0)) / total * 100.0
+                        self.events.put(
+                            (
+                                "download_progress",
+                                (overall, index, total, link_percent),
+                            )
+                        )
+                        continue
+
+                    if "Destination:" in line:
+                        self.events.put(("log", f"  {line}"))
+                    elif line.startswith("ERROR:") or line.startswith("WARNING:"):
+                        last_detail = line
+                    elif "[ExtractAudio]" in line:
+                        self.events.put(("log", f"  {line}"))
+                        last_detail = line
+
+            return_code = process.wait()
+            if return_code == 0:
                 downloaded += 1
                 self.events.put(("log", "  OK"))
             else:
                 failed += 1
-                detail = _summarize_process_output(result.stdout, result.stderr)
-                if detail:
-                    self.events.put(("log", f"  yt-dlp: {detail}"))
+                if last_detail:
+                    self.events.put(("log", f"  yt-dlp: {last_detail}"))
                 self.events.put(("log", "  ERRORE"))
 
             self.events.put(("progress", (index, total)))
@@ -1163,6 +1209,12 @@ class DoomerGeneratorApp:
 
             if event == "log":
                 self._log(str(payload))
+            elif event == "download_progress":
+                percent, index, total, link_percent = payload  # type: ignore[misc]
+                self.progress_var.set(percent)
+                self.progress_text.set(
+                    f"Download in corso: {index}/{total} - {link_percent:.1f}% del link"
+                )
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
