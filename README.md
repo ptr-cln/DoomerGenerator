@@ -41,7 +41,7 @@ Default audio:
 - rallentamento: `20`
 - taglio alte: `75`
 - bass boost: `50`
-- vinile: `50`
+- vinile: `10`
 - reverb: `15`
 - fade in/out: `1s / 1s`
 

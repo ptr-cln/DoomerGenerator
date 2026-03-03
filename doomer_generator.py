@@ -37,7 +37,7 @@ class AudioSettings:
     slowdown_percent: float = 20.0
     lowpass_strength: float = 75.0
     bass_boost_percent: float = 50.0
-    vinyl_volume_percent: float = 50.0
+    vinyl_volume_percent: float = 10.0
     reverb_percent: float = 15.0
     fade_in_seconds: float = 1.0
     fade_out_seconds: float = 1.0
