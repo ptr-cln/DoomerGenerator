@@ -1530,6 +1530,9 @@ class DoomerGeneratorApp:
         if self._is_busy():
             return
 
+        if not self._try_prepare_youtube_oauth_file():
+            return
+
         self.youtube_authenticating = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
@@ -1540,6 +1543,9 @@ class DoomerGeneratorApp:
 
     def _start_youtube_upload(self) -> None:
         if self._is_busy():
+            return
+
+        if not self._try_prepare_youtube_oauth_file():
             return
 
         video_dir = Path(self.upload_video_input_var.get().strip())
@@ -1905,6 +1911,57 @@ class DoomerGeneratorApp:
                 )
 
         self.root.after(120, self._poll_events)
+
+    def _try_prepare_youtube_oauth_file(self) -> bool:
+        configured = Path(self.youtube_client_secret_var.get().strip())
+        if configured.is_file():
+            return True
+
+        guessed = self._guess_youtube_client_secret_path()
+        if guessed:
+            self.youtube_client_secret_var.set(str(guessed))
+            self._log(f"OAuth JSON rilevato automaticamente: {guessed}")
+            return True
+
+        messagebox.showinfo(
+            "OAuth JSON mancante",
+            "Seleziona il file OAuth client JSON scaricato da Google Cloud.",
+        )
+        self._pick_youtube_client_secret()
+        selected = Path(self.youtube_client_secret_var.get().strip())
+        if selected.is_file():
+            return True
+
+        messagebox.showerror(
+            "File OAuth mancante",
+            "Nessun file JSON valido selezionato.\n"
+            "Scegli il file credenziali OAuth Desktop prima di fare login.",
+        )
+        return False
+
+    def _guess_youtube_client_secret_path(self) -> Path | None:
+        candidates: list[Path] = []
+        project_candidates = [
+            self.project_dir / "youtube_client_secret.json",
+            self.project_dir / "client_secret.json",
+        ]
+        for candidate in project_candidates:
+            if candidate.is_file():
+                candidates.append(candidate)
+
+        # Common Google OAuth download names.
+        for pattern in ("client_secret*.json", "*oauth*client*.json", "*credentials*.json"):
+            candidates.extend(path for path in self.project_dir.glob(pattern) if path.is_file())
+
+        downloads = Path.home() / "Downloads"
+        if downloads.is_dir():
+            for pattern in ("client_secret*.json", "*oauth*client*.json", "*credentials*.json"):
+                candidates.extend(path for path in downloads.glob(pattern) if path.is_file())
+
+        if not candidates:
+            return None
+        candidates.sort(key=lambda path: _safe_mtime(path), reverse=True)
+        return candidates[0]
 
     def _resolve_yt_dlp(self) -> list[str] | None:
         executable = shutil.which("yt-dlp")
