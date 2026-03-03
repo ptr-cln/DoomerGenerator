@@ -97,8 +97,8 @@ class AudioSettings:
 
 @dataclass(frozen=True)
 class VideoSettings:
-    fade_in_seconds: float = 1.0
-    fade_out_seconds: float = 1.0
+    fade_in_seconds: float = 3.0
+    fade_out_seconds: float = 3.0
     noise_percent: float = 65.0
     distortion_percent: float = 75.0
 
