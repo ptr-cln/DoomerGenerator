@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -698,12 +699,17 @@ def _strip_doomer_suffix(stem: str) -> str:
 
 
 def _try_remove_file(path: Path) -> bool:
-    try:
-        if path.is_file() or path.is_symlink():
-            path.unlink()
-            return True
-    except OSError:
-        return False
+    attempts = 6
+    for attempt in range(attempts):
+        try:
+            if path.is_file() or path.is_symlink():
+                path.unlink()
+                return True
+            return False
+        except OSError:
+            if attempt == attempts - 1:
+                return False
+            time.sleep(0.2)
     return False
 
 
@@ -1177,6 +1183,9 @@ class YouTubeUploader:
         failed = 0
         for index, video_file in enumerate(files, start=1):
             title = video_file.stem
+            cleanup_target: Path | None = None
+            media = None
+            insert_request = None
             self.log(f"[{index}/{total}] Upload: {video_file.name}")
             try:
                 try:
@@ -1216,11 +1225,7 @@ class YouTubeUploader:
                 uploaded += 1
                 video_id = response.get("id", "N/A")
                 self.log(f"  OK -> https://youtu.be/{video_id}")
-                if on_uploaded is not None:
-                    try:
-                        on_uploaded(video_file)
-                    except Exception as callback_error:  # noqa: BLE001
-                        self.log(f"  Cleanup warning: {callback_error}")
+                cleanup_target = video_file
             except HttpError as error:
                 failed += 1
                 self.log(f"  HTTP error: {error}")
@@ -1228,7 +1233,14 @@ class YouTubeUploader:
                 failed += 1
                 self.log(f"  Upload error: {error}")
             finally:
+                media = None
+                insert_request = None
                 progress((index / total) * 100.0, index, total, 100.0, video_file.name)
+                if cleanup_target is not None and on_uploaded is not None:
+                    try:
+                        on_uploaded(cleanup_target)
+                    except Exception as callback_error:  # noqa: BLE001
+                        self.log(f"  Cleanup warning: {callback_error}")
 
         return UploadSummary(total=total, uploaded=uploaded, failed=failed)
 
