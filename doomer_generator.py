@@ -534,6 +534,8 @@ class DoomerGeneratorApp:
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value="Pronto")
+        self.download_progress_var = tk.DoubleVar(value=0.0)
+        self.download_progress_text = tk.StringVar(value="In attesa")
 
         self._build_ui()
         self.root.after(100, self._poll_events)
@@ -588,6 +590,11 @@ class DoomerGeneratorApp:
         actions.pack(fill=tk.X, pady=(10, 0))
         self.download_button = ttk.Button(actions, text="Scarica Mp3", command=self._start_download)
         self.download_button.pack(side=tk.LEFT)
+
+        progress_box = ttk.LabelFrame(parent, text="Progresso Download", padding=8)
+        progress_box.pack(fill=tk.X, pady=(10, 0))
+        ttk.Progressbar(progress_box, variable=self.download_progress_var, maximum=100).pack(fill=tk.X)
+        ttk.Label(progress_box, textvariable=self.download_progress_text).pack(anchor="w", pady=(6, 0))
 
         ttk.Label(
             parent,
@@ -935,6 +942,8 @@ class DoomerGeneratorApp:
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
         self.progress_text.set("Download MP3 in corso...")
+        self.download_progress_var.set(0)
+        self.download_progress_text.set("Avvio download...")
         self._log(f"Avvio download YouTube ({len(links)} link)...")
         self._log(f"File link: {self.links_file}")
         self._log(f"Destinazione: {target_input}")
@@ -1048,91 +1057,105 @@ class DoomerGeneratorApp:
         links: list[str],
         target_dir: Path,
     ) -> None:
-        total = len(links)
-        downloaded = 0
-        failed = 0
-        ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
-        percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
+        try:
+            total = len(links)
+            downloaded = 0
+            failed = 0
+            ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
+            percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
 
-        for index, link in enumerate(links, start=1):
-            self.events.put(("log", f"[{index}/{total}] Download: {link}"))
-            command = [
-                *ytdlp_command,
-                "--no-playlist",
-                "--ignore-errors",
-                "--no-warnings",
-                "--newline",
-                "--extract-audio",
-                "--audio-format",
-                "mp3",
-                "--audio-quality",
-                "0",
-                "-f",
-                "bestaudio/best",
-                "--ffmpeg-location",
-                ffmpeg_location,
-                "--paths",
-                str(target_dir),
-                "--output",
-                "%(title)s [%(id)s].%(ext)s",
-                link,
-            ]
+            for index, link in enumerate(links, start=1):
+                self.events.put(("log", f"[{index}/{total}] Download: {link}"))
+                command = [
+                    *ytdlp_command,
+                    "--no-playlist",
+                    "--newline",
+                    "--extract-audio",
+                    "--audio-format",
+                    "mp3",
+                    "--audio-quality",
+                    "0",
+                    "--print",
+                    "after_move:filepath",
+                    "-f",
+                    "bestaudio/best",
+                    "--ffmpeg-location",
+                    ffmpeg_location,
+                    "--paths",
+                    str(target_dir),
+                    "--output",
+                    "%(title)s [%(id)s].%(ext)s",
+                    link,
+                ]
 
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            last_detail = ""
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                last_detail = ""
+                output_file: str | None = None
 
-            if process.stdout:
-                for raw_line in process.stdout:
-                    line = raw_line.strip()
-                    if not line:
-                        continue
+                if process.stdout:
+                    for raw_line in process.stdout:
+                        line = raw_line.strip()
+                        if not line:
+                            continue
 
-                    match = percent_pattern.search(line)
-                    if match:
-                        link_percent = float(match.group(1))
-                        link_percent = max(0.0, min(100.0, link_percent))
-                        overall = ((index - 1) + (link_percent / 100.0)) / total * 100.0
-                        self.events.put(
-                            (
-                                "download_progress",
-                                (overall, index, total, link_percent),
+                        match = percent_pattern.search(line)
+                        if match:
+                            link_percent = float(match.group(1))
+                            link_percent = max(0.0, min(100.0, link_percent))
+                            overall = ((index - 1) + (link_percent / 100.0)) / total * 100.0
+                            self.events.put(
+                                (
+                                    "download_progress",
+                                    (overall, index, total, link_percent),
+                                )
                             )
-                        )
-                        continue
+                            continue
 
-                    if "Destination:" in line:
-                        self.events.put(("log", f"  {line}"))
-                    elif line.startswith("ERROR:") or line.startswith("WARNING:"):
-                        last_detail = line
-                    elif "[ExtractAudio]" in line:
-                        self.events.put(("log", f"  {line}"))
-                        last_detail = line
+                        if "Destination:" in line or "[ExtractAudio]" in line:
+                            self.events.put(("log", f"  {line}"))
+                            last_detail = line
+                            continue
+                        if line.endswith(".mp3") and "://" not in line:
+                            output_file = line
+                            continue
+                        if line.startswith("ERROR:") or line.startswith("WARNING:"):
+                            last_detail = line
 
-            return_code = process.wait()
-            if return_code == 0:
-                downloaded += 1
-                self.events.put(("log", "  OK"))
-            else:
-                failed += 1
-                if last_detail:
-                    self.events.put(("log", f"  yt-dlp: {last_detail}"))
-                self.events.put(("log", "  ERRORE"))
+                return_code = process.wait()
+                if return_code == 0:
+                    downloaded += 1
+                    if output_file:
+                        self.events.put(("log", f"  File: {output_file}"))
+                    self.events.put(("log", "  OK"))
+                else:
+                    failed += 1
+                    if last_detail:
+                        self.events.put(("log", f"  yt-dlp: {last_detail}"))
+                    self.events.put(("log", "  ERRORE"))
 
-            self.events.put(("progress", (index, total)))
+                self.events.put(("progress", (index, total)))
 
-        self.events.put(
-            (
-                "download_finished",
-                DownloadSummary(total=total, downloaded=downloaded, failed=failed),
+            self.events.put(
+                (
+                    "download_finished",
+                    DownloadSummary(total=total, downloaded=downloaded, failed=failed),
+                )
             )
-        )
+        except Exception as error:  # noqa: BLE001
+            self.events.put(("download_runtime_error", str(error)))
+            self.events.put(
+                (
+                    "download_finished",
+                    DownloadSummary(total=len(links), downloaded=0, failed=len(links)),
+                )
+            )
 
     def _run_audio_batch(
         self,
@@ -1215,6 +1238,10 @@ class DoomerGeneratorApp:
                 self.progress_text.set(
                     f"Download in corso: {index}/{total} - {link_percent:.1f}% del link"
                 )
+                self.download_progress_var.set(percent)
+                self.download_progress_text.set(
+                    f"Link {index}/{total}: {link_percent:.1f}%"
+                )
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
@@ -1225,13 +1252,22 @@ class DoomerGeneratorApp:
                 self.downloading = False
                 self._set_action_buttons_enabled(True)
                 self.progress_var.set(100 if summary.total else 0)
+                self.download_progress_var.set(100 if summary.total else 0)
                 self.progress_text.set(
                     f"Download completato - OK: {summary.downloaded}, Errori: {summary.failed}"
+                )
+                self.download_progress_text.set(
+                    f"Completato - OK: {summary.downloaded}, Errori: {summary.failed}"
                 )
                 self._log(
                     "Fine download YouTube. "
                     f"Totale: {summary.total}, OK: {summary.downloaded}, Errori: {summary.failed}"
                 )
+            elif event == "download_runtime_error":
+                detail = str(payload)
+                self._log(f"Errore runtime download: {detail}")
+                self.progress_text.set("Errore durante il download")
+                self.download_progress_text.set("Errore durante il download")
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
