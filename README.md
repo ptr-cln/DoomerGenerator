@@ -3,7 +3,7 @@
 Generatore automatico Doomer Wave con GUI:
 - download MP3 da YouTube
 - conversione audio batch con effetti
-- generazione video Full HD batch in stile doomer
+- generazione video Full HD batch
 
 ## Struttura cartelle
 
@@ -15,16 +15,23 @@ L'app crea e usa automaticamente:
 Risorse richieste:
 - `resources/vinyls` (rumori vinile reali, scelti a caso per ogni traccia)
 - `resources/backgrounds` (sfondi per i video)
-- `resources/Doomer_Guy.jpg` (personaggio in overlay, con rimozione del bianco)
+- `resources/Doomer_Guy.png` (fallback automatico su `.jpg/.jpeg/.webp`)
 
 ## Tab GUI
 
-### 1) Download
+### 1) General
+- svuota input audio
+- svuota output audio
+- svuota output video
+- svuota youtube links
+- svuota tutto
+
+### 2) Download
 - file link: `youtube_links.txt`
 - pulsante `Scarica Mp3`
-- output diretto in `audio/in` (MP3 qualità massima `yt-dlp`: `--audio-quality 0`)
+- output diretto in `audio/in` (MP3 qualita massima yt-dlp)
 
-### 2) Audio
+### 3) Audio
 - input/output audio batch
 - effetti: slowdown, low-pass, bass boost, vinile, reverb
 - fade in/out audio regolabili (default `1s` + `1s`)
@@ -34,25 +41,25 @@ Default audio:
 - rallentamento: `20`
 - taglio alte: `75`
 - bass boost: `50`
-- vinile: `65`
+- vinile: `50`
 - reverb: `15`
 - fade in/out: `1s / 1s`
 
-### 3) Video
+### 4) Video
 - input audio (default: `audio/out`)
 - output video (default: `video/out`)
-- genera `.mp4` Full HD (`1920x1080`)
-- background casuale + overlay Doomer a sinistra
-- effetti globali sul frame composito (noise + jitter/distorsione + grading + vignette)
+- output `.mp4` Full HD (`1920x1080`)
+- background casuale + overlay doomer in basso a sinistra
+- effetti globali stile VHS/noise/distorsione statica su tutto il frame
 - fade in/out video regolabili (default `1s / 1s`)
 
 ## Requisiti
 
 - Python 3.10+
-- `ffmpeg` (PATH oppure selezione manuale in GUI)
-- `yt-dlp` (`yt-dlp` command o modulo `yt_dlp`)
+- `ffmpeg`
+- `yt-dlp`
 
-Installazione rapida Windows:
+Installazione rapida su Windows:
 
 ```powershell
 winget install Gyan.FFmpeg
@@ -70,8 +77,3 @@ pip install -r requirements.txt
 ```bash
 python doomer_generator.py
 ```
-
-## Note
-
-- L'app tenta auto-detect di `ffmpeg.exe` in `%LOCALAPPDATA%\Microsoft\WinGet\Packages`.
-- Se mancano file in `resources/vinyls` la conversione audio procede senza overlay vinile.

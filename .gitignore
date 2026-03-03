@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+tmp_*/
+
+audio/in/*
+!audio/in/.gitkeep
+
+audio/out/*
+!audio/out/.gitkeep
+
+video/out/*
+!video/out/.gitkeep
+
+/in/
+/out/

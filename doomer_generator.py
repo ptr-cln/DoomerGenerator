@@ -37,7 +37,7 @@ class AudioSettings:
     slowdown_percent: float = 20.0
     lowpass_strength: float = 75.0
     bass_boost_percent: float = 50.0
-    vinyl_volume_percent: float = 65.0
+    vinyl_volume_percent: float = 50.0
     reverb_percent: float = 15.0
     fade_in_seconds: float = 1.0
     fade_out_seconds: float = 1.0
@@ -97,12 +97,15 @@ class AudioSettings:
 class VideoSettings:
     fade_in_seconds: float = 1.0
     fade_out_seconds: float = 1.0
-    noise_percent: float = 35.0
-    distortion_percent: float = 28.0
+    noise_percent: float = 55.0
+    distortion_percent: float = 65.0
 
     def build_filter_complex(self, audio_duration_seconds: float | None) -> str:
-        noise_amount = round((self.noise_percent / 100.0) * 26.0, 2)
-        distortion_px = int(round((self.distortion_percent / 100.0) * 16.0))
+        noise_amount = round(5.0 + (self.noise_percent / 100.0) * 38.0, 2)
+        distortion_strength = max(0.0, min(1.0, self.distortion_percent / 100.0))
+        scanline_alpha = round(0.03 + distortion_strength * 0.12, 3)
+        blur_sigma = round(0.15 + distortion_strength * 0.9, 3)
+        unsharp_amount = round(0.22 + distortion_strength * 0.25, 3)
         fade_in = max(0.0, self.fade_in_seconds)
         fade_out = max(0.0, self.fade_out_seconds)
         fade_out_start = None
@@ -115,31 +118,21 @@ class VideoSettings:
             "crop=1920:1080,setsar=1"
             "[bg]",
             "[1:v]"
-            "format=rgba,colorkey=0xFFFFFF:0.30:0.12,"
-            "scale=920:-1"
+            "format=rgba,"
+            "scale=-1:980"
             "[doomer]",
-            "[bg][doomer]overlay=x=70:y=H-h-24:format=auto[scene]",
+            "[bg][doomer]overlay=x=36:y=H-h:format=auto[scene]",
         ]
 
-        cursor = "scene"
-        if distortion_px > 0:
-            crop_margin = distortion_px * 2
-            parts.append(
-                f"[{cursor}]"
-                f"crop=iw-{crop_margin}:ih-{crop_margin}:"
-                f"x={distortion_px}+sin(n/9)*{distortion_px}:"
-                f"y={distortion_px}+cos(n/11)*{distortion_px},"
-                "scale=1920:1080"
-                "[jitter]"
-            )
-            cursor = "jitter"
-
         parts.append(
-            f"[{cursor}]"
+            "[scene]"
             "fps=30,"
-            "eq=contrast=1.12:saturation=0.82:brightness=-0.035,"
+            "eq=contrast=1.16:saturation=0.72:brightness=-0.045,"
             f"noise=alls={noise_amount}:allf=t+u,"
-            "vignette=PI/4,gblur=sigma=0.35"
+            f"drawgrid=width=iw:height=4:thickness=1:color=black@{scanline_alpha},"
+            f"gblur=sigma={blur_sigma},"
+            f"unsharp=5:5:{unsharp_amount}:5:5:0.0,"
+            "vignette=PI/5"
             "[vfx]"
         )
         cursor = "vfx"
@@ -215,6 +208,35 @@ def _with_doomer_suffix(stem: str) -> str:
     if stem.lower().endswith(DOOMER_SUFFIX.lower()):
         return stem
     return f"{stem}{DOOMER_SUFFIX}"
+
+
+def _clear_directory_contents(path: Path) -> int:
+    path.mkdir(parents=True, exist_ok=True)
+    removed_files = 0
+    items = sorted(path.rglob("*"), key=lambda value: len(value.parts), reverse=True)
+    for item in items:
+        try:
+            if item.is_file() or item.is_symlink():
+                item.unlink()
+                removed_files += 1
+            elif item.is_dir():
+                item.rmdir()
+        except OSError:
+            continue
+    return removed_files
+
+
+def _resolve_doomer_image(resources_dir: Path) -> Path:
+    preferred = [
+        resources_dir / "Doomer_Guy.png",
+        resources_dir / "Doomer_Guy.webp",
+        resources_dir / "Doomer_Guy.jpg",
+        resources_dir / "Doomer_Guy.jpeg",
+    ]
+    for candidate in preferred:
+        if candidate.is_file():
+            return candidate
+    return preferred[0]
 
 
 class DoomerBatchConverter:
@@ -488,7 +510,7 @@ class DoomerGeneratorApp:
         self.resources_dir = self.project_dir / "resources"
         self.vinyls_dir = self.resources_dir / "vinyls"
         self.backgrounds_dir = self.resources_dir / "backgrounds"
-        self.doomer_image_path = self.resources_dir / "Doomer_Guy.jpg"
+        self.doomer_image_path = _resolve_doomer_image(self.resources_dir)
         self.links_file = self.project_dir / "youtube_links.txt"
 
         self.audio_root = self.project_dir / "audio"
@@ -547,13 +569,16 @@ class DoomerGeneratorApp:
         notebook = ttk.Notebook(main)
         notebook.pack(fill=tk.BOTH, expand=False)
 
+        general_tab = ttk.Frame(notebook, padding=10)
         download_tab = ttk.Frame(notebook, padding=10)
         audio_tab = ttk.Frame(notebook, padding=10)
         video_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(general_tab, text="General")
         notebook.add(download_tab, text="Download")
         notebook.add(audio_tab, text="Audio")
         notebook.add(video_tab, text="Video")
 
+        self._build_general_tab(general_tab)
         self._build_download_tab(download_tab)
         self._build_audio_tab(audio_tab)
         self._build_video_tab(video_tab)
@@ -573,6 +598,48 @@ class DoomerGeneratorApp:
         scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_widget.configure(yscrollcommand=scrollbar.set)
+
+    def _build_general_tab(self, parent: ttk.Frame) -> None:
+        actions = ttk.LabelFrame(parent, text="Manutenzione", padding=8)
+        actions.pack(fill=tk.X)
+
+        self.clear_audio_input_button = ttk.Button(
+            actions,
+            text="Svuota input audio",
+            command=lambda: self._clear_directory_action(self.audio_input_var.get(), "input audio"),
+        )
+        self.clear_audio_input_button.grid(row=0, column=0, padx=6, pady=6, sticky="w")
+
+        self.clear_audio_output_button = ttk.Button(
+            actions,
+            text="Svuota output audio",
+            command=lambda: self._clear_directory_action(self.audio_output_var.get(), "output audio"),
+        )
+        self.clear_audio_output_button.grid(row=0, column=1, padx=6, pady=6, sticky="w")
+
+        self.clear_video_output_button = ttk.Button(
+            actions,
+            text="Svuota output video",
+            command=lambda: self._clear_directory_action(self.video_output_var.get(), "output video"),
+        )
+        self.clear_video_output_button.grid(row=1, column=0, padx=6, pady=6, sticky="w")
+
+        self.clear_links_button = ttk.Button(
+            actions,
+            text="Svuota Youtube links",
+            command=self._clear_youtube_links,
+        )
+        self.clear_links_button.grid(row=1, column=1, padx=6, pady=6, sticky="w")
+
+        self.clear_all_button = ttk.Button(actions, text="Svuota tutto", command=self._clear_all_outputs)
+        self.clear_all_button.grid(row=2, column=0, padx=6, pady=6, sticky="w")
+
+        info = ttk.LabelFrame(parent, text="Percorsi", padding=8)
+        info.pack(fill=tk.X, pady=(10, 0))
+        ttk.Label(info, text=f"Audio input: {self.audio_input_dir}").pack(anchor="w", pady=2)
+        ttk.Label(info, text=f"Audio output: {self.audio_output_dir}").pack(anchor="w", pady=2)
+        ttk.Label(info, text=f"Video output: {self.video_output_dir}").pack(anchor="w", pady=2)
+        ttk.Label(info, text=f"YouTube links: {self.links_file}").pack(anchor="w", pady=2)
 
     def _build_download_tab(self, parent: ttk.Frame) -> None:
         box = ttk.LabelFrame(parent, text="YouTube", padding=8)
@@ -901,6 +968,61 @@ class DoomerGeneratorApp:
         except OSError as error:
             messagebox.showerror("Errore apertura file", f"Impossibile aprire il file link.\n{error}")
 
+    def _clear_directory_action(self, raw_path: str, label: str) -> None:
+        if self._is_busy():
+            messagebox.showinfo("Operazione non disponibile", "Attendi la fine dell'elaborazione corrente.")
+            return
+
+        target = Path(raw_path.strip())
+        removed = _clear_directory_contents(target)
+        self._log(f"Svuotata cartella {label}: {target} (file rimossi: {removed})")
+        messagebox.showinfo("Completato", f"Cartella {label} svuotata.\nFile rimossi: {removed}")
+
+    def _clear_youtube_links(self) -> None:
+        if self._is_busy():
+            messagebox.showinfo("Operazione non disponibile", "Attendi la fine dell'elaborazione corrente.")
+            return
+
+        try:
+            self._write_links_template()
+        except OSError as error:
+            messagebox.showerror("Errore", f"Impossibile svuotare il file links.\n{error}")
+            return
+
+        self._log("File youtube_links.txt ripristinato (vuoto).")
+        messagebox.showinfo("Completato", "youtube_links.txt svuotato.")
+
+    def _clear_all_outputs(self) -> None:
+        if self._is_busy():
+            messagebox.showinfo("Operazione non disponibile", "Attendi la fine dell'elaborazione corrente.")
+            return
+
+        if not messagebox.askyesno(
+            "Conferma",
+            "Vuoi svuotare input audio, output audio, output video e youtube_links.txt?",
+        ):
+            return
+
+        in_removed = _clear_directory_contents(Path(self.audio_input_var.get().strip()))
+        out_removed = _clear_directory_contents(Path(self.audio_output_var.get().strip()))
+        video_removed = _clear_directory_contents(Path(self.video_output_var.get().strip()))
+        try:
+            self._write_links_template()
+        except OSError as error:
+            self._log(f"Errore durante reset youtube_links: {error}")
+
+        self._log(
+            "Svuota tutto completato: "
+            f"input audio={in_removed}, output audio={out_removed}, output video={video_removed}"
+        )
+        messagebox.showinfo(
+            "Completato",
+            "Pulizia completata.\n"
+            f"Input audio: {in_removed}\n"
+            f"Output audio: {out_removed}\n"
+            f"Output video: {video_removed}",
+        )
+
     def _start_download(self) -> None:
         if self._is_busy():
             return
@@ -1222,6 +1344,11 @@ class DoomerGeneratorApp:
         self.audio_reset_button.configure(state=state)
         self.video_generate_button.configure(state=state)
         self.open_links_button.configure(state=state)
+        self.clear_audio_input_button.configure(state=state)
+        self.clear_audio_output_button.configure(state=state)
+        self.clear_video_output_button.configure(state=state)
+        self.clear_links_button.configure(state=state)
+        self.clear_all_button.configure(state=state)
 
     def _poll_events(self) -> None:
         while True:
@@ -1381,6 +1508,9 @@ class DoomerGeneratorApp:
     def _ensure_links_file(self) -> None:
         if self.links_file.is_file():
             return
+        self._write_links_template()
+
+    def _write_links_template(self) -> None:
         self.links_file.write_text(
             "# Inserisci un link YouTube per riga.\n"
             "# Le righe vuote o con # all'inizio vengono ignorate.\n"
