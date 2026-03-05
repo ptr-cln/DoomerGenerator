@@ -689,7 +689,9 @@ def _get_least_used_file(
     # Get all files with minimum usage
     least_used = [f for f, usage in file_usage.items() if usage == min_usage]
     # If there are multiple files with same usage, pick one randomly for variety
-    return random.choice(least_used)
+    selected = random.choice(least_used)
+    
+    return Path(selected)
 
 
 def _increment_usage(
@@ -1400,8 +1402,10 @@ class DoomerBatchConverter:
 
             vinyl_file = None
             if vinyl_files and settings.vinyl_volume_percent > 0:
-                # Temporarily disable memory system for debugging
-                vinyl_file = random.choice(vinyl_files)
+                memory = _check_and_reset_memory(self.usage_memory_path, vinyl_files, "vinyls")
+                vinyl_file = _get_least_used_file(vinyl_files, memory, "vinyls")
+                if vinyl_file:
+                    _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
 
             self.log(f"[{index}/{total}] Audio: {source_file.name}")
             if vinyl_file:
