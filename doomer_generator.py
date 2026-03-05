@@ -1400,10 +1400,8 @@ class DoomerBatchConverter:
 
             vinyl_file = None
             if vinyl_files and settings.vinyl_volume_percent > 0:
-                memory = _check_and_reset_memory(self.usage_memory_path, vinyl_files, "vinyls")
-                vinyl_file = _get_least_used_file(vinyl_files, memory, "vinyls")
-                if vinyl_file:
-                    _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
+                # Temporarily disable memory system for debugging
+                vinyl_file = random.choice(vinyl_files)
 
             self.log(f"[{index}/{total}] Audio: {source_file.name}")
             if vinyl_file:
