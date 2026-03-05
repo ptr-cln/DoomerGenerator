@@ -2539,7 +2539,7 @@ class DoomerGeneratorApp:
         ttk.Label(
             options_box,
             text=self._t("upload_openai_hint"),
-        ).grid(row=4, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
+        ).grid(row=5, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
         desc_box = ttk.LabelFrame(parent, text=self._t("upload_group_description"), padding=8)
         desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
