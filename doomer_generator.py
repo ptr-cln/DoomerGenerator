@@ -674,7 +674,7 @@ def _get_least_used_file(
     files: list[Path],
     memory: dict[str, dict[str, int]],
     memory_key: str
-) -> Path:
+) -> Path | None:
     """Select the least used file from the list."""
     if not files:
         return None
@@ -689,9 +689,7 @@ def _get_least_used_file(
     # Get all files with minimum usage
     least_used = [f for f, usage in file_usage.items() if usage == min_usage]
     # If there are multiple files with same usage, pick one randomly for variety
-    selected = random.choice(least_used)
-    
-    return Path(selected)
+    return random.choice(least_used)
 
 
 def _increment_usage(
@@ -1403,7 +1401,8 @@ class DoomerBatchConverter:
             if vinyl_files and settings.vinyl_volume_percent > 0:
                 memory = _check_and_reset_memory(self.usage_memory_path, vinyl_files, "vinyls")
                 vinyl_file = _get_least_used_file(vinyl_files, memory, "vinyls")
-                _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
+                if vinyl_file:
+                    _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
 
             self.log(f"[{index}/{total}] Audio: {source_file.name}")
             if vinyl_file:
@@ -1527,7 +1526,8 @@ class DoomerVideoGenerator:
             destination.parent.mkdir(parents=True, exist_ok=True)
             memory = _check_and_reset_memory(self.usage_memory_path, backgrounds, "backgrounds")
             background = _get_least_used_file(backgrounds, memory, "backgrounds")
-            _increment_usage(self.usage_memory_path, background, "backgrounds")
+            if background:
+                _increment_usage(self.usage_memory_path, background, "backgrounds")
 
             self.log(f"[{index}/{total}] Video: {audio_file.name}")
             self.log(f"  Background: {background.name}")
@@ -2660,7 +2660,8 @@ class DoomerGeneratorApp:
         if settings.vinyl_volume_percent > 0 and vinyl_files:
             memory = _check_and_reset_memory(self.usage_memory_path, vinyl_files, "vinyls")
             vinyl_file = _get_least_used_file(vinyl_files, memory, "vinyls")
-            _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
+            if vinyl_file:
+                _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
 
         tmp_dir = self.project_dir / "tmp_preview"
         tmp_dir.mkdir(parents=True, exist_ok=True)
