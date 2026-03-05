@@ -1530,7 +1530,10 @@ class DoomerVideoGenerator:
                 _increment_usage(self.usage_memory_path, background, "backgrounds")
 
             self.log(f"[{index}/{total}] Video: {audio_file.name}")
-            self.log(f"  Background: {background.name}")
+            if background:
+                self.log(f"  Background: {background.name}")
+            else:
+                self.log("  Background: Nessuno selezionato")
 
             if self._generate_single_video(audio_file, background, destination, settings, resolved_encoder):
                 generated += 1
