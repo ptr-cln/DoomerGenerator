@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import time
+import datetime
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -142,6 +143,7 @@ UI_TEXTS = {
         "upload_label_oauth_token": "Token OAuth",
         "upload_group_options": "Opzioni Upload",
         "upload_label_privacy": "Privacy",
+        "upload_label_publish_at": "Data pubblicazione (UTC)",
         "upload_label_category": "Categoria",
         "upload_check_auto_tags": "Tag automatici (AI + fallback smart)",
         "upload_check_shutdown": "Spegni computer al termine (60s)",
@@ -324,6 +326,7 @@ UI_TEXTS = {
         "upload_label_oauth_token": "OAuth token",
         "upload_group_options": "Upload Options",
         "upload_label_privacy": "Privacy",
+        "upload_label_publish_at": "Publish at (UTC)",
         "upload_label_category": "Category",
         "upload_check_auto_tags": "Automatic tags (AI + smart fallback)",
         "upload_check_shutdown": "Turn off computer when done (60s)",
@@ -597,6 +600,10 @@ class UploadSettings:
     openai_model: str = "gpt-4o-mini"
     openai_api_key: str = ""
     openai_timeout_seconds: float = 20.0
+    # RFC3339 timestamp when video should be published (UTC). Only
+    # meaningful when privacy_status is "scheduled". Stored in the
+    # settings file so it survives restarts.
+    publish_at: str | None = None
 
 
 @dataclass
@@ -1281,6 +1288,18 @@ class YouTubeUploader:
                     description = f"{title}\n\n{settings.description_template}"
                 tags = _compose_youtube_tags(title, settings, log=self.log)
 
+                # build status dictionary taking care of scheduled uploads
+                status_dict: dict[str, object] = {
+                    "privacyStatus": settings.privacy_status,
+                    "selfDeclaredMadeForKids": False,
+                }
+                if settings.privacy_status == "scheduled":
+                    # YouTube requires privacyStatus to be "private" when using
+                    # publishAt; we also add the timestamp if provided.
+                    status_dict["privacyStatus"] = "private"
+                    if settings.publish_at:
+                        status_dict["publishAt"] = settings.publish_at
+
                 request_body = {
                     "snippet": {
                         "title": title,
@@ -1288,10 +1307,7 @@ class YouTubeUploader:
                         "categoryId": settings.category_id,
                         "tags": tags,
                     },
-                    "status": {
-                        "privacyStatus": settings.privacy_status,
-                        "selfDeclaredMadeForKids": False,
-                    },
+                    "status": status_dict,
                 }
                 media = MediaFileUpload(str(video_file), chunksize=8 * 1024 * 1024, resumable=True)
                 insert_request = service.videos().insert(
@@ -1862,6 +1878,8 @@ class DoomerGeneratorApp:
         self.youtube_client_secret_var = tk.StringVar(value=str(self.youtube_client_secret_path))
         self.youtube_token_var = tk.StringVar(value=str(self.youtube_token_path))
         self.youtube_privacy_var = tk.StringVar(value=self.default_upload_settings.privacy_status)
+        # schedule timestamp (ISO UTC) for "scheduled" privacy status
+        self.youtube_schedule_var = tk.StringVar(value="")
         self.youtube_category_var = tk.StringVar(value=self.default_upload_settings.category_id)
         self.youtube_extra_tags_var = tk.StringVar(value=self.default_upload_settings.extra_tags_csv)
         self.youtube_smart_tags_var = tk.BooleanVar(value=self.default_upload_settings.smart_tags_enabled)
@@ -1871,15 +1889,24 @@ class DoomerGeneratorApp:
         self.youtube_openai_model_var = tk.StringVar(value=self.default_upload_settings.openai_model)
         self.youtube_openai_key_var = tk.StringVar(value="")
         self.youtube_description_text = self.default_upload_settings.description_template
+        # privacy widget trace will be installed once the upload tab is
+        # fully built, so that the schedule label/entry exist when the callback
+        # fires.
         self.language_var = tk.StringVar(value=LANGUAGE_CODE_TO_LABEL[self.current_language])
         self.shutdown_after_upload_requested = False
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value=self._t("status_ready"))
 
-        self._load_persisted_app_settings()
-        self.progress_text.set(self._t("status_ready"))
+        # build interface first so that all widgets (especially upload
+        # controls) exist before we populate them with saved settings.  this
+        # avoids the previous race where changing the privacy variable while
+        # loading triggered callbacks before the schedule widgets were created.
         self._build_ui()
+        self._load_persisted_app_settings()
+        # ensure UI reflects any scheduled value right away
+        self._update_schedule_visibility()
+        self.progress_text.set(self._t("status_ready"))
         self.root.after(100, self._poll_events)
 
     def _t(self, key: str, **kwargs: object) -> str:
@@ -2451,7 +2478,7 @@ class DoomerGeneratorApp:
         ttk.Combobox(
             options_box,
             textvariable=self.youtube_privacy_var,
-            values=["private", "unlisted", "public"],
+            values=["private", "unlisted", "public", "scheduled"],
             state="readonly",
             width=12,
         ).grid(row=0, column=1, padx=6, pady=6, sticky="w")
@@ -2461,16 +2488,27 @@ class DoomerGeneratorApp:
             row=0, column=3, padx=6, pady=6, sticky="w"
         )
 
+        # schedule controls start hidden, shown only when privacy == scheduled
+        self.youtube_schedule_label = ttk.Label(options_box, text=self._t("upload_label_publish_at"))
+        self.youtube_schedule_entry = ttk.Entry(options_box, textvariable=self.youtube_schedule_var, width=20)
+        # place them immediately below the first row; row indices below will be
+        # bumped accordingly
+        self.youtube_schedule_label.grid(row=1, column=0, padx=6, pady=6, sticky="w")
+        self.youtube_schedule_entry.grid(row=1, column=1, padx=6, pady=6, sticky="w")
+        # hide initially
+        self.youtube_schedule_label.grid_remove()
+        self.youtube_schedule_entry.grid_remove()
+
         self.youtube_smart_tags_check = ttk.Checkbutton(
             options_box,
             text=self._t("upload_check_auto_tags"),
             variable=self.youtube_smart_tags_var,
         )
-        self.youtube_smart_tags_check.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+        self.youtube_smart_tags_check.grid(row=2, column=0, columnspan=2, padx=6, pady=6, sticky="w")
 
-        ttk.Label(options_box, text=self._t("upload_label_extra_tags")).grid(row=1, column=2, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_extra_tags")).grid(row=2, column=2, padx=6, pady=6, sticky="w")
         ttk.Entry(options_box, textvariable=self.youtube_extra_tags_var).grid(
-            row=1, column=3, padx=6, pady=6, sticky="ew"
+            row=2, column=3, padx=6, pady=6, sticky="ew"
         )
 
         self.youtube_shutdown_after_upload_check = ttk.Checkbutton(
@@ -2478,25 +2516,25 @@ class DoomerGeneratorApp:
             text=self._t("upload_check_shutdown"),
             variable=self.youtube_shutdown_after_upload_var,
         )
-        self.youtube_shutdown_after_upload_check.grid(row=2, column=0, columnspan=4, padx=6, pady=6, sticky="w")
+        self.youtube_shutdown_after_upload_check.grid(row=3, column=0, columnspan=4, padx=6, pady=6, sticky="w")
 
-        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=3, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=4, column=0, padx=6, pady=6, sticky="w")
         self.youtube_openai_model_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_model_var,
             width=16,
         )
-        self.youtube_openai_model_entry.grid(row=3, column=1, padx=6, pady=6, sticky="w")
+        self.youtube_openai_model_entry.grid(row=4, column=1, padx=6, pady=6, sticky="w")
 
         ttk.Label(options_box, text=self._t("upload_label_openai_key")).grid(
-            row=3, column=2, padx=6, pady=6, sticky="w"
+            row=4, column=2, padx=6, pady=6, sticky="w"
         )
         self.youtube_openai_key_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_key_var,
             show="*",
         )
-        self.youtube_openai_key_entry.grid(row=3, column=3, padx=6, pady=6, sticky="ew")
+        self.youtube_openai_key_entry.grid(row=4, column=3, padx=6, pady=6, sticky="ew")
 
         ttk.Label(
             options_box,
@@ -2531,6 +2569,58 @@ class DoomerGeneratorApp:
             command=self._save_upload_settings,
         )
         self.upload_save_button.pack(side=tk.LEFT, padx=8)
+
+        # after creating the upload tab and its widgets we need to ensure the
+        # schedule controls are shown/hidden correctly based on the current
+        # privacy status; the trace on the privacy variable will call
+        # _on_privacy_change which in turn calls _update_schedule_visibility.
+        self._update_schedule_visibility()
+        # now that widgets exist we can safely attach the trace handler
+        self.youtube_privacy_var.trace_add("write", self._on_privacy_change)
+
+    def _on_privacy_change(self, *args) -> None:
+        """Callback when the privacy combobox value changes."""
+        self._update_schedule_visibility()
+
+    def _default_schedule_iso(self) -> str:
+        """Return default publish timestamp (tomorrow 12:00 local in UTC).
+
+        The upload API expects an RFC3339 timestamp in UTC. We take local time
+        at noon tomorrow and convert it to UTC with trailing Z.
+        """
+        now = datetime.datetime.now()
+        target = (now + datetime.timedelta(days=1)).replace(
+            hour=12, minute=0, second=0, microsecond=0
+        )
+        try:
+            target_utc = target.astimezone(datetime.timezone.utc)
+        except Exception:
+            # if naive datetime cannot be converted, assume it already is UTC
+            target_utc = target
+        return target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _update_schedule_visibility(self) -> None:
+        """Show or hide schedule widgets depending on privacy status."""
+        # if controls are not created yet just bail out; some callers
+        # (loading persisted settings or widget callbacks) may invoke this
+        # before the UI finished building.  using getattr avoids weird
+        # behavior when hasattr somehow propagates AttributeError.
+        if (
+            getattr(self, "youtube_schedule_label", None) is None
+            or getattr(self, "youtube_schedule_entry", None) is None
+        ):
+            return
+
+        status = self.youtube_privacy_var.get().strip()
+        if status == "scheduled":
+            # set a sensible default if field is empty
+            if not self.youtube_schedule_var.get().strip():
+                self.youtube_schedule_var.set(self._default_schedule_iso())
+            self.youtube_schedule_label.grid()
+            self.youtube_schedule_entry.grid()
+        else:
+            self.youtube_schedule_label.grid_remove()
+            self.youtube_schedule_entry.grid_remove()
 
     def _add_slider(
         self,
@@ -3083,6 +3173,11 @@ class DoomerGeneratorApp:
         description_template = self.youtube_description_widget.get("1.0", tk.END).strip()
         if not description_template:
             description_template = self.default_upload_settings.description_template
+        publish_at: str | None = None
+        if self.youtube_privacy_var.get().strip() == "scheduled":
+            publish_at = self.youtube_schedule_var.get().strip() or None
+            if not publish_at:
+                publish_at = self._default_schedule_iso()
         return UploadSettings(
             privacy_status=self.youtube_privacy_var.get().strip(),
             category_id=self.youtube_category_var.get().strip(),
@@ -3092,6 +3187,7 @@ class DoomerGeneratorApp:
             shutdown_after_upload=bool(self.youtube_shutdown_after_upload_var.get()),
             openai_model=self.youtube_openai_model_var.get().strip(),
             openai_api_key=self.youtube_openai_key_var.get().strip(),
+            publish_at=publish_at,
         )
 
     def _run_youtube_login(self) -> None:
@@ -3599,8 +3695,11 @@ class DoomerGeneratorApp:
                 self.youtube_token_var.set(token_path)
 
             privacy = upload.get("privacy_status")
-            if isinstance(privacy, str) and privacy in {"private", "unlisted", "public"}:
+            if isinstance(privacy, str) and privacy in {"private", "unlisted", "public", "scheduled"}:
                 self.youtube_privacy_var.set(privacy)
+
+            # publish_at is NOT loaded from settings; it always defaults to
+            # tomorrow 12:00 when "scheduled" is selected in the UI
 
             category = upload.get("category_id")
             if isinstance(category, str) and category.strip():
@@ -3670,7 +3769,9 @@ class DoomerGeneratorApp:
         if not description_template:
             description_template = self.default_upload_settings.description_template
 
-        payload["upload"] = {
+        # conditionally persist upload settings (schedule date is NOT saved,
+        # always defaults to tomorrow 12:00 on app restart)
+        upload_payload: dict[str, object] = {
             "video_input_dir": self.upload_video_input_var.get().strip(),
             "youtube_client_secret": self.youtube_client_secret_var.get().strip(),
             "youtube_token": self.youtube_token_var.get().strip(),
@@ -3683,6 +3784,7 @@ class DoomerGeneratorApp:
             "openai_api_key": self.youtube_openai_key_var.get().strip(),
             "description_template": description_template,
         }
+        payload["upload"] = upload_payload
         if self._write_persisted_app_settings(payload):
             self._log(self._t("log_upload_settings_saved", file=self.app_settings_path.name))
 

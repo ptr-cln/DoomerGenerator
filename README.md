@@ -53,7 +53,8 @@ Required assets:
 - Google OAuth login (`YouTube login`)
 - Metadata:
   - title = filename
-  - privacy (`private/unlisted/public`, default `public`)
+  - privacy (`private/unlisted/public/scheduled`, default `public`)
+- schedule publishing time (ISO‑8601 UTC, default tomorrow 12:00)
   - YouTube category
   - description template (`{title}` placeholder)
   - automatic tags (AI + smart fallback) + optional CSV tags

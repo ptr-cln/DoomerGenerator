@@ -161,7 +161,7 @@ Local settings are serialized to `app_settings.json`:
 - general: language
 - audio: folders, ffmpeg path, format, effects
 - video: folders, effects, encoder
-- upload: auth paths, privacy/category, tags, OpenAI config, description template
+- upload: auth paths, privacy/category (including scheduled), publishAt, tags, OpenAI config, description template
 
 Load occurs during app startup before UI build.
 Save is explicit through `Save settings` buttons (Audio/Video/Upload) and language auto-persist on change.
