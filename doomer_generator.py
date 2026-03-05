@@ -632,6 +632,82 @@ def _collect_files(base_dir: Path, extensions: set[str]) -> list[Path]:
     )
 
 
+def _load_usage_memory(memory_file: Path) -> dict[str, dict[str, int]]:
+    """Load usage memory from file, or return empty dict if file doesn't exist."""
+    if memory_file.exists():
+        try:
+            with open(memory_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {"backgrounds": {}, "vinyls": {}}
+    return {"backgrounds": {}, "vinyls": {}}
+
+
+def _save_usage_memory(memory_file: Path, memory: dict[str, dict[str, int]]) -> None:
+    """Save usage memory to file."""
+    try:
+        with open(memory_file, "w", encoding="utf-8") as f:
+            json.dump(memory, f, indent=2, ensure_ascii=False)
+    except IOError:
+        pass
+
+
+def _check_and_reset_memory(
+    memory_file: Path,
+    current_files: list[Path],
+    memory_key: str
+) -> dict[str, dict[str, int]]:
+    """Check if new files were added, reset memory if needed."""
+    memory = _load_usage_memory(memory_file)
+    current_file_paths = {str(f) for f in current_files}
+    stored_paths = set(memory.get(memory_key, {}).keys())
+    
+    # If files have been added or removed, reset memory for this category
+    if current_file_paths != stored_paths:
+        memory[memory_key] = {str(f): 0 for f in current_files}
+        _save_usage_memory(memory_file, memory)
+    
+    return memory
+
+
+def _get_least_used_file(
+    files: list[Path],
+    memory: dict[str, dict[str, int]],
+    memory_key: str
+) -> Path:
+    """Select the least used file from the list."""
+    if not files:
+        return None
+    
+    file_usage = {}
+    for f in files:
+        file_str = str(f)
+        file_usage[file_str] = memory.get(memory_key, {}).get(file_str, 0)
+    
+    # Find the minimum usage count
+    min_usage = min(file_usage.values())
+    # Get all files with minimum usage
+    least_used = [f for f, usage in file_usage.items() if usage == min_usage]
+    # If there are multiple files with same usage, pick one randomly for variety
+    selected = random.choice(least_used)
+    
+    return Path(selected)
+
+
+def _increment_usage(
+    memory_file: Path,
+    file_path: Path,
+    memory_key: str
+) -> None:
+    """Increment usage counter for a file."""
+    memory = _load_usage_memory(memory_file)
+    file_str = str(file_path)
+    if memory_key not in memory:
+        memory[memory_key] = {}
+    memory[memory_key][file_str] = memory[memory_key].get(file_str, 0) + 1
+    _save_usage_memory(memory_file, memory)
+
+
 def _summarize_process_output(stdout: str, stderr: str) -> str:
     for text in (stderr, stdout):
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -1325,7 +1401,9 @@ class DoomerBatchConverter:
 
             vinyl_file = None
             if vinyl_files and settings.vinyl_volume_percent > 0:
-                vinyl_file = random.choice(vinyl_files)
+                memory = _check_and_reset_memory(self.usage_memory_path, vinyl_files, "vinyls")
+                vinyl_file = _get_least_used_file(vinyl_files, memory, "vinyls")
+                _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
 
             self.log(f"[{index}/{total}] Audio: {source_file.name}")
             if vinyl_file:
@@ -1447,7 +1525,9 @@ class DoomerVideoGenerator:
             relative = audio_file.relative_to(audio_input_dir)
             destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
             destination.parent.mkdir(parents=True, exist_ok=True)
-            background = random.choice(backgrounds)
+            memory = _check_and_reset_memory(self.usage_memory_path, backgrounds, "backgrounds")
+            background = _get_least_used_file(backgrounds, memory, "backgrounds")
+            _increment_usage(self.usage_memory_path, background, "backgrounds")
 
             self.log(f"[{index}/{total}] Video: {audio_file.name}")
             self.log(f"  Background: {background.name}")
@@ -1727,6 +1807,7 @@ class DoomerGeneratorApp:
         self.youtube_client_secret_path = self.project_dir / "youtube_client_secret.json"
         self.youtube_token_path = self.project_dir / "youtube_token.json"
         self.app_settings_path = self.project_dir / APP_SETTINGS_FILE
+        self.usage_memory_path = self.project_dir / ".usage_memory.json"
 
         self.default_audio_settings = AudioSettings()
         self.default_video_settings = VideoSettings()
@@ -2577,7 +2658,9 @@ class DoomerGeneratorApp:
         vinyl_files = _collect_files(self.vinyls_dir, VINYL_EXTENSIONS)
         vinyl_file = None
         if settings.vinyl_volume_percent > 0 and vinyl_files:
-            vinyl_file = random.choice(vinyl_files)
+            memory = _check_and_reset_memory(self.usage_memory_path, vinyl_files, "vinyls")
+            vinyl_file = _get_least_used_file(vinyl_files, memory, "vinyls")
+            _increment_usage(self.usage_memory_path, vinyl_file, "vinyls")
 
         tmp_dir = self.project_dir / "tmp_preview"
         tmp_dir.mkdir(parents=True, exist_ok=True)
