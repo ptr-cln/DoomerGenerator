@@ -1365,9 +1365,10 @@ class YouTubeUploader:
 
 
 class DoomerBatchConverter:
-    def __init__(self, ffmpeg_bin: str, vinyls_dir: Path, log: Callable[[str], None]):
+    def __init__(self, ffmpeg_bin: str, vinyls_dir: Path, usage_memory_path: Path, log: Callable[[str], None]):
         self.ffmpeg_bin = ffmpeg_bin
         self.vinyls_dir = vinyls_dir
+        self.usage_memory_path = usage_memory_path
         self.log = log
 
     def convert_folder(
@@ -1477,12 +1478,14 @@ class DoomerVideoGenerator:
         ffmpeg_bin: str,
         backgrounds_dir: Path,
         doomer_image: Path,
+        usage_memory_path: Path,
         log: Callable[[str], None],
     ):
         self.ffmpeg_bin = ffmpeg_bin
         self.ffprobe_bin = self._resolve_ffprobe(ffmpeg_bin)
         self.backgrounds_dir = backgrounds_dir
         self.doomer_image = doomer_image
+        self.usage_memory_path = usage_memory_path
         self.log = log
         self.available_video_encoders = self._detect_available_video_encoders()
         self.failed_video_encoders: set[str] = set()
@@ -3248,7 +3251,7 @@ class DoomerGeneratorApp:
         output_dir: Path,
         settings: AudioSettings,
     ) -> None:
-        converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self._queue_log)
+        converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self.usage_memory_path, self._queue_log)
         summary = converter.convert_folder(
             input_dir=input_dir,
             output_dir=output_dir,
@@ -3268,6 +3271,7 @@ class DoomerGeneratorApp:
             ffmpeg_bin=ffmpeg_bin,
             backgrounds_dir=self.backgrounds_dir,
             doomer_image=self.doomer_image_path,
+            usage_memory_path=self.usage_memory_path,
             log=self._queue_log,
         )
         summary = generator.generate_from_audio_folder(
