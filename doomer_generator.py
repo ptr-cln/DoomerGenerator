@@ -188,6 +188,8 @@ UI_TEXTS = {
         "progress_upload_running": "Upload YouTube in corso...",
         "progress_runtime_download_error": "Errore durante il download",
         "progress_runtime_upload_error": "Errore durante upload YouTube",
+        "progress_runtime_audio_error": "Errore durante conversione audio",
+        "progress_runtime_video_error": "Errore durante generazione video",
         "progress_login_done": "Login YouTube completato",
         "progress_login_error": "Errore login YouTube",
         "progress_download_file": "Download in corso: {index}/{total} - {percent:.1f}% del link",
@@ -219,6 +221,8 @@ UI_TEXTS = {
         "log_video_finished": "Fine generazione video. Totale: {total}, OK: {ok}, Errori: {err}",
         "log_runtime_download_error": "Errore runtime download: {detail}",
         "log_runtime_upload_error": "Errore runtime upload: {detail}",
+        "log_runtime_audio_error": "Errore runtime audio: {detail}",
+        "log_runtime_video_error": "Errore runtime video: {detail}",
         "log_shutdown_scheduled": "Spegnimento forzato pianificato tra 5 minuti. Annulla con: {cancel}",
         "log_shutdown_skipped_errors": "Spegnimento non pianificato: upload non completato per tutti i file.",
         "log_shutdown_skipped_busy": "Spegnimento non pianificato: altre operazioni in corso.",
@@ -378,6 +382,8 @@ UI_TEXTS = {
         "progress_upload_running": "YouTube upload in progress...",
         "progress_runtime_download_error": "Download error",
         "progress_runtime_upload_error": "YouTube upload error",
+        "progress_runtime_audio_error": "Audio conversion error",
+        "progress_runtime_video_error": "Video generation error",
         "progress_login_done": "YouTube login completed",
         "progress_login_error": "YouTube login error",
         "progress_download_file": "Download in progress: {index}/{total} - {percent:.1f}% of link",
@@ -409,6 +415,8 @@ UI_TEXTS = {
         "log_video_finished": "Video generation finished. Total: {total}, OK: {ok}, Errors: {err}",
         "log_runtime_download_error": "Download runtime error: {detail}",
         "log_runtime_upload_error": "Upload runtime error: {detail}",
+        "log_runtime_audio_error": "Audio runtime error: {detail}",
+        "log_runtime_video_error": "Video runtime error: {detail}",
         "log_shutdown_scheduled": "Forced shutdown scheduled in 5 minutes. Cancel with: {cancel}",
         "log_shutdown_skipped_errors": "Shutdown not scheduled: upload did not complete for all files.",
         "log_shutdown_skipped_busy": "Shutdown not scheduled: other operations are still running.",
@@ -3521,14 +3529,18 @@ class DoomerGeneratorApp:
         output_dir: Path,
         settings: AudioSettings,
     ) -> None:
-        converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self.usage_memory_path, self._queue_log)
-        summary = converter.convert_folder(
-            input_dir=input_dir,
-            output_dir=output_dir,
-            settings=settings,
-            progress=self._queue_audio_progress,
-        )
-        self.events.put(("audio_finished", summary))
+        try:
+            converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self.usage_memory_path, self._queue_log)
+            summary = converter.convert_folder(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                settings=settings,
+                progress=self._queue_audio_progress,
+            )
+            self.events.put(("audio_finished", summary))
+        except Exception as error:  # noqa: BLE001
+            self.events.put(("audio_runtime_error", str(error)))
+            self.events.put(("audio_finished", ConversionSummary(total=0, converted=0, failed=0)))
 
     def _run_video_batch(
         self,
@@ -3537,20 +3549,24 @@ class DoomerGeneratorApp:
         output_video_dir: Path,
         settings: VideoSettings,
     ) -> None:
-        generator = DoomerVideoGenerator(
-            ffmpeg_bin=ffmpeg_bin,
-            backgrounds_dir=self.backgrounds_dir,
-            doomer_image=self.doomer_image_path,
-            usage_memory_path=self.usage_memory_path,
-            log=self._queue_log,
-        )
-        summary = generator.generate_from_audio_folder(
-            audio_input_dir=input_audio_dir,
-            video_output_dir=output_video_dir,
-            settings=settings,
-            progress=self._queue_video_progress,
-        )
-        self.events.put(("video_finished", summary))
+        try:
+            generator = DoomerVideoGenerator(
+                ffmpeg_bin=ffmpeg_bin,
+                backgrounds_dir=self.backgrounds_dir,
+                doomer_image=self.doomer_image_path,
+                usage_memory_path=self.usage_memory_path,
+                log=self._queue_log,
+            )
+            summary = generator.generate_from_audio_folder(
+                audio_input_dir=input_audio_dir,
+                video_output_dir=output_video_dir,
+                settings=settings,
+                progress=self._queue_video_progress,
+            )
+            self.events.put(("video_finished", summary))
+        except Exception as error:  # noqa: BLE001
+            self.events.put(("video_runtime_error", str(error)))
+            self.events.put(("video_finished", VideoSummary(total=0, generated=0, failed=0)))
 
     def _queue_log(self, message: str) -> None:
         self.events.put(("log", message))
@@ -4115,9 +4131,13 @@ class DoomerGeneratorApp:
                     )
                 )
             elif event == "download_runtime_error":
+                self.downloading = False
+                self._stop_timer("download")
+                self._set_action_buttons_enabled()
                 detail = str(payload)
                 self._log(self._t("log_runtime_download_error", detail=detail))
                 self.progress_text.set(self._t("progress_runtime_download_error"))
+                self.download_progress_text.set(self._t("progress_runtime_download_error"))
             elif event == "youtube_login_ok":
                 self.youtube_authenticating = False
                 self._set_action_buttons_enabled()
@@ -4158,9 +4178,21 @@ class DoomerGeneratorApp:
                         self._log(self._t("log_shutdown_skipped_busy"))
                     self.shutdown_after_upload_requested = False
             elif event == "upload_runtime_error":
+                self.uploading = False
+                self._stop_timer("upload")
+                self._set_action_buttons_enabled()
                 detail = str(payload)
                 self._log(self._t("log_runtime_upload_error", detail=detail))
                 self.progress_text.set(self._t("progress_runtime_upload_error"))
+                self.upload_progress_text.set(self._t("progress_runtime_upload_error"))
+            elif event == "audio_runtime_error":
+                self.audio_processing = False
+                self._stop_timer("audio")
+                self._set_action_buttons_enabled()
+                detail = str(payload)
+                self._log(self._t("log_runtime_audio_error", detail=detail))
+                self.progress_text.set(self._t("progress_runtime_audio_error"))
+                self.audio_progress_text.set(self._t("progress_runtime_audio_error"))
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
@@ -4180,6 +4212,14 @@ class DoomerGeneratorApp:
                         err=summary.failed,
                     )
                 )
+            elif event == "video_runtime_error":
+                self.video_processing = False
+                self._stop_timer("video")
+                self._set_action_buttons_enabled()
+                detail = str(payload)
+                self._log(self._t("log_runtime_video_error", detail=detail))
+                self.progress_text.set(self._t("progress_runtime_video_error"))
+                self.video_progress_text.set(self._t("progress_runtime_video_error"))
             elif event == "video_finished":
                 summary: VideoSummary = payload  # type: ignore[assignment]
                 self.video_processing = False
