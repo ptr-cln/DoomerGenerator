@@ -1334,9 +1334,11 @@ class YouTubeUploader:
 
                         if status is None:
                             # First chunk, no progress yet
+                            self.log(f"  DEBUG: status is None, continuing...")
                             continue
 
                         chunk_count += 1
+                        self.log(f"  DEBUG: Chunk {chunk_count} received, status.progress()={status.progress()}")
 
                         # Calculate upload speed
                         current_progress = status.progress()
