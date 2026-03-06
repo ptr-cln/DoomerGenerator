@@ -3526,7 +3526,7 @@ class DoomerGeneratorApp:
             input_dir=input_dir,
             output_dir=output_dir,
             settings=settings,
-            progress=self._queue_progress,
+            progress=self._queue_audio_progress,
         )
         self.events.put(("audio_finished", summary))
 
@@ -3548,12 +3548,18 @@ class DoomerGeneratorApp:
             audio_input_dir=input_audio_dir,
             video_output_dir=output_video_dir,
             settings=settings,
-            progress=self._queue_progress,
+            progress=self._queue_video_progress,
         )
         self.events.put(("video_finished", summary))
 
     def _queue_log(self, message: str) -> None:
         self.events.put(("log", message))
+
+    def _queue_audio_progress(self, done: int, total: int) -> None:
+        self.events.put(("audio_progress", (done, total)))
+
+    def _queue_video_progress(self, done: int, total: int) -> None:
+        self.events.put(("video_progress", (done, total)))
 
     def _queue_progress(self, done: int, total: int) -> None:
         self.events.put(("progress", (done, total)))
@@ -4068,6 +4074,22 @@ class DoomerGeneratorApp:
                 )
                 self.progress_text.set(progress_msg)
                 self.upload_progress_text.set(progress_msg)
+            elif event == "audio_progress":
+                done, total = payload  # type: ignore[misc]
+                percent = 0 if total == 0 else (done / total) * 100
+                self.progress_var.set(percent)
+                self.audio_progress_var.set(percent)
+                progress_msg = self._t("progress_generic", done=done, total=total)
+                self.progress_text.set(progress_msg)
+                self.audio_progress_text.set(progress_msg)
+            elif event == "video_progress":
+                done, total = payload  # type: ignore[misc]
+                percent = 0 if total == 0 else (done / total) * 100
+                self.progress_var.set(percent)
+                self.video_progress_var.set(percent)
+                progress_msg = self._t("progress_generic", done=done, total=total)
+                self.progress_text.set(progress_msg)
+                self.video_progress_text.set(progress_msg)
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
