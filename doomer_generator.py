@@ -5474,6 +5474,7 @@ class DoomerGeneratorApp:
                 message="",
             )
             self.queue_items.append(item)
+            self._log_debug(f"Added queue item: {Path(file_path).name} ({operation}) - Total items: {len(self.queue_items)}")
             if refresh:
                 self._refresh_queue_display()
             return item
@@ -5538,6 +5539,7 @@ class DoomerGeneratorApp:
     def _refresh_queue_display(self) -> None:
         """Refresh the queue display in the UI."""
         if self.queue_tree is None or self.queue_filter_var is None:
+            self._log_debug("Queue display refresh skipped: tree or filter not initialized")
             return
 
         # Clear existing items
@@ -5553,6 +5555,7 @@ class DoomerGeneratorApp:
                 item for item in self.queue_items
                 if filter_status == "all" or item.status == filter_status
             ]
+            self._log_debug(f"Refreshing queue display: {len(self.queue_items)} total, {len(filtered_items)} filtered (filter={filter_status})")
 
             for item in filtered_items:
                 # Format progress
