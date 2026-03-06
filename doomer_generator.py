@@ -1333,58 +1333,54 @@ class YouTubeUploader:
                     self.log(f"  Dimensione file: {file_size / (1024 * 1024):.1f} MB")
 
                     response = None
+                    speed_mbps = 0.0  # Initialize speed
                     while response is None:
-                        try:
-                            status, response = insert_request.next_chunk(num_retries=3)
+                        status, response = insert_request.next_chunk(num_retries=3)
 
-                            if status is None:
-                                # First chunk, no progress yet
-                                continue
+                        if status is None:
+                            # First chunk, no progress yet
+                            continue
 
-                            chunk_count += 1
+                        chunk_count += 1
 
-                            # Calculate upload speed
-                            current_progress = status.progress()
-                            current_time = time.time()
-                            elapsed = current_time - last_time
+                        # Calculate upload speed
+                        current_progress = status.progress()
+                        current_time = time.time()
+                        elapsed = current_time - last_time
 
-                            # Log progress every 10 chunks to help debug stalling
-                            if chunk_count % 10 == 0:
-                                self.log(f"  Chunk {chunk_count}: {current_progress * 100:.1f}% completato")
+                        # Log progress every 5 chunks to help debug stalling
+                        if chunk_count % 5 == 0:
+                            self.log(f"  Chunk {chunk_count}: {current_progress * 100:.1f}% completato")
 
-                            if elapsed > 0.5:  # Update speed every 0.5 seconds
-                                bytes_uploaded = (current_progress - last_progress) * file_size
-                                speed_mbps = (bytes_uploaded / elapsed) / (1024 * 1024)  # MB/s
-                                last_progress = current_progress
-                                last_time = current_time
+                        if elapsed > 0.5:  # Update speed every 0.5 seconds
+                            bytes_uploaded = (current_progress - last_progress) * file_size
+                            speed_mbps = (bytes_uploaded / elapsed) / (1024 * 1024)  # MB/s
+                            last_progress = current_progress
+                            last_time = current_time
+                        else:
+                            # Use average speed if not enough time has passed
+                            total_elapsed = current_time - upload_start_time
+                            if total_elapsed > 0:
+                                speed_mbps = (current_progress * file_size / total_elapsed) / (1024 * 1024)
                             else:
-                                # Use average speed if not enough time has passed
-                                total_elapsed = current_time - upload_start_time
-                                if total_elapsed > 0:
-                                    speed_mbps = (current_progress * file_size / total_elapsed) / (1024 * 1024)
-                                else:
-                                    speed_mbps = 0.0
+                                speed_mbps = 0.0
 
-                            # Calculate estimated time remaining
-                            eta_seconds = 0
-                            if speed_mbps > 0:
-                                # Calculate remaining bytes for current file
-                                current_file_remaining = file_size * (1.0 - current_progress)
+                        # Calculate estimated time remaining
+                        eta_seconds = 0
+                        if speed_mbps > 0:
+                            # Calculate remaining bytes for current file
+                            current_file_remaining = file_size * (1.0 - current_progress)
 
-                                # Total remaining bytes (using pre-calculated pending_size)
-                                total_remaining_bytes = current_file_remaining + pending_size
+                            # Total remaining bytes (using pre-calculated pending_size)
+                            total_remaining_bytes = current_file_remaining + pending_size
 
-                                # ETA in seconds
-                                speed_bytes_per_sec = speed_mbps * 1024 * 1024
-                                eta_seconds = int(total_remaining_bytes / speed_bytes_per_sec)
+                            # ETA in seconds
+                            speed_bytes_per_sec = speed_mbps * 1024 * 1024
+                            eta_seconds = int(total_remaining_bytes / speed_bytes_per_sec)
 
-                            link_percent = max(0.0, min(100.0, current_progress * 100.0))
-                            overall_percent = ((index - 1) + current_progress) / total * 100.0
-                            progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
-
-                        except Exception as chunk_error:
-                            self.log(f"  Errore durante upload chunk {chunk_count}: {chunk_error}")
-                            raise
+                        link_percent = max(0.0, min(100.0, current_progress * 100.0))
+                        overall_percent = ((index - 1) + current_progress) / total * 100.0
+                        progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
 
                     uploaded += 1
                     video_id = response.get("id", "N/A")
