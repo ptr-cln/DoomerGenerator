@@ -2900,6 +2900,21 @@ class DoomerGeneratorApp:
             messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
             return
 
+        # Map label to confirmation key
+        confirm_key_map = {
+            "input audio": "clear_audio_in_confirm",
+            "output audio": "clear_audio_out_confirm",
+            "output video": "clear_video_out_confirm",
+        }
+        confirm_key = confirm_key_map.get(label, "clear_all_confirm")
+
+        # Ask for confirmation
+        if not messagebox.askyesno(
+            self._t("dialog_confirm_title"),
+            self._t(confirm_key),
+        ):
+            return
+
         target = Path(raw_path.strip())
         removed = _clear_directory_contents(target)
         self._log(self._t("log_clear_dir", label=label, path=target, count=removed))
@@ -2911,6 +2926,13 @@ class DoomerGeneratorApp:
     def _clear_youtube_links(self) -> None:
         if self._is_busy():
             messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
+            return
+
+        # Ask for confirmation
+        if not messagebox.askyesno(
+            self._t("dialog_confirm_title"),
+            self._t("clear_links_confirm"),
+        ):
             return
 
         try:
