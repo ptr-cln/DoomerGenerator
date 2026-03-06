@@ -1335,7 +1335,8 @@ class YouTubeUploader:
                     response = None
                     speed_mbps = 0.0  # Initialize speed
                     iteration = 0
-                    while response is None:
+                    # Loop until we get a valid response dict (not None, not False)
+                    while not isinstance(response, dict):
                         iteration += 1
                         self.log(f"  DEBUG: Iteration {iteration}, calling next_chunk()...")
                         status, response = insert_request.next_chunk(num_retries=3)
