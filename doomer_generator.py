@@ -476,6 +476,26 @@ class UploadSummary:
     failed: int
 
 
+@dataclass
+class QueueItem:
+    """Represents a file in the processing queue."""
+    file_path: str
+    operation: str  # "download", "audio", "video", "upload"
+    status: str  # "pending", "processing", "complete", "error"
+    progress: float = 0.0  # 0-100
+    message: str = ""
+    error: str = ""
+    start_time: float | None = None
+    end_time: float | None = None
+
+    def get_elapsed_time(self) -> float:
+        """Get elapsed time in seconds."""
+        if self.start_time is None:
+            return 0.0
+        end = self.end_time if self.end_time is not None else time.time()
+        return end - self.start_time
+
+
 @dataclass(frozen=True)
 class DownloadTarget:
     source_url: str
@@ -1823,6 +1843,13 @@ class DoomerGeneratorApp:
         self.video_presets: dict[str, VideoPreset] = {}
         self._load_presets()
 
+        # Queue system
+        self.queue_items: list[QueueItem] = []
+        self.queue_lock = threading.Lock()
+        self.queue_tree: ttk.Treeview | None = None
+        self.queue_filter_var: tk.StringVar | None = None
+        self.queue_stats_var: tk.StringVar | None = None
+
         self._ensure_default_filesystem()
         self._ensure_links_file()
 
@@ -2145,11 +2172,16 @@ class DoomerGeneratorApp:
         audio_tab_container, audio_tab = self._create_scrollable_tab(notebook)
         video_tab_container, video_tab = self._create_scrollable_tab(notebook)
         upload_tab_container, upload_tab = self._create_scrollable_tab(notebook)
+
+        # Queue tab doesn't need scrolling - it has its own Treeview with scrollbar
+        queue_tab = ttk.Frame(notebook, padding=10)
+
         notebook.add(general_tab_container, text=self._t("tab_general"))
         notebook.add(download_tab_container, text=self._t("tab_download"))
         notebook.add(audio_tab_container, text=self._t("tab_audio"))
         notebook.add(video_tab_container, text=self._t("tab_video"))
         notebook.add(upload_tab_container, text=self._t("tab_upload"))
+        notebook.add(queue_tab, text=self._t("tab_queue"))
         notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
         self._on_notebook_tab_changed()
         self._bind_tab_mousewheel()
@@ -2159,6 +2191,7 @@ class DoomerGeneratorApp:
         self._build_audio_tab(audio_tab)
         self._build_video_tab(video_tab)
         self._build_upload_tab(upload_tab)
+        self._build_queue_tab(queue_tab)
 
         logs_frame = ttk.LabelFrame(main, text=self._t("log_group"), padding=8)
         logs_frame.grid(row=1, column=0, sticky="nsew")
@@ -2925,6 +2958,79 @@ class DoomerGeneratorApp:
         self._update_schedule_visibility()
         # now that widgets exist we can safely attach the trace handler
         self.youtube_privacy_var.trace_add("write", self._on_privacy_change)
+
+    def _build_queue_tab(self, parent: ttk.Frame) -> None:
+        """Build the queue management tab."""
+        # Filter controls
+        filter_frame = ttk.Frame(parent)
+        filter_frame.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(filter_frame, text=self._t("queue_label_filter")).pack(side=tk.LEFT, padx=(0, 6))
+
+        self.queue_filter_var = tk.StringVar(value="all")
+        filter_combo = ttk.Combobox(
+            filter_frame,
+            textvariable=self.queue_filter_var,
+            values=["all", "pending", "processing", "complete", "error"],
+            state="readonly",
+            width=15,
+        )
+        filter_combo.pack(side=tk.LEFT, padx=(0, 12))
+        filter_combo.bind("<<ComboboxSelected>>", lambda e: self._refresh_queue_display())
+
+        # Action buttons
+        ttk.Button(
+            filter_frame,
+            text=self._t("queue_btn_clear_complete"),
+            command=self._clear_complete_queue_items,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            filter_frame,
+            text=self._t("queue_btn_clear_all"),
+            command=self._clear_all_queue_items,
+        ).pack(side=tk.LEFT, padx=2)
+
+        # Queue display with Treeview
+        queue_frame = ttk.Frame(parent)
+        queue_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Define columns
+        columns = ("file", "operation", "status", "progress", "message")
+        self.queue_tree = ttk.Treeview(
+            queue_frame,
+            columns=columns,
+            show="headings",
+            selectmode="browse",
+        )
+
+        # Configure column headings
+        self.queue_tree.heading("file", text=self._t("queue_col_file"))
+        self.queue_tree.heading("operation", text=self._t("queue_col_operation"))
+        self.queue_tree.heading("status", text=self._t("queue_col_status"))
+        self.queue_tree.heading("progress", text=self._t("queue_col_progress"))
+        self.queue_tree.heading("message", text=self._t("queue_col_message"))
+
+        # Configure column widths
+        self.queue_tree.column("file", width=300, minwidth=150)
+        self.queue_tree.column("operation", width=100, minwidth=80)
+        self.queue_tree.column("status", width=100, minwidth=80)
+        self.queue_tree.column("progress", width=80, minwidth=60)
+        self.queue_tree.column("message", width=300, minwidth=150)
+
+        # Add scrollbar
+        queue_scrollbar = ttk.Scrollbar(queue_frame, orient=tk.VERTICAL, command=self.queue_tree.yview)
+        self.queue_tree.configure(yscrollcommand=queue_scrollbar.set)
+
+        self.queue_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        queue_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Stats frame
+        stats_frame = ttk.LabelFrame(parent, text=self._t("queue_group_stats"), padding=8)
+        stats_frame.pack(fill=tk.X, pady=(8, 0))
+
+        self.queue_stats_var = tk.StringVar(value=self._t("queue_stats_empty"))
+        ttk.Label(stats_frame, textvariable=self.queue_stats_var).pack(anchor="w")
 
     def _on_privacy_change(self, *args) -> None:
         """Callback when the privacy combobox value changes."""
@@ -4631,6 +4737,150 @@ class DoomerGeneratorApp:
                 self._t("preset_import_error", error=error),
                 parent=self.root,
             )
+
+    # ============================================================================
+    # Queue Management Methods
+    # ============================================================================
+
+    def _add_queue_item(self, file_path: str, operation: str) -> QueueItem:
+        """Add a new item to the queue."""
+        with self.queue_lock:
+            item = QueueItem(
+                file_path=file_path,
+                operation=operation,
+                status="pending",
+                progress=0.0,
+                message="",
+            )
+            self.queue_items.append(item)
+            self._refresh_queue_display()
+            return item
+
+    def _update_queue_item(
+        self,
+        item: QueueItem,
+        status: str | None = None,
+        progress: float | None = None,
+        message: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Update a queue item's status."""
+        with self.queue_lock:
+            if status is not None:
+                item.status = status
+                if status == "processing" and item.start_time is None:
+                    item.start_time = time.time()
+                elif status in ("complete", "error") and item.end_time is None:
+                    item.end_time = time.time()
+
+            if progress is not None:
+                item.progress = progress
+
+            if message is not None:
+                item.message = message
+
+            if error is not None:
+                item.error = error
+
+            self._refresh_queue_display()
+
+    def _remove_queue_item(self, item: QueueItem) -> None:
+        """Remove an item from the queue."""
+        with self.queue_lock:
+            if item in self.queue_items:
+                self.queue_items.remove(item)
+                self._refresh_queue_display()
+
+    def _clear_complete_queue_items(self) -> None:
+        """Clear all completed items from the queue."""
+        with self.queue_lock:
+            self.queue_items = [
+                item for item in self.queue_items
+                if item.status not in ("complete", "error")
+            ]
+            self._refresh_queue_display()
+
+    def _clear_all_queue_items(self) -> None:
+        """Clear all items from the queue."""
+        if not messagebox.askyesno(
+            self._t("queue_clear_title"),
+            self._t("queue_clear_confirm"),
+            parent=self.root,
+        ):
+            return
+
+        with self.queue_lock:
+            self.queue_items.clear()
+            self._refresh_queue_display()
+
+    def _refresh_queue_display(self) -> None:
+        """Refresh the queue display in the UI."""
+        if self.queue_tree is None or self.queue_filter_var is None:
+            return
+
+        # Clear existing items
+        for item_id in self.queue_tree.get_children():
+            self.queue_tree.delete(item_id)
+
+        # Get filter
+        filter_status = self.queue_filter_var.get()
+
+        # Add filtered items
+        with self.queue_lock:
+            filtered_items = [
+                item for item in self.queue_items
+                if filter_status == "all" or item.status == filter_status
+            ]
+
+            for item in filtered_items:
+                # Format progress
+                progress_str = f"{item.progress:.0f}%" if item.status == "processing" else ""
+
+                # Get status emoji
+                status_emoji = {
+                    "pending": "⏳",
+                    "processing": "⚙️",
+                    "complete": "✅",
+                    "error": "❌",
+                }.get(item.status, "")
+
+                # Get operation label
+                operation_label = self._t(f"queue_operation_{item.operation}")
+
+                # Insert into tree
+                self.queue_tree.insert(
+                    "",
+                    tk.END,
+                    values=(
+                        Path(item.file_path).name,
+                        operation_label,
+                        f"{status_emoji} {self._t(f'queue_status_{item.status}')}",
+                        progress_str,
+                        item.error if item.error else item.message,
+                    ),
+                )
+
+            # Update stats
+            if self.queue_stats_var is not None:
+                total = len(self.queue_items)
+                pending = sum(1 for item in self.queue_items if item.status == "pending")
+                processing = sum(1 for item in self.queue_items if item.status == "processing")
+                complete = sum(1 for item in self.queue_items if item.status == "complete")
+                error = sum(1 for item in self.queue_items if item.status == "error")
+
+                if total == 0:
+                    self.queue_stats_var.set(self._t("queue_stats_empty"))
+                else:
+                    self.queue_stats_var.set(
+                        self._t(
+                            "queue_stats",
+                            total=total,
+                            pending=pending,
+                            processing=processing,
+                            complete=complete,
+                            error=error,
+                        )
+                    )
 
     def _apply_audio_settings(self, audio: dict[str, object]) -> None:
         audio_input = audio.get("input_dir")
