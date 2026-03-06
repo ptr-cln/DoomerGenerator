@@ -1241,9 +1241,9 @@ class YouTubeUploader:
         credentials = self._authenticate(interactive=False)
 
         # Configure HTTP with timeout to prevent hanging
+        # Use httplib2.Http with timeout and pass credentials separately
         http = httplib2.Http(timeout=60)
-        http = credentials.authorize(http)
-        service = build("youtube", "v3", http=http, cache_discovery=False)
+        service = build("youtube", "v3", credentials=credentials, http=http, cache_discovery=False)
 
         uploaded = 0
         failed = 0
