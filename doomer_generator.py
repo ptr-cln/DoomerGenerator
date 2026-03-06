@@ -1335,12 +1335,13 @@ class YouTubeUploader:
                     response = None
                     while response is None:
                         try:
-                            chunk_count += 1
                             status, response = insert_request.next_chunk(num_retries=3)
 
                             if status is None:
                                 # First chunk, no progress yet
                                 continue
+
+                            chunk_count += 1
 
                             # Calculate upload speed
                             current_progress = status.progress()
