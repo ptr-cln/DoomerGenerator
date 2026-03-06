@@ -206,6 +206,7 @@ UI_TEXTS = {
         "progress_login_error": "Errore login YouTube",
         "progress_download_file": "Download in corso: {index}/{total} - {percent:.1f}% del link",
         "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s - Totale rimanente: {eta}",
+        "progress_video_file": "Video {done}/{total} - Totale rimanente: {eta}",
         "progress_generic": "Progress: {done}/{total}",
         "progress_download_done": "Download completato - OK: {ok}, Errori: {err}",
         "progress_upload_done": "Upload completato - OK: {ok}, Errori: {err}",
@@ -412,6 +413,7 @@ UI_TEXTS = {
         "progress_login_error": "YouTube login error",
         "progress_download_file": "Download in progress: {index}/{total} - {percent:.1f}% of link",
         "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s - Total remaining: {eta}",
+        "progress_video_file": "Video {done}/{total} - Total remaining: {eta}",
         "progress_generic": "Progress: {done}/{total}",
         "progress_download_done": "Download completed - OK: {ok}, Errors: {err}",
         "progress_upload_done": "Upload completed - OK: {ok}, Errors: {err}",
@@ -1687,7 +1689,7 @@ class DoomerVideoGenerator:
         audio_input_dir: Path,
         video_output_dir: Path,
         settings: VideoSettings,
-        progress: Callable[[int, int], None],
+        progress: Callable[[int, int, int], None],
     ) -> VideoSummary:
         audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
         total = len(audio_files)
@@ -1713,6 +1715,9 @@ class DoomerVideoGenerator:
         generated = 0
         failed = 0
 
+        # Track generation times for ETA calculation
+        generation_times: list[float] = []
+
         for index, audio_file in enumerate(audio_files, start=1):
             relative = audio_file.relative_to(audio_input_dir)
             destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
@@ -1728,14 +1733,27 @@ class DoomerVideoGenerator:
             else:
                 self.log("  Background: Nessuno selezionato")
 
-            if self._generate_single_video(audio_file, background, destination, settings, resolved_encoder):
+            # Track generation time
+            start_time = time.time()
+            success = self._generate_single_video(audio_file, background, destination, settings, resolved_encoder)
+            elapsed = time.time() - start_time
+
+            if success:
                 generated += 1
+                generation_times.append(elapsed)
                 self.log(f"  OK -> {destination.name}")
             else:
                 failed += 1
                 self.log(f"  ERRORE -> {audio_file.name}")
 
-            progress(index, total)
+            # Calculate ETA based on average generation time
+            eta_seconds = 0
+            if generation_times:
+                avg_time = sum(generation_times) / len(generation_times)
+                remaining_videos = total - index
+                eta_seconds = int(avg_time * remaining_videos)
+
+            progress(index, total, eta_seconds)
 
         return VideoSummary(total=total, generated=generated, failed=failed)
 
@@ -3946,8 +3964,8 @@ class DoomerGeneratorApp:
     def _queue_audio_progress(self, done: int, total: int) -> None:
         self.events.put(("audio_progress", (done, total)))
 
-    def _queue_video_progress(self, done: int, total: int) -> None:
-        self.events.put(("video_progress", (done, total)))
+    def _queue_video_progress(self, done: int, total: int, eta_seconds: int) -> None:
+        self.events.put(("video_progress", (done, total, eta_seconds)))
 
     def _queue_progress(self, done: int, total: int) -> None:
         self.events.put(("progress", (done, total)))
@@ -4525,11 +4543,18 @@ class DoomerGeneratorApp:
                 self.progress_text.set(progress_msg)
                 self.audio_progress_text.set(progress_msg)
             elif event == "video_progress":
-                done, total = payload  # type: ignore[misc]
+                done, total, eta_seconds = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
                 self.progress_var.set(percent)
                 self.video_progress_var.set(percent)
-                progress_msg = self._t("progress_generic", done=done, total=total)
+
+                # Format ETA as HH:MM:SS
+                hours = eta_seconds // 3600
+                minutes = (eta_seconds % 3600) // 60
+                seconds = eta_seconds % 60
+                eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                progress_msg = self._t("progress_video_file", done=done, total=total, eta=eta_formatted)
                 self.progress_text.set(progress_msg)
                 self.video_progress_text.set(progress_msg)
             elif event == "progress":
