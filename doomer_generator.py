@@ -149,7 +149,7 @@ UI_TEXTS = {
         "video_desc_glitch": "Disturbi digitali casuali e shift di colore.",
         "video_check_shutdown": "Spegni computer al termine (5m)",
         "video_btn_generate": "Genera video batch",
-        "video_btn_play_test": "▶ Preview (10s)",
+        "video_btn_play_test": "▶ Preview (20s)",
         "video_btn_reset": "Reset default",
         "video_play_test_generating": "Generazione preview in corso...",
         "video_play_test_title": "Preview Effetti Video",
@@ -355,7 +355,7 @@ UI_TEXTS = {
         "video_desc_glitch": "Random digital artifacts and color shifts.",
         "video_check_shutdown": "Turn off computer when done (5m)",
         "video_btn_generate": "Generate batch videos",
-        "video_btn_play_test": "▶ Preview (10s)",
+        "video_btn_play_test": "▶ Preview (20s)",
         "video_btn_reset": "Reset defaults",
         "video_play_test_generating": "Generating preview...",
         "video_play_test_title": "Video Effects Preview",
@@ -3432,7 +3432,7 @@ class DoomerGeneratorApp:
         thread.start()
 
     def _show_video_play_test(self) -> None:
-        """Generate and display a 10-second preview video with current settings."""
+        """Generate and display a 20-second preview video with current settings."""
         ffmpeg_bin = self._resolve_ffmpeg()
         if not ffmpeg_bin:
             messagebox.showerror(
@@ -3498,14 +3498,14 @@ class DoomerGeneratorApp:
             # Pick a random background (don't update usage memory)
             background = random.choice(backgrounds)
 
-            # Generate silent 10-second video
+            # Generate silent 20-second video
             self.events.put(("log", self._t("video_play_test_generating")))
             success = self._generate_preview_video(
                 ffmpeg_bin=ffmpeg_bin,
                 background=background,
                 output_path=temp_video,
                 settings=settings,
-                duration=10.0,
+                duration=20.0,
             )
 
             if success and temp_video.is_file():
