@@ -164,6 +164,7 @@ class AudioSettings:
     chorus_intensity: float = 0.0  # 0-100%
     bitcrush_amount: float = 0.0  # 0-100%
     distortion_amount: float = 0.0  # 0-100%
+    compressor_intensity: float = 0.0  # 0-100%
 
     def build_filter_complex(self, include_vinyl: bool) -> str:
         speed = max(0.50, min(1.00, 1.0 - (self.slowdown_percent / 100.0)))
@@ -254,6 +255,20 @@ class AudioSettings:
             color = round(5 + dist * 15, 1)  # 5 to 20
             parts.append(f"[{cursor}]acompressor=threshold=-20dB:ratio=4:attack=5:release=50,volume={gain}dB[distorted]")
             cursor = "distorted"
+
+        # Compressor (0-100%)
+        if self.compressor_intensity > 0:
+            comp = max(0.0, min(1.0, self.compressor_intensity / 100.0))
+            # Dynamic range compression with adjustable parameters
+            threshold = round(-30 + comp * 20, 1)  # -30dB to -10dB
+            ratio = round(1.5 + comp * 6.5, 1)  # 1.5:1 to 8:1
+            attack = round(20 - comp * 15, 1)  # 20ms to 5ms
+            release = round(250 - comp * 150, 1)  # 250ms to 100ms
+            makeup_gain = round(comp * 6, 1)  # 0 to 6dB makeup gain
+            parts.append(
+                f"[{cursor}]acompressor=threshold={threshold}dB:ratio={ratio}:attack={attack}:release={release},volume={makeup_gain}dB[compressed]"
+            )
+            cursor = "compressed"
 
         if fade_in > 0:
             parts.append(f"[{cursor}]afade=t=in:st=0:d={fade_in:.2f}[fadin]")
@@ -433,6 +448,7 @@ class AudioPreset:
     chorus_intensity: float = 0.0
     bitcrush_amount: float = 0.0
     distortion_amount: float = 0.0
+    compressor_intensity: float = 0.0
 
     @staticmethod
     def from_settings(name: str, settings: AudioSettings) -> "AudioPreset":
@@ -450,6 +466,7 @@ class AudioPreset:
             chorus_intensity=settings.chorus_intensity,
             bitcrush_amount=settings.bitcrush_amount,
             distortion_amount=settings.distortion_amount,
+            compressor_intensity=settings.compressor_intensity,
         )
 
     def to_settings(self) -> AudioSettings:
@@ -466,6 +483,7 @@ class AudioPreset:
             chorus_intensity=self.chorus_intensity,
             bitcrush_amount=self.bitcrush_amount,
             distortion_amount=self.distortion_amount,
+            compressor_intensity=self.compressor_intensity,
         )
 
 
@@ -1952,6 +1970,7 @@ class DoomerGeneratorApp:
         self.chorus_var = tk.DoubleVar(value=self.default_audio_settings.chorus_intensity)
         self.bitcrush_var = tk.DoubleVar(value=self.default_audio_settings.bitcrush_amount)
         self.distortion_var = tk.DoubleVar(value=self.default_audio_settings.distortion_amount)
+        self.compressor_var = tk.DoubleVar(value=self.default_audio_settings.compressor_intensity)
         self.audio_test_process: subprocess.Popen[str] | None = None
         self.audio_test_temp_file: Path | None = None
 
@@ -2803,6 +2822,15 @@ class DoomerGeneratorApp:
             row=3,
             description=self._t("audio_desc_distortion"),
         )
+        self._add_slider(
+            advanced_effects,
+            label=self._t("audio_lbl_compressor"),
+            variable=self.compressor_var,
+            minimum=0,
+            maximum=100,
+            row=4,
+            description=self._t("audio_desc_compressor"),
+        )
 
         self._build_audio_equalizer(parent)
 
@@ -3444,6 +3472,7 @@ class DoomerGeneratorApp:
             chorus_intensity=self.chorus_var.get(),
             bitcrush_amount=self.bitcrush_var.get(),
             distortion_amount=self.distortion_var.get(),
+            compressor_intensity=self.compressor_var.get(),
         )
 
     def _resolve_ffplay(self, ffmpeg_bin: str) -> str | None:
@@ -5717,6 +5746,14 @@ class DoomerGeneratorApp:
                 100.0,
             )
         )
+        self.compressor_var.set(
+            self._coerce_float(
+                audio.get("compressor_intensity"),
+                self.default_audio_settings.compressor_intensity,
+                0.0,
+                100.0,
+            )
+        )
 
     def _apply_video_settings(self, video: dict[str, object]) -> None:
         video_audio_input = video.get("audio_input_dir")
@@ -5896,6 +5933,7 @@ class DoomerGeneratorApp:
             "chorus_intensity": self.chorus_var.get(),
             "bitcrush_amount": self.bitcrush_var.get(),
             "distortion_amount": self.distortion_var.get(),
+            "compressor_intensity": self.compressor_var.get(),
         }
         if self._write_persisted_app_settings(payload):
             self._log(self._t("log_audio_settings_saved", file=self.app_settings_path.name))

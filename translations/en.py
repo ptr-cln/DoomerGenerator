@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "Lo-fi effect by reducing bit depth and sample rate.",
     "audio_lbl_distortion": "Distortion (%)",
     "audio_desc_distortion": "Adds warm saturation and distortion.",
+    "audio_lbl_compressor": "Compressor (%)",
+    "audio_desc_compressor": "Dynamic range compression with adjustable intensity.",
     "audio_group_eq": "7-Band Mini Equalizer (dB)",
     "audio_eq_low": "Cut lows",
     "audio_eq_mid": "Flat",

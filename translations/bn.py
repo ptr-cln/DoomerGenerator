@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "বিট গভীরতা এবং নমুনা হার হ্রাস করে লো-ফাই প্রভাব।",
     "audio_lbl_distortion": "বিকৃতি (%)",
     "audio_desc_distortion": "উষ্ণ স্যাচুরেশন এবং বিকৃতি যোগ করে।",
+    "audio_lbl_compressor": "কম্প্রেসর (%)",
+    "audio_desc_compressor": "সামঞ্জস্যযোগ্য তীব্রতা সহ গতিশীল পরিসীমা সংকোচন।",
     "audio_group_eq": "7-ব্যান্ড মিনি ইকুয়ালাইজার (dB)",
     "audio_eq_low": "বেস কাট করুন",
     "audio_eq_mid": "সমতল",

@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "تأثير لو-فاي عن طريق تقليل عمق البت ومعدل العينة.",
     "audio_lbl_distortion": "تشويه (%)",
     "audio_desc_distortion": "يضيف تشبعًا دافئًا وتشويهًا.",
+    "audio_lbl_compressor": "ضاغط (%)",
+    "audio_desc_compressor": "ضغط النطاق الديناميكي مع شدة قابلة للتعديل.",
     "audio_group_eq": "معادل صغير 7 نطاقات (dB)",
     "audio_eq_low": "قطع الجهير",
     "audio_eq_mid": "مسطح",

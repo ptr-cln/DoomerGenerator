@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "Эффект lo-fi путем уменьшения битовой глубины и частоты дискретизации.",
     "audio_lbl_distortion": "Искажение (%)",
     "audio_desc_distortion": "Добавляет теплое насыщение и искажение.",
+    "audio_lbl_compressor": "Компрессор (%)",
+    "audio_desc_compressor": "Сжатие динамического диапазона с регулируемой интенсивностью.",
     "audio_group_eq": "7-полосный мини-эквалайзер (dB)",
     "audio_eq_low": "Срезать басы",
     "audio_eq_mid": "Плоский",

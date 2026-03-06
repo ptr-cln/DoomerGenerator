@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "Efeito lo-fi reduzindo profundidade de bits e taxa de amostragem.",
     "audio_lbl_distortion": "Distorção (%)",
     "audio_desc_distortion": "Adiciona saturação quente e distorção.",
+    "audio_lbl_compressor": "Compressor (%)",
+    "audio_desc_compressor": "Compressão de faixa dinâmica com intensidade ajustável.",
     "audio_group_eq": "Equalizador Mini de 7 Bandas (dB)",
     "audio_eq_low": "Cortar Graves",
     "audio_eq_mid": "Plano",

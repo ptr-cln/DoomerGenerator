@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "बिट गहराई और नमूना दर को कम करके लो-फाई प्रभाव।",
     "audio_lbl_distortion": "विरूपण (%)",
     "audio_desc_distortion": "गर्म संतृप्ति और विरूपण जोड़ता है।",
+    "audio_lbl_compressor": "कंप्रेसर (%)",
+    "audio_desc_compressor": "समायोज्य तीव्रता के साथ गतिशील रेंज संपीड़न।",
     "audio_group_eq": "7-बैंड मिनी इक्वलाइज़र (dB)",
     "audio_eq_low": "बास कम करें",
     "audio_eq_mid": "समतल",

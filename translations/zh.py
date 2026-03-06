@@ -61,6 +61,8 @@ TRANSLATIONS = {
     "audio_desc_bitcrush": "通过降低位深度和采样率实现lo-fi效果。",
     "audio_lbl_distortion": "失真 (%)",
     "audio_desc_distortion": "添加温暖的饱和度和失真。",
+    "audio_lbl_compressor": "压缩器 (%)",
+    "audio_desc_compressor": "可调强度的动态范围压缩。",
     "audio_group_eq": "7段迷你均衡器 (dB)",
     "audio_eq_low": "削减低音",
     "audio_eq_mid": "平坦",
