@@ -284,5 +284,13 @@ TRANSLATIONS = {
     "queue_status_processing": "प्रसंस्करण",
     "queue_status_complete": "पूर्ण",
     "queue_status_error": "त्रुटि",
+    # Performance
+    "general_group_performance": "प्रदर्शन",
+    "perf_label_gpu": "GPU:",
+    "perf_gpu_not_available": "उपलब्ध नहीं",
+    "perf_check_use_gpu": "GPU त्वरण सक्षम करें",
+    "perf_label_memory": "मेमोरी उपयोग:",
+    "perf_memory_unavailable": "लागू नहीं",
+    "perf_label_memory_limit": "मेमोरी सीमा:",
 }
 

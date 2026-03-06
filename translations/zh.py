@@ -284,5 +284,13 @@ TRANSLATIONS = {
     "queue_status_processing": "处理中",
     "queue_status_complete": "已完成",
     "queue_status_error": "错误",
+    # Performance
+    "general_group_performance": "性能",
+    "perf_label_gpu": "GPU:",
+    "perf_gpu_not_available": "不可用",
+    "perf_check_use_gpu": "启用GPU加速",
+    "perf_label_memory": "内存使用:",
+    "perf_memory_unavailable": "不适用",
+    "perf_label_memory_limit": "内存限制:",
 }
 

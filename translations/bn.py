@@ -284,5 +284,13 @@ TRANSLATIONS = {
     "queue_status_processing": "প্রক্রিয়াকরণ",
     "queue_status_complete": "সম্পূর্ণ",
     "queue_status_error": "ত্রুটি",
+    # Performance
+    "general_group_performance": "কর্মক্ষমতা",
+    "perf_label_gpu": "GPU:",
+    "perf_gpu_not_available": "উপলব্ধ নয়",
+    "perf_check_use_gpu": "GPU ত্বরণ সক্ষম করুন",
+    "perf_label_memory": "মেমরি ব্যবহার:",
+    "perf_memory_unavailable": "প্রযোজ্য নয়",
+    "perf_label_memory_limit": "মেমরি সীমা:",
 }
 

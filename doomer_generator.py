@@ -1850,6 +1850,14 @@ class DoomerGeneratorApp:
         self.queue_filter_var: tk.StringVar | None = None
         self.queue_stats_var: tk.StringVar | None = None
 
+        # Performance settings
+        self.max_workers = 4  # Default number of parallel workers
+        self.use_gpu = False  # GPU acceleration (auto-detected)
+        self.memory_limit_mb = 2048  # Memory limit in MB
+        self.gpu_available = False  # GPU detection result
+        self.gpu_name = "N/A"  # GPU name if available
+        self._detect_gpu()
+
         self._ensure_default_filesystem()
         self._ensure_links_file()
 
@@ -2025,6 +2033,9 @@ class DoomerGeneratorApp:
             elapsed = current_time - self.upload_start_time
             self.upload_timer_text.set(self._format_elapsed_time(elapsed))
 
+        # Update memory display
+        self._update_memory_display()
+
         # Schedule next update
         self.root.after(1000, self._update_timers)
 
@@ -2125,6 +2136,27 @@ class DoomerGeneratorApp:
             )
 
         self._log_debug(f"Theme changed to: {self.current_theme}")
+
+    def _on_gpu_toggle(self) -> None:
+        """Handle GPU toggle event."""
+        if hasattr(self, "use_gpu_var"):
+            self.use_gpu = self.use_gpu_var.get()
+            status = "enabled" if self.use_gpu else "disabled"
+            self._log_debug(f"GPU acceleration {status}")
+
+    def _on_memory_limit_changed(self, _value=None) -> None:
+        """Handle memory limit slider change."""
+        if hasattr(self, "memory_limit_var") and hasattr(self, "memory_limit_label"):
+            new_limit = int(self.memory_limit_var.get())
+            self.memory_limit_mb = new_limit
+            self.memory_limit_label.configure(text=f"{new_limit} MB")
+
+    def _update_memory_display(self) -> None:
+        """Update memory usage display."""
+        if hasattr(self, "memory_usage_label"):
+            current_mem = self._get_memory_usage_mb()
+            mem_text = f"{current_mem:.0f} MB" if current_mem > 0 else self._t("perf_memory_unavailable")
+            self.memory_usage_label.configure(text=mem_text)
 
     def _rebuild_ui(self) -> None:
         previous_logs = ""
@@ -2356,6 +2388,58 @@ class DoomerGeneratorApp:
 
         self.export_logs_button = ttk.Button(actions, text=self._t("general_btn_export_logs"), command=self._export_logs)
         self.export_logs_button.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+
+        # Performance settings
+        perf_box = ttk.LabelFrame(parent, text=self._t("general_group_performance"), padding=8)
+        perf_box.pack(fill=tk.X, pady=(10, 0))
+        perf_box.columnconfigure(1, weight=1)
+
+        # GPU status
+        ttk.Label(perf_box, text=self._t("perf_label_gpu")).grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        gpu_status = f"✅ {self.gpu_name}" if self.gpu_available else "❌ " + self._t("perf_gpu_not_available")
+        self.gpu_status_label = ttk.Label(perf_box, text=gpu_status)
+        self.gpu_status_label.grid(row=0, column=1, padx=6, pady=6, sticky="w")
+
+        # GPU toggle (only if GPU is available)
+        if self.gpu_available:
+            self.use_gpu_var = tk.BooleanVar(value=self.use_gpu)
+            self.use_gpu_check = ttk.Checkbutton(
+                perf_box,
+                text=self._t("perf_check_use_gpu"),
+                variable=self.use_gpu_var,
+                command=self._on_gpu_toggle,
+            )
+            self.use_gpu_check.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+
+        # Memory usage
+        ttk.Label(perf_box, text=self._t("perf_label_memory")).grid(
+            row=2, column=0, padx=6, pady=6, sticky="w"
+        )
+        current_mem = self._get_memory_usage_mb()
+        mem_text = f"{current_mem:.0f} MB" if current_mem > 0 else self._t("perf_memory_unavailable")
+        self.memory_usage_label = ttk.Label(perf_box, text=mem_text)
+        self.memory_usage_label.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+
+        # Memory limit slider
+        ttk.Label(perf_box, text=self._t("perf_label_memory_limit")).grid(
+            row=3, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.memory_limit_var = tk.IntVar(value=self.memory_limit_mb)
+        memory_frame = ttk.Frame(perf_box)
+        memory_frame.grid(row=3, column=1, padx=6, pady=6, sticky="ew")
+        self.memory_limit_scale = ttk.Scale(
+            memory_frame,
+            from_=512,
+            to=8192,
+            orient=tk.HORIZONTAL,
+            variable=self.memory_limit_var,
+            command=self._on_memory_limit_changed,
+        )
+        self.memory_limit_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.memory_limit_label = ttk.Label(memory_frame, text=f"{self.memory_limit_mb} MB")
+        self.memory_limit_label.pack(side=tk.LEFT, padx=(6, 0))
 
         info = ttk.LabelFrame(parent, text=self._t("general_group_paths"), padding=8)
         info.pack(fill=tk.X, pady=(10, 0))
@@ -4881,6 +4965,56 @@ class DoomerGeneratorApp:
                             error=error,
                         )
                     )
+
+    # ============================================================================
+    # Performance Optimization Methods
+    # ============================================================================
+
+    def _detect_gpu(self) -> None:
+        """Detect NVIDIA GPU and CUDA availability for hardware acceleration."""
+        try:
+            # Try nvidia-smi to detect NVIDIA GPU
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                self.gpu_available = True
+                self.gpu_name = result.stdout.strip().split('\n')[0]
+                self.use_gpu = True  # Enable GPU by default if available
+                self._log_debug(f"GPU detected: {self.gpu_name}")
+            else:
+                self.gpu_available = False
+                self.gpu_name = "N/A"
+                self.use_gpu = False
+                self._log_debug("No NVIDIA GPU detected")
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            self.gpu_available = False
+            self.gpu_name = "N/A"
+            self.use_gpu = False
+            self._log_debug("GPU detection failed (nvidia-smi not found)")
+
+    def _get_memory_usage_mb(self) -> float:
+        """Get current memory usage in MB."""
+        try:
+            import psutil
+            process = psutil.Process()
+            return process.memory_info().rss / (1024 * 1024)
+        except ImportError:
+            return 0.0
+
+    def _check_memory_limit(self) -> bool:
+        """Check if memory usage is approaching the limit."""
+        current_mb = self._get_memory_usage_mb()
+        if current_mb > 0 and current_mb > self.memory_limit_mb * 0.9:
+            self._log_warning(
+                f"Memory usage ({current_mb:.0f} MB) approaching limit ({self.memory_limit_mb} MB)"
+            )
+            return False
+        return True
 
     def _apply_audio_settings(self, audio: dict[str, object]) -> None:
         audio_input = audio.get("input_dir")

@@ -284,5 +284,13 @@ TRANSLATIONS = {
     "queue_status_processing": "Procesando",
     "queue_status_complete": "Completado",
     "queue_status_error": "Error",
+    # Performance
+    "general_group_performance": "Rendimiento",
+    "perf_label_gpu": "GPU:",
+    "perf_gpu_not_available": "No disponible",
+    "perf_check_use_gpu": "Habilitar aceleración GPU",
+    "perf_label_memory": "Uso de memoria:",
+    "perf_memory_unavailable": "N/D",
+    "perf_label_memory_limit": "Límite de memoria:",
 }
 

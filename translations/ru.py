@@ -284,5 +284,13 @@ TRANSLATIONS = {
     "queue_status_processing": "Обработка",
     "queue_status_complete": "Завершено",
     "queue_status_error": "Ошибка",
+    # Performance
+    "general_group_performance": "Производительность",
+    "perf_label_gpu": "GPU:",
+    "perf_gpu_not_available": "Недоступно",
+    "perf_check_use_gpu": "Включить ускорение GPU",
+    "perf_label_memory": "Использование памяти:",
+    "perf_memory_unavailable": "Н/Д",
+    "perf_label_memory_limit": "Лимит памяти:",
 }
 

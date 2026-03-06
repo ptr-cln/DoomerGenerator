@@ -284,5 +284,13 @@ TRANSLATIONS = {
     "queue_status_processing": "قيد المعالجة",
     "queue_status_complete": "مكتمل",
     "queue_status_error": "خطأ",
+    # Performance
+    "general_group_performance": "الأداء",
+    "perf_label_gpu": "GPU:",
+    "perf_gpu_not_available": "غير متوفر",
+    "perf_check_use_gpu": "تفعيل تسريع GPU",
+    "perf_label_memory": "استخدام الذاكرة:",
+    "perf_memory_unavailable": "غير متاح",
+    "perf_label_memory_limit": "حد الذاكرة:",
 }
 
