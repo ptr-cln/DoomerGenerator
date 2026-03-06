@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "Importar",
     "preset_save_title": "Salvar Predefinição",
     "preset_save_prompt": "Digite o nome da predefinição:",
+    "preset_overwrite_title": "Sobrescrever Predefinição?",
+    "preset_overwrite_message": "Já existe uma predefinição chamada '{name}'.\nDeseja sobrescrevê-la?",
     "preset_delete_title": "Excluir Predefinição",
     "preset_delete_no_selection": "Selecione uma predefinição para excluir.",
     "preset_delete_confirm": "Tem certeza de que deseja excluir a predefinição '{name}'?",

@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "आयात करें",
     "preset_save_title": "प्रीसेट सहेजें",
     "preset_save_prompt": "प्रीसेट का नाम दर्ज करें:",
+    "preset_overwrite_title": "प्रीसेट को ओवरराइट करें?",
+    "preset_overwrite_message": "'{name}' नाम का प्रीसेट पहले से मौजूद है।\nक्या आप इसे ओवरराइट करना चाहते हैं?",
     "preset_delete_title": "प्रीसेट हटाएं",
     "preset_delete_no_selection": "कृपया हटाने के लिए एक प्रीसेट चुनें।",
     "preset_delete_confirm": "क्या आप वाकई प्रीसेट '{name}' को हटाना चाहते हैं?",

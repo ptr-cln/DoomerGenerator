@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "Importer",
     "preset_save_title": "Enregistrer le Préréglage",
     "preset_save_prompt": "Entrez le nom du préréglage:",
+    "preset_overwrite_title": "Écraser le Préréglage?",
+    "preset_overwrite_message": "Un préréglage nommé '{name}' existe déjà.\nVoulez-vous l'écraser?",
     "preset_delete_title": "Supprimer le Préréglage",
     "preset_delete_no_selection": "Veuillez sélectionner un préréglage à supprimer.",
     "preset_delete_confirm": "Êtes-vous sûr de vouloir supprimer le préréglage '{name}'?",

@@ -138,3 +138,7 @@
 [2026-03-06 20:25:36] [DEBUG] Update check failed: HTTP Error 404: Not Found
 [2026-03-06 20:25:38] [DEBUG] Checking for updates...
 [2026-03-06 20:25:38] [DEBUG] Update check failed: HTTP Error 404: Not Found
+[2026-03-06 20:30:34] [INFO] Impostazioni audio salvate in app_settings.json.
+[2026-03-06 20:30:34] [INFO] Impostazioni video salvate in app_settings.json.
+[2026-03-06 20:30:34] [INFO] Impostazioni upload salvate in app_settings.json.
+[2026-03-06 20:30:34] [DEBUG] Auto-save completed

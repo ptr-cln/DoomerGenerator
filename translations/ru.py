@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "Импорт",
     "preset_save_title": "Сохранить Пресет",
     "preset_save_prompt": "Введите имя пресета:",
+    "preset_overwrite_title": "Перезаписать Пресет?",
+    "preset_overwrite_message": "Пресет с именем '{name}' уже существует.\nВы хотите перезаписать его?",
     "preset_delete_title": "Удалить Пресет",
     "preset_delete_no_selection": "Пожалуйста, выберите пресет для удаления.",
     "preset_delete_confirm": "Вы уверены, что хотите удалить пресет '{name}'?",

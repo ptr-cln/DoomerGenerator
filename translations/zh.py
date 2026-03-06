@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "导入",
     "preset_save_title": "保存预设",
     "preset_save_prompt": "输入预设名称:",
+    "preset_overwrite_title": "覆盖预设？",
+    "preset_overwrite_message": "已存在名为'{name}'的预设。\n是否要覆盖它？",
     "preset_delete_title": "删除预设",
     "preset_delete_no_selection": "请选择要删除的预设。",
     "preset_delete_confirm": "确定要删除预设'{name}'吗?",

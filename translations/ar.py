@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "استيراد",
     "preset_save_title": "حفظ الإعداد المسبق",
     "preset_save_prompt": "أدخل اسم الإعداد المسبق:",
+    "preset_overwrite_title": "استبدال الإعداد المسبق؟",
+    "preset_overwrite_message": "يوجد بالفعل إعداد مسبق باسم '{name}'.\nهل تريد استبداله؟",
     "preset_delete_title": "حذف الإعداد المسبق",
     "preset_delete_no_selection": "يرجى تحديد إعداد مسبق للحذف.",
     "preset_delete_confirm": "هل أنت متأكد من حذف الإعداد المسبق '{name}'؟",

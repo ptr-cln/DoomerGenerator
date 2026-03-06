@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "Importar",
     "preset_save_title": "Guardar Preajuste",
     "preset_save_prompt": "Ingrese el nombre del preajuste:",
+    "preset_overwrite_title": "¿Sobrescribir Preajuste?",
+    "preset_overwrite_message": "Ya existe un preajuste llamado '{name}'.\n¿Desea sobrescribirlo?",
     "preset_delete_title": "Eliminar Preajuste",
     "preset_delete_no_selection": "Seleccione un preajuste para eliminar.",
     "preset_delete_confirm": "¿Está seguro de que desea eliminar el preajuste '{name}'?",

@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "Importa",
     "preset_save_title": "Salva Preset",
     "preset_save_prompt": "Inserisci il nome del preset:",
+    "preset_overwrite_title": "Sovrascrivere Preset?",
+    "preset_overwrite_message": "Esiste già un preset chiamato '{name}'.\nVuoi sovrascriverlo?",
     "preset_delete_title": "Elimina Preset",
     "preset_delete_no_selection": "Seleziona un preset da eliminare.",
     "preset_delete_confirm": "Sei sicuro di voler eliminare il preset '{name}'?",

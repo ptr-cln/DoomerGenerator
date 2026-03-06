@@ -4996,6 +4996,16 @@ class DoomerGeneratorApp:
 
         name = name.strip()
 
+        # Check if preset already exists
+        if name in self.audio_presets:
+            confirm = messagebox.askyesno(
+                self._t("preset_overwrite_title"),
+                self._t("preset_overwrite_message", name=name),
+                parent=self.root
+            )
+            if not confirm:
+                return
+
         # Get current audio settings
         settings = self._collect_audio_settings_from_ui()
         preset = AudioPreset.from_settings(name, settings)
@@ -5182,6 +5192,16 @@ class DoomerGeneratorApp:
             return
 
         name = name.strip()
+
+        # Check if preset already exists
+        if name in self.video_presets:
+            confirm = messagebox.askyesno(
+                self._t("preset_overwrite_title"),
+                self._t("preset_overwrite_message", name=name),
+                parent=self.root
+            )
+            if not confirm:
+                return
 
         # Get current video settings
         settings = self._collect_video_settings_from_ui()

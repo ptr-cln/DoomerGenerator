@@ -255,6 +255,8 @@ TRANSLATIONS = {
     "preset_btn_import": "আমদানি করুন",
     "preset_save_title": "প্রিসেট সংরক্ষণ করুন",
     "preset_save_prompt": "প্রিসেটের নাম লিখুন:",
+    "preset_overwrite_title": "প্রিসেট ওভাররাইট করবেন?",
+    "preset_overwrite_message": "'{name}' নামের একটি প্রিসেট ইতিমধ্যে বিদ্যমান।\nআপনি কি এটি ওভাররাইট করতে চান?",
     "preset_delete_title": "প্রিসেট মুছুন",
     "preset_delete_no_selection": "মুছতে একটি প্রিসেট নির্বাচন করুন।",
     "preset_delete_confirm": "আপনি কি নিশ্চিত যে প্রিসেট '{name}' মুছতে চান?",
