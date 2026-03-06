@@ -3545,6 +3545,12 @@ class DoomerGeneratorApp:
         """Generate a silent preview video with current settings (optimized for speed)."""
         # Build FFMPEG command for silent video (no audio input)
         # Optimizations: 720p resolution, CRF 30, tune=fastdecode
+
+        # Get the base filter complex and add scale before the final output
+        base_filter = settings.build_filter_complex(audio_duration_seconds=duration)
+        # Replace [vout] with scale to 720p then output
+        preview_filter = base_filter.replace("[vout]", "[vtemp];[vtemp]scale=1280:720[vout]")
+
         command = [
             ffmpeg_bin,
             "-hide_banner",
@@ -3564,7 +3570,7 @@ class DoomerGeneratorApp:
             "-i",
             "anullsrc=channel_layout=stereo:sample_rate=44100",  # Silent audio
             "-filter_complex",
-            settings.build_filter_complex(audio_duration_seconds=duration) + ",scale=1280:720",  # 720p for speed
+            preview_filter,  # 720p for speed
             "-map",
             "[vout]",
             "-map",
