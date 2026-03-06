@@ -3912,12 +3912,14 @@ class DoomerGeneratorApp:
         settings = self._collect_audio_settings_from_ui()
         self._stop_audio_test(log_action=False)
 
-        # Add files to queue
+        # Add files to queue (batch mode - refresh only once at the end)
         audio_files = _collect_files(input_dir, AUDIO_EXTENSIONS)
         self.current_queue_items.clear()
         for audio_file in audio_files:
-            item = self._add_queue_item(str(audio_file), "Audio")
+            item = self._add_queue_item(str(audio_file), "Audio", refresh=False)
             self.current_queue_items[audio_file.name] = item
+        # Refresh display once after all items are added
+        self._refresh_queue_display()
 
         self.audio_processing = True
         self._start_timer("audio")
@@ -3972,12 +3974,14 @@ class DoomerGeneratorApp:
             shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
         )
 
-        # Add files to queue
+        # Add files to queue (batch mode - refresh only once at the end)
         audio_files = _collect_files(input_audio_dir, AUDIO_EXTENSIONS)
         self.current_queue_items.clear()
         for audio_file in audio_files:
-            item = self._add_queue_item(str(audio_file), "Video")
+            item = self._add_queue_item(str(audio_file), "Video", refresh=False)
             self.current_queue_items[audio_file.name] = item
+        # Refresh display once after all items are added
+        self._refresh_queue_display()
 
         # Don't capture shutdown flag here - we'll check it when video finishes
         self.video_processing = True
@@ -4230,12 +4234,14 @@ class DoomerGeneratorApp:
 
         settings = self._collect_upload_settings()
 
-        # Add files to queue
+        # Add files to queue (batch mode - refresh only once at the end)
         video_files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         self.current_queue_items.clear()
         for video_file in video_files:
-            item = self._add_queue_item(str(video_file), "Upload")
+            item = self._add_queue_item(str(video_file), "Upload", refresh=False)
             self.current_queue_items[video_file.name] = item
+        # Refresh display once after all items are added
+        self._refresh_queue_display()
 
         # Don't capture shutdown flag here - we'll check it when upload finishes
         self.uploading = True
@@ -5432,8 +5438,15 @@ class DoomerGeneratorApp:
     # Queue Management Methods
     # ============================================================================
 
-    def _add_queue_item(self, file_path: str, operation: str) -> QueueItem:
-        """Add a new item to the queue."""
+    def _add_queue_item(self, file_path: str, operation: str, refresh: bool = True) -> QueueItem:
+        """Add a new item to the queue.
+
+        Args:
+            file_path: Path to the file
+            operation: Type of operation (Audio/Video/Upload)
+            refresh: Whether to refresh the display immediately (default: True)
+                     Set to False when adding multiple items in batch
+        """
         with self.queue_lock:
             item = QueueItem(
                 file_path=file_path,
@@ -5443,7 +5456,8 @@ class DoomerGeneratorApp:
                 message="",
             )
             self.queue_items.append(item)
-            self._refresh_queue_display()
+            if refresh:
+                self._refresh_queue_display()
             return item
 
     def _update_queue_item(
