@@ -1302,9 +1302,8 @@ class YouTubeUploader:
                         },
                         "status": status_dict,
                     }
-                    # Use 10MB chunks - balanced between speed and reliability
-                    # Too large (32MB) can cause timeouts, too small (1MB) is slow
-                    media = MediaFileUpload(str(video_file), chunksize=10 * 1024 * 1024, resumable=True)
+                    # Use 8MB chunks (default, proven stable)
+                    media = MediaFileUpload(str(video_file), chunksize=8 * 1024 * 1024, resumable=True)
                     insert_request = service.videos().insert(
                         part="snippet,status",
                         body=request_body,
