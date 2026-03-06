@@ -159,6 +159,11 @@ class AudioSettings:
     fade_in_seconds: float = 1.0
     fade_out_seconds: float = 1.0
     output_format: str = "mp3"
+    # Advanced effects
+    stereo_width: float = 0.0  # 0-100%
+    chorus_intensity: float = 0.0  # 0-100%
+    bitcrush_amount: float = 0.0  # 0-100%
+    distortion_amount: float = 0.0  # 0-100%
 
     def build_filter_complex(self, include_vinyl: bool) -> str:
         speed = max(0.50, min(1.00, 1.0 - (self.slowdown_percent / 100.0)))
@@ -206,6 +211,50 @@ class AudioSettings:
 
         parts.append(f"[mixed]{eq_chain}[eqmixed]")
         cursor = "eqmixed"
+
+        # Advanced effects
+        # Stereo widening (0-100%)
+        if self.stereo_width > 0:
+            width_factor = max(0.0, min(1.0, self.stereo_width / 100.0))
+            # Use stereotools for precise stereo width control
+            width_value = round(1.0 + width_factor * 2.0, 3)  # 1.0 to 3.0
+            parts.append(f"[{cursor}]stereotools=mlev=1.0:slev={width_value}:sbal=0.0[stereo]")
+            cursor = "stereo"
+
+        # Chorus effect (0-100%)
+        if self.chorus_intensity > 0:
+            intensity = max(0.0, min(1.0, self.chorus_intensity / 100.0))
+            # Chorus parameters: in_gain, out_gain, delays, decays, speeds, depths
+            delay1 = round(40 + intensity * 20, 1)
+            delay2 = round(60 + intensity * 30, 1)
+            decay = round(0.3 + intensity * 0.2, 2)
+            speed = round(0.25 + intensity * 0.75, 2)
+            depth = round(1.0 + intensity * 3.0, 1)
+            parts.append(
+                f"[{cursor}]chorus=0.5:0.9:{delay1}|{delay2}:{decay}|{decay}:{speed}|{speed}:{depth}|{depth}[chorus]"
+            )
+            cursor = "chorus"
+
+        # Bitcrusher (0-100%)
+        if self.bitcrush_amount > 0:
+            crush = max(0.0, min(1.0, self.bitcrush_amount / 100.0))
+            # Reduce bit depth and sample rate for lo-fi effect
+            bits = round(16 - crush * 8)  # 16 to 8 bits
+            sample_rate = round(44100 - crush * 32100)  # 44100 to 12000 Hz
+            parts.append(
+                f"[{cursor}]aresample={sample_rate},aformat=sample_fmts=s{bits},aresample=44100[bitcrush]"
+            )
+            cursor = "bitcrush"
+
+        # Distortion (0-100%)
+        if self.distortion_amount > 0:
+            dist = max(0.0, min(1.0, self.distortion_amount / 100.0))
+            # Use overdrive filter for warm distortion
+            gain = round(2 + dist * 18, 1)  # 2 to 20 dB
+            color = round(5 + dist * 15, 1)  # 5 to 20
+            parts.append(f"[{cursor}]acompressor=threshold=-20dB:ratio=4:attack=5:release=50,volume={gain}dB[distorted]")
+            cursor = "distorted"
+
         if fade_in > 0:
             parts.append(f"[{cursor}]afade=t=in:st=0:d={fade_in:.2f}[fadin]")
             cursor = "fadin"
@@ -379,6 +428,11 @@ class AudioPreset:
     fade_in_seconds: float
     fade_out_seconds: float
     output_format: str
+    # Advanced effects (with defaults for backward compatibility)
+    stereo_width: float = 0.0
+    chorus_intensity: float = 0.0
+    bitcrush_amount: float = 0.0
+    distortion_amount: float = 0.0
 
     @staticmethod
     def from_settings(name: str, settings: AudioSettings) -> "AudioPreset":
@@ -392,6 +446,10 @@ class AudioPreset:
             fade_in_seconds=settings.fade_in_seconds,
             fade_out_seconds=settings.fade_out_seconds,
             output_format=settings.output_format,
+            stereo_width=settings.stereo_width,
+            chorus_intensity=settings.chorus_intensity,
+            bitcrush_amount=settings.bitcrush_amount,
+            distortion_amount=settings.distortion_amount,
         )
 
     def to_settings(self) -> AudioSettings:
@@ -404,6 +462,10 @@ class AudioPreset:
             fade_in_seconds=self.fade_in_seconds,
             fade_out_seconds=self.fade_out_seconds,
             output_format=self.output_format,
+            stereo_width=self.stereo_width,
+            chorus_intensity=self.chorus_intensity,
+            bitcrush_amount=self.bitcrush_amount,
+            distortion_amount=self.distortion_amount,
         )
 
 
@@ -1885,6 +1947,11 @@ class DoomerGeneratorApp:
         self.eq_band_vars: list[tk.DoubleVar] = [
             tk.DoubleVar(value=gain) for gain in self.default_audio_settings.eq_band_gains
         ]
+        # Advanced audio effects
+        self.stereo_width_var = tk.DoubleVar(value=self.default_audio_settings.stereo_width)
+        self.chorus_var = tk.DoubleVar(value=self.default_audio_settings.chorus_intensity)
+        self.bitcrush_var = tk.DoubleVar(value=self.default_audio_settings.bitcrush_amount)
+        self.distortion_var = tk.DoubleVar(value=self.default_audio_settings.distortion_amount)
         self.audio_test_process: subprocess.Popen[str] | None = None
         self.audio_test_temp_file: Path | None = None
 
@@ -2696,6 +2763,47 @@ class DoomerGeneratorApp:
             resolution=0.1,
         )
 
+        # Advanced audio effects
+        advanced_effects = ttk.LabelFrame(parent, text=self._t("audio_group_advanced_effects"), padding=8)
+        advanced_effects.pack(fill=tk.X, pady=(0, 8))
+
+        self._add_slider(
+            advanced_effects,
+            label=self._t("audio_lbl_stereo_width"),
+            variable=self.stereo_width_var,
+            minimum=0,
+            maximum=100,
+            row=0,
+            description=self._t("audio_desc_stereo_width"),
+        )
+        self._add_slider(
+            advanced_effects,
+            label=self._t("audio_lbl_chorus"),
+            variable=self.chorus_var,
+            minimum=0,
+            maximum=100,
+            row=1,
+            description=self._t("audio_desc_chorus"),
+        )
+        self._add_slider(
+            advanced_effects,
+            label=self._t("audio_lbl_bitcrush"),
+            variable=self.bitcrush_var,
+            minimum=0,
+            maximum=100,
+            row=2,
+            description=self._t("audio_desc_bitcrush"),
+        )
+        self._add_slider(
+            advanced_effects,
+            label=self._t("audio_lbl_distortion"),
+            variable=self.distortion_var,
+            minimum=0,
+            maximum=100,
+            row=3,
+            description=self._t("audio_desc_distortion"),
+        )
+
         self._build_audio_equalizer(parent)
 
         actions = ttk.Frame(parent)
@@ -3332,6 +3440,10 @@ class DoomerGeneratorApp:
             fade_in_seconds=self.audio_fade_in_var.get(),
             fade_out_seconds=self.audio_fade_out_var.get(),
             output_format=self.audio_format_var.get(),
+            stereo_width=self.stereo_width_var.get(),
+            chorus_intensity=self.chorus_var.get(),
+            bitcrush_amount=self.bitcrush_var.get(),
+            distortion_amount=self.distortion_var.get(),
         )
 
     def _resolve_ffplay(self, ffmpeg_bin: str) -> str | None:
@@ -5572,6 +5684,39 @@ class DoomerGeneratorApp:
                 8.0,
             )
         )
+        # Advanced effects
+        self.stereo_width_var.set(
+            self._coerce_float(
+                audio.get("stereo_width"),
+                self.default_audio_settings.stereo_width,
+                0.0,
+                100.0,
+            )
+        )
+        self.chorus_var.set(
+            self._coerce_float(
+                audio.get("chorus_intensity"),
+                self.default_audio_settings.chorus_intensity,
+                0.0,
+                100.0,
+            )
+        )
+        self.bitcrush_var.set(
+            self._coerce_float(
+                audio.get("bitcrush_amount"),
+                self.default_audio_settings.bitcrush_amount,
+                0.0,
+                100.0,
+            )
+        )
+        self.distortion_var.set(
+            self._coerce_float(
+                audio.get("distortion_amount"),
+                self.default_audio_settings.distortion_amount,
+                0.0,
+                100.0,
+            )
+        )
 
     def _apply_video_settings(self, video: dict[str, object]) -> None:
         video_audio_input = video.get("audio_input_dir")
@@ -5747,6 +5892,10 @@ class DoomerGeneratorApp:
             "reverb_percent": self.reverb_var.get(),
             "fade_in_seconds": self.audio_fade_in_var.get(),
             "fade_out_seconds": self.audio_fade_out_var.get(),
+            "stereo_width": self.stereo_width_var.get(),
+            "chorus_intensity": self.chorus_var.get(),
+            "bitcrush_amount": self.bitcrush_var.get(),
+            "distortion_amount": self.distortion_var.get(),
         }
         if self._write_persisted_app_settings(payload):
             self._log(self._t("log_audio_settings_saved", file=self.app_settings_path.name))

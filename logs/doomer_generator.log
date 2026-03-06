@@ -44,3 +44,17 @@
 [2026-03-06 17:48:48] [DEBUG] Theme changed to: light
 [2026-03-06 17:48:50] [DEBUG] Checking for updates...
 [2026-03-06 17:48:52] [DEBUG] Update check failed: HTTP Error 404: Not Found
+[2026-03-06 17:48:55] [DEBUG] Checking for updates...
+[2026-03-06 17:48:56] [DEBUG] Update check failed: HTTP Error 404: Not Found
+[2026-03-06 17:50:15] [INFO] ============================================================
+[2026-03-06 17:50:15] [INFO] Doomer Generator started
+[2026-03-06 17:50:15] [INFO] Python version: 3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 17.0.0 (clang-1700.6.3.2)]
+[2026-03-06 17:50:15] [INFO] Platform: darwin
+[2026-03-06 17:50:15] [INFO] ============================================================
+[2026-03-06 17:50:15] [DEBUG] Loaded 0 audio presets and 0 video presets
+[2026-03-06 17:50:15] [DEBUG] GPU detection failed (nvidia-smi not found)
+[2026-03-06 17:50:15] [DEBUG] Theme changed to: light
+[2026-03-06 17:50:17] [DEBUG] Checking for updates...
+[2026-03-06 17:50:18] [DEBUG] Update check failed: HTTP Error 404: Not Found
+[2026-03-06 17:50:19] [DEBUG] Checking for updates...
+[2026-03-06 17:50:20] [DEBUG] Update check failed: HTTP Error 404: Not Found
