@@ -1237,9 +1237,13 @@ class YouTubeUploader:
             self.log("Nessun video trovato in video/out.")
             return UploadSummary(total=0, uploaded=0, failed=0)
 
-        _, _, _, build, HttpError, MediaFileUpload = _import_youtube_modules()
+        _, _, _, build, HttpError, MediaFileUpload, httplib2 = _import_youtube_modules()
         credentials = self._authenticate(interactive=False)
-        service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+
+        # Configure HTTP with timeout to prevent hanging
+        http = httplib2.Http(timeout=60)
+        http = credentials.authorize(http)
+        service = build("youtube", "v3", http=http, cache_discovery=False)
 
         uploaded = 0
         failed = 0
