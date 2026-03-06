@@ -1628,7 +1628,7 @@ class DoomerVideoGenerator:
 class DoomerGeneratorApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.current_language = "it"
+        self.current_language = "en"
         self.main_frame: ttk.Frame | None = None
         self.notebook_widget: ttk.Notebook | None = None
         self.tab_scroll_canvases: dict[str, tk.Canvas] = {}
@@ -1851,7 +1851,7 @@ class DoomerGeneratorApp:
         if selected_code == self.current_language:
             return
         if self._is_busy():
-            self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "Italiano"))
+            self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "English"))
             messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
             return
         self.current_language = selected_code
@@ -2029,7 +2029,7 @@ class DoomerGeneratorApp:
         )
         self.language_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
         self.language_combo.bind("<<ComboboxSelected>>", self._on_language_changed)
-        self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "Italiano"))
+        self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "English"))
 
         actions = ttk.LabelFrame(parent, text=self._t("general_group_maintenance"), padding=8)
         actions.pack(fill=tk.X)
@@ -3959,7 +3959,7 @@ class DoomerGeneratorApp:
         if isinstance(general, dict):
             language_code = self._sanitize_language_code(general.get("language"), self.current_language)
             self.current_language = language_code
-            self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(language_code, "Italiano"))
+            self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(language_code, "English"))
 
         audio = payload.get("audio")
         if isinstance(audio, dict):
