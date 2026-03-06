@@ -17,6 +17,7 @@ TRANSLATIONS = {
     "log_group": "लॉग",
     "general_group_language": "भाषा",
     "general_label_language": "इंटरफ़ेस भाषा",
+    "general_label_theme": "थीम",
     "general_group_maintenance": "रखरखाव",
     "general_btn_clear_audio_in": "ऑडियो इनपुट साफ़ करें",
     "general_btn_clear_audio_out": "ऑडियो आउटपुट साफ़ करें",

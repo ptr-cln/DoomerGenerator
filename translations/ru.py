@@ -17,6 +17,7 @@ TRANSLATIONS = {
     "log_group": "Журнал",
     "general_group_language": "Язык",
     "general_label_language": "Язык интерфейса",
+    "general_label_theme": "Тема",
     "general_group_maintenance": "Обслуживание",
     "general_btn_clear_audio_in": "Очистить входное аудио",
     "general_btn_clear_audio_out": "Очистить выходное аудио",

@@ -17,6 +17,7 @@ TRANSLATIONS = {
     "log_group": "السجل",
     "general_group_language": "اللغة",
     "general_label_language": "لغة الواجهة",
+    "general_label_theme": "السمة",
     "general_group_maintenance": "الصيانة",
     "general_btn_clear_audio_in": "مسح إدخال الصوت",
     "general_btn_clear_audio_out": "مسح إخراج الصوت",

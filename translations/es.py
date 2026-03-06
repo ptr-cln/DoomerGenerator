@@ -17,6 +17,7 @@ TRANSLATIONS = {
     "log_group": "Registro",
     "general_group_language": "Idioma",
     "general_label_language": "Idioma de interfaz",
+    "general_label_theme": "Tema",
     "general_group_maintenance": "Mantenimiento",
     "general_btn_clear_audio_in": "Limpiar entrada de audio",
     "general_btn_clear_audio_out": "Limpiar salida de audio",

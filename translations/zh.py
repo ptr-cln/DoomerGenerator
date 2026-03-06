@@ -17,6 +17,7 @@ TRANSLATIONS = {
     "log_group": "日志",
     "general_group_language": "语言",
     "general_label_language": "界面语言",
+    "general_label_theme": "主题",
     "general_group_maintenance": "维护",
     "general_btn_clear_audio_in": "清空音频输入",
     "general_btn_clear_audio_out": "清空音频输出",

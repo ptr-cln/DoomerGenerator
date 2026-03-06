@@ -72,6 +72,40 @@ LANGUAGE_LABEL_TO_CODE = {
 }
 LANGUAGE_CODE_TO_LABEL = {code: label for label, code in LANGUAGE_LABEL_TO_CODE.items()}
 
+# Theme definitions
+THEMES = {
+    "light": {
+        "bg": "#f0f0f0",
+        "fg": "#000000",
+        "select_bg": "#0078d7",
+        "select_fg": "#ffffff",
+        "button_bg": "#e1e1e1",
+        "entry_bg": "#ffffff",
+        "entry_fg": "#000000",
+        "frame_bg": "#f0f0f0",
+        "label_bg": "#f0f0f0",
+        "label_fg": "#000000",
+        "text_bg": "#ffffff",
+        "text_fg": "#000000",
+        "disabled_fg": "#6d6d6d",
+    },
+    "dark": {
+        "bg": "#1e1e1e",
+        "fg": "#e0e0e0",
+        "select_bg": "#0078d7",
+        "select_fg": "#ffffff",
+        "button_bg": "#2d2d2d",
+        "entry_bg": "#2d2d2d",
+        "entry_fg": "#e0e0e0",
+        "frame_bg": "#1e1e1e",
+        "label_bg": "#1e1e1e",
+        "label_fg": "#e0e0e0",
+        "text_bg": "#2d2d2d",
+        "text_fg": "#e0e0e0",
+        "disabled_fg": "#808080",
+    },
+}
+
 # Dynamic translation loading
 _TRANSLATIONS_CACHE: dict[str, dict[str, str]] = {}
 
@@ -1631,6 +1665,7 @@ class DoomerGeneratorApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.current_language = "en"
+        self.current_theme = "light"
         self.main_frame: ttk.Frame | None = None
         self.notebook_widget: ttk.Notebook | None = None
         self.tab_scroll_canvases: dict[str, tk.Canvas] = {}
@@ -1758,6 +1793,8 @@ class DoomerGeneratorApp:
         # loading triggered callbacks before the schedule widgets were created.
         self._build_ui()
         self._load_persisted_app_settings()
+        # Apply theme after UI is built and settings are loaded
+        self._apply_theme()
         # ensure UI reflects any scheduled value right away
         self._update_schedule_visibility()
         self.progress_text.set(self._t("status_ready"))
@@ -1851,6 +1888,16 @@ class DoomerGeneratorApp:
         payload["general"] = general
         self._write_persisted_app_settings(payload)
 
+    def _persist_general_theme(self) -> None:
+        """Save current theme to app settings."""
+        payload = self._read_persisted_app_settings()
+        general = payload.get("general")
+        if not isinstance(general, dict):
+            general = {}
+        general["theme"] = self.current_theme
+        payload["general"] = general
+        self._write_persisted_app_settings(payload)
+
     def _on_language_changed(self, _event=None) -> None:
         selected_label = self.language_var.get().strip()
         selected_code = LANGUAGE_LABEL_TO_CODE.get(selected_label, self.current_language)
@@ -1863,6 +1910,72 @@ class DoomerGeneratorApp:
         self.current_language = selected_code
         self._persist_general_language()
         self._rebuild_ui()
+
+    def _on_theme_changed(self, _event=None) -> None:
+        """Handle theme change event."""
+        selected_theme = self.theme_var.get().strip().lower()
+        if selected_theme == self.current_theme:
+            return
+        if self._is_busy():
+            self.theme_var.set(self.current_theme.capitalize())
+            messagebox.showinfo(self._t("dialog_info_title"), self._t("dialog_busy_message"))
+            return
+        self.current_theme = selected_theme
+        self._persist_general_theme()
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        """Apply the current theme to all widgets."""
+        theme = THEMES.get(self.current_theme, THEMES["light"])
+
+        # Apply to root window
+        self.root.configure(bg=theme["bg"])
+
+        # Configure ttk styles
+        style = ttk.Style()
+        style.theme_use("clam")  # Use clam theme as base for customization
+
+        # Configure ttk widgets
+        style.configure("TFrame", background=theme["frame_bg"])
+        style.configure("TLabel", background=theme["label_bg"], foreground=theme["label_fg"])
+        style.configure("TLabelframe", background=theme["frame_bg"], foreground=theme["label_fg"])
+        style.configure("TLabelframe.Label", background=theme["frame_bg"], foreground=theme["label_fg"])
+        style.configure("TButton", background=theme["button_bg"], foreground=theme["fg"])
+        style.map("TButton",
+                  background=[("active", theme["select_bg"]), ("disabled", theme["button_bg"])],
+                  foreground=[("disabled", theme["disabled_fg"])])
+        style.configure("TEntry", fieldbackground=theme["entry_bg"], foreground=theme["entry_fg"])
+        style.configure("TCombobox", fieldbackground=theme["entry_bg"], foreground=theme["entry_fg"])
+        style.configure("TCheckbutton", background=theme["frame_bg"], foreground=theme["label_fg"])
+        style.configure("TRadiobutton", background=theme["frame_bg"], foreground=theme["label_fg"])
+        style.configure("TNotebook", background=theme["bg"])
+        style.configure("TNotebook.Tab", background=theme["button_bg"], foreground=theme["fg"])
+        style.map("TNotebook.Tab",
+                  background=[("selected", theme["select_bg"])],
+                  foreground=[("selected", theme["select_fg"])])
+        style.configure("Horizontal.TProgressbar", background=theme["select_bg"])
+        style.configure("Horizontal.TScale", background=theme["frame_bg"])
+
+        # Apply to Text widgets (log widget, description widget)
+        if hasattr(self, "log_widget"):
+            self.log_widget.configure(
+                bg=theme["text_bg"],
+                fg=theme["text_fg"],
+                insertbackground=theme["text_fg"],
+                selectbackground=theme["select_bg"],
+                selectforeground=theme["select_fg"],
+            )
+
+        if hasattr(self, "youtube_description_widget"):
+            self.youtube_description_widget.configure(
+                bg=theme["text_bg"],
+                fg=theme["text_fg"],
+                insertbackground=theme["text_fg"],
+                selectbackground=theme["select_bg"],
+                selectforeground=theme["select_fg"],
+            )
+
+        self._log_debug(f"Theme changed to: {self.current_theme}")
 
     def _rebuild_ui(self) -> None:
         previous_logs = ""
@@ -2036,6 +2149,21 @@ class DoomerGeneratorApp:
         self.language_combo.grid(row=0, column=1, padx=6, pady=6, sticky="w")
         self.language_combo.bind("<<ComboboxSelected>>", self._on_language_changed)
         self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(self.current_language, "English"))
+
+        # Theme selector
+        ttk.Label(language_box, text=self._t("general_label_theme")).grid(
+            row=1, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.theme_var = tk.StringVar(value=self.current_theme.capitalize())
+        self.theme_combo = ttk.Combobox(
+            language_box,
+            textvariable=self.theme_var,
+            values=["Light", "Dark"],
+            state="readonly",
+            width=14,
+        )
+        self.theme_combo.grid(row=1, column=1, padx=6, pady=6, sticky="w")
+        self.theme_combo.bind("<<ComboboxSelected>>", self._on_theme_changed)
 
         actions = ttk.LabelFrame(parent, text=self._t("general_group_maintenance"), padding=8)
         actions.pack(fill=tk.X)
@@ -4006,6 +4134,12 @@ class DoomerGeneratorApp:
             language_code = self._sanitize_language_code(general.get("language"), self.current_language)
             self.current_language = language_code
             self.language_var.set(LANGUAGE_CODE_TO_LABEL.get(language_code, "English"))
+
+            # Load theme
+            theme = general.get("theme")
+            if isinstance(theme, str) and theme in THEMES:
+                self.current_theme = theme
+                self.theme_var.set(theme.capitalize())
 
         audio = payload.get("audio")
         if isinstance(audio, dict):

@@ -17,6 +17,7 @@ TRANSLATIONS = {
     "log_group": "Log",
     "general_group_language": "Lingua",
     "general_label_language": "Lingua interfaccia",
+    "general_label_theme": "Tema",
     "general_group_maintenance": "Manutenzione",
     "general_btn_clear_audio_in": "Svuota input audio",
     "general_btn_clear_audio_out": "Svuota output audio",
