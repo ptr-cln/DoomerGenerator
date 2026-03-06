@@ -1347,10 +1347,6 @@ class YouTubeUploader:
                         current_time = time.time()
                         elapsed = current_time - last_time
 
-                        # Log progress every 5 chunks to help debug stalling
-                        if chunk_count % 5 == 0:
-                            self.log(f"  Chunk {chunk_count}: {current_progress * 100:.1f}% completato")
-
                         if elapsed > 0.5:  # Update speed every 0.5 seconds
                             bytes_uploaded = (current_progress - last_progress) * file_size
                             speed_mbps = (bytes_uploaded / elapsed) / (1024 * 1024)  # MB/s
