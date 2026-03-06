@@ -1206,11 +1206,12 @@ def _import_youtube_modules():
         from googleapiclient.discovery import build
         from googleapiclient.errors import HttpError
         from googleapiclient.http import MediaFileUpload
+        import httplib2
     except ImportError as error:  # pragma: no cover - runtime dependency check
         raise RuntimeError(
             "Dipendenze YouTube mancanti. Esegui: pip install -r requirements.txt"
         ) from error
-    return Request, Credentials, InstalledAppFlow, build, HttpError, MediaFileUpload
+    return Request, Credentials, InstalledAppFlow, build, HttpError, MediaFileUpload, httplib2
 
 
 class YouTubeUploader:
@@ -1302,8 +1303,9 @@ class YouTubeUploader:
                         },
                         "status": status_dict,
                     }
-                    # Use 8MB chunks (default, proven stable)
-                    media = MediaFileUpload(str(video_file), chunksize=8 * 1024 * 1024, resumable=True)
+                    # Use 1MB chunks for better stability (reduced from 8MB to prevent timeout issues)
+                    # Smaller chunks = more frequent progress updates and less chance of timeout
+                    media = MediaFileUpload(str(video_file), chunksize=1 * 1024 * 1024, resumable=True)
                     insert_request = service.videos().insert(
                         part="snippet,status",
                         body=request_body,
@@ -1315,52 +1317,67 @@ class YouTubeUploader:
                     upload_start_time = time.time()
                     last_progress = 0.0
                     last_time = upload_start_time
+                    chunk_count = 0
 
                     # Pre-calculate pending files size ONCE (not in the loop!)
-                    # This was causing upload stalling by scanning directory every 8MB chunk
+                    # This was causing upload stalling by scanning directory every chunk
                     all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files and f != video_file]
                     pending_size = sum(f.stat().st_size for f in all_pending)
 
+                    self.log(f"  Dimensione file: {file_size / (1024 * 1024):.1f} MB")
+
                     response = None
                     while response is None:
-                        status, response = insert_request.next_chunk(num_retries=3)
-                        if status is None:
-                            continue
+                        try:
+                            chunk_count += 1
+                            status, response = insert_request.next_chunk(num_retries=3)
 
-                        # Calculate upload speed
-                        current_progress = status.progress()
-                        current_time = time.time()
-                        elapsed = current_time - last_time
+                            if status is None:
+                                # First chunk, no progress yet
+                                continue
 
-                        if elapsed > 0.5:  # Update speed every 0.5 seconds
-                            bytes_uploaded = (current_progress - last_progress) * file_size
-                            speed_mbps = (bytes_uploaded / elapsed) / (1024 * 1024)  # MB/s
-                            last_progress = current_progress
-                            last_time = current_time
-                        else:
-                            # Use average speed if not enough time has passed
-                            total_elapsed = current_time - upload_start_time
-                            if total_elapsed > 0:
-                                speed_mbps = (current_progress * file_size / total_elapsed) / (1024 * 1024)
+                            # Calculate upload speed
+                            current_progress = status.progress()
+                            current_time = time.time()
+                            elapsed = current_time - last_time
+
+                            # Log progress every 10 chunks to help debug stalling
+                            if chunk_count % 10 == 0:
+                                self.log(f"  Chunk {chunk_count}: {current_progress * 100:.1f}% completato")
+
+                            if elapsed > 0.5:  # Update speed every 0.5 seconds
+                                bytes_uploaded = (current_progress - last_progress) * file_size
+                                speed_mbps = (bytes_uploaded / elapsed) / (1024 * 1024)  # MB/s
+                                last_progress = current_progress
+                                last_time = current_time
                             else:
-                                speed_mbps = 0.0
+                                # Use average speed if not enough time has passed
+                                total_elapsed = current_time - upload_start_time
+                                if total_elapsed > 0:
+                                    speed_mbps = (current_progress * file_size / total_elapsed) / (1024 * 1024)
+                                else:
+                                    speed_mbps = 0.0
 
-                        # Calculate estimated time remaining
-                        eta_seconds = 0
-                        if speed_mbps > 0:
-                            # Calculate remaining bytes for current file
-                            current_file_remaining = file_size * (1.0 - current_progress)
+                            # Calculate estimated time remaining
+                            eta_seconds = 0
+                            if speed_mbps > 0:
+                                # Calculate remaining bytes for current file
+                                current_file_remaining = file_size * (1.0 - current_progress)
 
-                            # Total remaining bytes (using pre-calculated pending_size)
-                            total_remaining_bytes = current_file_remaining + pending_size
+                                # Total remaining bytes (using pre-calculated pending_size)
+                                total_remaining_bytes = current_file_remaining + pending_size
 
-                            # ETA in seconds
-                            speed_bytes_per_sec = speed_mbps * 1024 * 1024
-                            eta_seconds = int(total_remaining_bytes / speed_bytes_per_sec)
+                                # ETA in seconds
+                                speed_bytes_per_sec = speed_mbps * 1024 * 1024
+                                eta_seconds = int(total_remaining_bytes / speed_bytes_per_sec)
 
-                        link_percent = max(0.0, min(100.0, current_progress * 100.0))
-                        overall_percent = ((index - 1) + current_progress) / total * 100.0
-                        progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
+                            link_percent = max(0.0, min(100.0, current_progress * 100.0))
+                            overall_percent = ((index - 1) + current_progress) / total * 100.0
+                            progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
+
+                        except Exception as chunk_error:
+                            self.log(f"  Errore durante upload chunk {chunk_count}: {chunk_error}")
+                            raise
 
                     uploaded += 1
                     video_id = response.get("id", "N/A")
@@ -1385,7 +1402,7 @@ class YouTubeUploader:
         return UploadSummary(total=total, uploaded=uploaded, failed=failed)
 
     def _authenticate(self, interactive: bool):
-        Request, Credentials, InstalledAppFlow, _, _, _ = _import_youtube_modules()
+        Request, Credentials, InstalledAppFlow, _, _, _, httplib2 = _import_youtube_modules()
 
         if not self.client_secret_path.is_file():
             raise RuntimeError(
