@@ -1848,6 +1848,11 @@ class DoomerGeneratorApp:
         self.queue_lock = threading.Lock()
         self.queue_tree: ttk.Treeview | None = None
         self.queue_filter_var: tk.StringVar | None = None
+
+        # Backup & Recovery system
+        self.backups_dir = self.project_dir / "backups"
+        self.auto_save_interval_ms = 300000  # 5 minutes
+        self.last_auto_save_time = time.time()
         self.queue_stats_var: tk.StringVar | None = None
 
         # Performance settings
@@ -2035,6 +2040,9 @@ class DoomerGeneratorApp:
 
         # Update memory display
         self._update_memory_display()
+
+        # Auto-save settings periodically
+        self._auto_save_settings()
 
         # Schedule next update
         self.root.after(1000, self._update_timers)
@@ -2440,6 +2448,43 @@ class DoomerGeneratorApp:
         self.memory_limit_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.memory_limit_label = ttk.Label(memory_frame, text=f"{self.memory_limit_mb} MB")
         self.memory_limit_label.pack(side=tk.LEFT, padx=(6, 0))
+
+        # Backup & Recovery section
+        backup_box = ttk.LabelFrame(parent, text=self._t("general_group_backup"), padding=8)
+        backup_box.pack(fill=tk.X, pady=(10, 0))
+        backup_box.columnconfigure(1, weight=1)
+
+        # Backup buttons
+        backup_buttons_frame = ttk.Frame(backup_box)
+        backup_buttons_frame.grid(row=0, column=0, columnspan=2, padx=6, pady=6, sticky="ew")
+
+        self.create_backup_button = ttk.Button(
+            backup_buttons_frame,
+            text=self._t("backup_btn_create"),
+            command=self._create_manual_backup,
+        )
+        self.create_backup_button.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.restore_backup_button = ttk.Button(
+            backup_buttons_frame,
+            text=self._t("backup_btn_restore"),
+            command=self._show_restore_dialog,
+        )
+        self.restore_backup_button.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.cleanup_backups_button = ttk.Button(
+            backup_buttons_frame,
+            text=self._t("backup_btn_cleanup"),
+            command=self._cleanup_old_backups_dialog,
+        )
+        self.cleanup_backups_button.pack(side=tk.LEFT)
+
+        # Backup info
+        backups = self._get_available_backups()
+        backup_count = len(backups)
+        backup_info_text = self._t("backup_info", count=backup_count)
+        self.backup_info_label = ttk.Label(backup_box, text=backup_info_text)
+        self.backup_info_label.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
 
         info = ttk.LabelFrame(parent, text=self._t("general_group_paths"), padding=8)
         info.pack(fill=tk.X, pady=(10, 0))
@@ -3460,6 +3505,9 @@ class DoomerGeneratorApp:
         ):
             return
 
+        # Create backup before clearing
+        self._create_backup("pre_clear")
+
         target = Path(raw_path.strip())
         removed = _clear_directory_contents(target)
         self._log(self._t("log_clear_dir", label=label, path=target, count=removed))
@@ -3499,6 +3547,9 @@ class DoomerGeneratorApp:
             self._t("clear_all_confirm"),
         ):
             return
+
+        # Create backup before clearing all
+        self._create_backup("pre_clear")
 
         in_removed = _clear_directory_contents(Path(self.audio_input_var.get().strip()))
         out_removed = _clear_directory_contents(Path(self.audio_output_var.get().strip()))
@@ -4397,6 +4448,263 @@ class DoomerGeneratorApp:
             self._log(self._t("log_settings_save_error", error=error))
             return False
 
+    def _create_backup(self, backup_type: str = "manual") -> Path | None:
+        """Create a backup of current settings and presets.
+
+        Args:
+            backup_type: Type of backup ('manual', 'auto', 'pre_clear')
+
+        Returns:
+            Path to backup directory or None if failed
+        """
+        try:
+            self.backups_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create timestamped backup directory
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = self.backups_dir / f"{backup_type}_{timestamp}"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            # Backup app settings
+            if self.app_settings_path.exists():
+                shutil.copy2(self.app_settings_path, backup_dir / "app_settings.json")
+
+            # Backup presets
+            if self.presets_file.exists():
+                shutil.copy2(self.presets_file, backup_dir / "presets.json")
+
+            # Create metadata file
+            metadata = {
+                "timestamp": timestamp,
+                "type": backup_type,
+                "created_at": datetime.datetime.now().isoformat(),
+                "files": ["app_settings.json", "presets.json"],
+            }
+
+            (backup_dir / "backup_metadata.json").write_text(
+                json.dumps(metadata, indent=2),
+                encoding="utf-8",
+            )
+
+            self._log_debug(f"Backup created: {backup_dir.name}")
+            return backup_dir
+
+        except OSError as error:
+            self._log_error(f"Failed to create backup: {error}")
+            return None
+
+    def _auto_save_settings(self) -> None:
+        """Automatically save settings periodically."""
+        current_time = time.time()
+        if current_time - self.last_auto_save_time >= (self.auto_save_interval_ms / 1000):
+            self._save_audio_settings()
+            self._save_video_settings()
+            self._save_upload_settings()
+            self.last_auto_save_time = current_time
+            self._log_debug("Auto-save completed")
+
+    def _get_available_backups(self) -> list[tuple[str, str, str]]:
+        """Get list of available backups.
+
+        Returns:
+            List of tuples (backup_name, backup_type, timestamp)
+        """
+        if not self.backups_dir.exists():
+            return []
+
+        backups = []
+        for backup_dir in sorted(self.backups_dir.iterdir(), reverse=True):
+            if not backup_dir.is_dir():
+                continue
+
+            metadata_file = backup_dir / "backup_metadata.json"
+            if metadata_file.exists():
+                try:
+                    metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+                    backups.append((
+                        backup_dir.name,
+                        metadata.get("type", "unknown"),
+                        metadata.get("created_at", ""),
+                    ))
+                except (OSError, json.JSONDecodeError):
+                    continue
+
+        return backups
+
+    def _restore_from_backup(self, backup_name: str) -> bool:
+        """Restore settings and presets from a backup.
+
+        Args:
+            backup_name: Name of the backup directory
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            backup_dir = self.backups_dir / backup_name
+            if not backup_dir.exists():
+                self._log_error(f"Backup not found: {backup_name}")
+                return False
+
+            # Restore app settings
+            backup_settings = backup_dir / "app_settings.json"
+            if backup_settings.exists():
+                shutil.copy2(backup_settings, self.app_settings_path)
+
+            # Restore presets
+            backup_presets = backup_dir / "presets.json"
+            if backup_presets.exists():
+                shutil.copy2(backup_presets, self.presets_file)
+
+            # Reload settings and presets
+            self._load_persisted_app_settings()
+            self._load_presets()
+            self._refresh_preset_dropdowns()
+
+            self._log(self._t("log_backup_restored", name=backup_name))
+            return True
+
+        except OSError as error:
+            self._log_error(f"Failed to restore backup: {error}")
+            return False
+
+    def _cleanup_old_backups(self, keep_count: int = 10) -> None:
+        """Remove old backups, keeping only the most recent ones.
+
+        Args:
+            keep_count: Number of backups to keep
+        """
+        if not self.backups_dir.exists():
+            return
+
+        backups = sorted(
+            [d for d in self.backups_dir.iterdir() if d.is_dir()],
+            key=lambda x: x.name,
+            reverse=True,
+        )
+
+        for backup_dir in backups[keep_count:]:
+            try:
+                shutil.rmtree(backup_dir)
+                self._log_debug(f"Removed old backup: {backup_dir.name}")
+            except OSError as error:
+                self._log_warning(f"Failed to remove old backup {backup_dir.name}: {error}")
+
+    def _create_manual_backup(self) -> None:
+        """Create a manual backup via UI button."""
+        backup_dir = self._create_backup("manual")
+        if backup_dir:
+            self._log(self._t("log_backup_created", name=backup_dir.name))
+            messagebox.showinfo(
+                self._t("backup_create_title"),
+                self._t("backup_create_success", name=backup_dir.name),
+                parent=self.root,
+            )
+            self._update_backup_info()
+        else:
+            messagebox.showerror(
+                self._t("backup_create_title"),
+                self._t("backup_create_error"),
+                parent=self.root,
+            )
+
+    def _show_restore_dialog(self) -> None:
+        """Show dialog to select and restore a backup."""
+        backups = self._get_available_backups()
+        if not backups:
+            messagebox.showinfo(
+                self._t("backup_restore_title"),
+                self._t("backup_restore_no_backups"),
+                parent=self.root,
+            )
+            return
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self._t("backup_restore_title"))
+        dialog.geometry("600x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Listbox with backups
+        ttk.Label(dialog, text=self._t("backup_restore_select")).pack(padx=10, pady=10)
+
+        listbox_frame = ttk.Frame(dialog)
+        listbox_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        scrollbar = ttk.Scrollbar(listbox_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        listbox = tk.Listbox(listbox_frame, yscrollcommand=scrollbar.set)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+
+        for backup_name, backup_type, created_at in backups:
+            display_text = f"{backup_name} ({backup_type}) - {created_at}"
+            listbox.insert(tk.END, display_text)
+
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        def restore_selected():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning(
+                    self._t("backup_restore_title"),
+                    self._t("backup_restore_no_selection"),
+                    parent=dialog,
+                )
+                return
+
+            backup_name = backups[selection[0]][0]
+            if messagebox.askyesno(
+                self._t("backup_restore_title"),
+                self._t("backup_restore_confirm", name=backup_name),
+                parent=dialog,
+            ):
+                if self._restore_from_backup(backup_name):
+                    messagebox.showinfo(
+                        self._t("backup_restore_title"),
+                        self._t("backup_restore_success"),
+                        parent=dialog,
+                    )
+                    dialog.destroy()
+                    self._update_backup_info()
+                else:
+                    messagebox.showerror(
+                        self._t("backup_restore_title"),
+                        self._t("backup_restore_error"),
+                        parent=dialog,
+                    )
+
+        ttk.Button(button_frame, text=self._t("backup_btn_restore"), command=restore_selected).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self._t("dialog_cancel"), command=dialog.destroy).pack(side=tk.LEFT)
+
+    def _cleanup_old_backups_dialog(self) -> None:
+        """Show dialog to cleanup old backups."""
+        if messagebox.askyesno(
+            self._t("backup_cleanup_title"),
+            self._t("backup_cleanup_confirm"),
+            parent=self.root,
+        ):
+            self._cleanup_old_backups(keep_count=10)
+            self._log(self._t("log_backup_cleanup"))
+            messagebox.showinfo(
+                self._t("backup_cleanup_title"),
+                self._t("backup_cleanup_success"),
+                parent=self.root,
+            )
+            self._update_backup_info()
+
+    def _update_backup_info(self) -> None:
+        """Update backup info label."""
+        backups = self._get_available_backups()
+        backup_count = len(backups)
+        backup_info_text = self._t("backup_info", count=backup_count)
+        if hasattr(self, "backup_info_label"):
+            self.backup_info_label.config(text=backup_info_text)
+
     def _load_presets(self) -> None:
         """Load audio and video presets from JSON file."""
         try:
@@ -4468,6 +4776,16 @@ class DoomerGeneratorApp:
     def _get_video_preset_names(self) -> list[str]:
         """Get list of video preset names."""
         return sorted(self.video_presets.keys())
+
+    def _refresh_preset_dropdowns(self) -> None:
+        """Refresh preset dropdown menus after restore."""
+        if hasattr(self, "audio_preset_combo"):
+            self.audio_preset_combo["values"] = self._get_audio_preset_names()
+            self.audio_preset_var.set("")
+
+        if hasattr(self, "video_preset_combo"):
+            self.video_preset_combo["values"] = self._get_video_preset_names()
+            self.video_preset_var.set("")
 
     def _save_audio_preset(self) -> None:
         """Save current audio settings as a preset."""
