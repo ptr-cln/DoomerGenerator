@@ -1316,6 +1316,11 @@ class YouTubeUploader:
                     last_progress = 0.0
                     last_time = upload_start_time
 
+                    # Pre-calculate pending files size ONCE (not in the loop!)
+                    # This was causing upload stalling by scanning directory every 8MB chunk
+                    all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files and f != video_file]
+                    pending_size = sum(f.stat().st_size for f in all_pending)
+
                     response = None
                     while response is None:
                         status, response = insert_request.next_chunk(num_retries=3)
@@ -1346,11 +1351,7 @@ class YouTubeUploader:
                             # Calculate remaining bytes for current file
                             current_file_remaining = file_size * (1.0 - current_progress)
 
-                            # Calculate total size of all pending files (excluding current)
-                            all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files and f != video_file]
-                            pending_size = sum(f.stat().st_size for f in all_pending)
-
-                            # Total remaining bytes
+                            # Total remaining bytes (using pre-calculated pending_size)
                             total_remaining_bytes = current_file_remaining + pending_size
 
                             # ETA in seconds
