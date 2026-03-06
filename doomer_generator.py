@@ -252,7 +252,6 @@ class AudioSettings:
             dist = max(0.0, min(1.0, self.distortion_amount / 100.0))
             # Use overdrive filter for warm distortion
             gain = round(2 + dist * 18, 1)  # 2 to 20 dB
-            color = round(5 + dist * 15, 1)  # 5 to 20
             parts.append(f"[{cursor}]acompressor=threshold=-20dB:ratio=4:attack=5:release=50,volume={gain}dB[distorted]")
             cursor = "distorted"
 
@@ -3475,6 +3474,24 @@ class DoomerGeneratorApp:
             compressor_intensity=self.compressor_var.get(),
         )
 
+    def _collect_video_settings_from_ui(self) -> VideoSettings:
+        """Collect current video settings from UI."""
+        return VideoSettings(
+            fade_in_seconds=self.video_fade_in_var.get(),
+            fade_out_seconds=self.video_fade_out_var.get(),
+            noise_percent=self.video_noise_var.get(),
+            distortion_percent=self.video_distortion_var.get(),
+            vhs_effect=self.video_vhs_var.get(),
+            chromatic_aberration=self.video_chromatic_var.get(),
+            film_burn=self.video_burn_var.get(),
+            glitch_effect=self.video_glitch_var.get(),
+            video_encoder=self._sanitize_video_encoder(
+                self.video_encoder_var.get(),
+                self.default_video_settings.video_encoder,
+            ),
+            shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
+        )
+
     def _resolve_ffplay(self, ffmpeg_bin: str) -> str | None:
         ffmpeg_path = Path(ffmpeg_bin)
         sibling = ffmpeg_path.with_name("ffplay.exe")
@@ -4977,7 +4994,7 @@ class DoomerGeneratorApp:
         name = name.strip()
 
         # Get current audio settings
-        settings = self._build_audio_settings()
+        settings = self._collect_audio_settings_from_ui()
         preset = AudioPreset.from_settings(name, settings)
 
         # Save preset
@@ -5010,6 +5027,13 @@ class DoomerGeneratorApp:
         for i, gain in enumerate(settings.eq_band_gains):
             if i < len(self.eq_band_vars):
                 self.eq_band_vars[i].set(gain)
+
+        # Apply advanced effects
+        self.stereo_width_var.set(settings.stereo_width)
+        self.chorus_var.set(settings.chorus_intensity)
+        self.bitcrush_var.set(settings.bitcrush_amount)
+        self.distortion_var.set(settings.distortion_amount)
+        self.compressor_var.set(settings.compressor_intensity)
 
         self._log(self._t("log_preset_loaded", name=name))
 
@@ -5157,7 +5181,7 @@ class DoomerGeneratorApp:
         name = name.strip()
 
         # Get current video settings
-        settings = self._build_video_settings()
+        settings = self._collect_video_settings_from_ui()
         preset = VideoPreset.from_settings(name, settings)
 
         # Save preset
