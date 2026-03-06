@@ -1234,7 +1234,7 @@ class DoomerBatchConverter:
         input_dir: Path,
         output_dir: Path,
         settings: AudioSettings,
-        progress: Callable[[int, int], None],
+        progress: Callable[[int, int, str], None],
     ) -> ConversionSummary:
         files = _collect_files(input_dir, AUDIO_EXTENSIONS)
         total = len(files)
@@ -1274,7 +1274,7 @@ class DoomerBatchConverter:
                 failed += 1
                 self.log(f"  ERRORE -> {source_file.name}")
 
-            progress(index, total)
+            progress(index, total, source_file.name)
 
         return ConversionSummary(total=total, converted=converted, failed=failed)
 
@@ -1355,7 +1355,7 @@ class DoomerVideoGenerator:
         audio_input_dir: Path,
         video_output_dir: Path,
         settings: VideoSettings,
-        progress: Callable[[int, int, int], None],
+        progress: Callable[[int, int, int, str, str], None],
     ) -> VideoSummary:
         audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
         total = len(audio_files)
@@ -1419,7 +1419,8 @@ class DoomerVideoGenerator:
                 remaining_videos = total - index
                 eta_seconds = int(avg_time * remaining_videos)
 
-            progress(index, total, eta_seconds)
+            background_name = background.name if background else "N/A"
+            progress(index, total, eta_seconds, audio_file.name, background_name)
 
         return VideoSummary(total=total, generated=generated, failed=failed)
 
@@ -3798,11 +3799,11 @@ class DoomerGeneratorApp:
     def _queue_log(self, message: str) -> None:
         self.events.put(("log", message))
 
-    def _queue_audio_progress(self, done: int, total: int) -> None:
-        self.events.put(("audio_progress", (done, total)))
+    def _queue_audio_progress(self, done: int, total: int, file_name: str) -> None:
+        self.events.put(("audio_progress", (done, total, file_name)))
 
-    def _queue_video_progress(self, done: int, total: int, eta_seconds: int) -> None:
-        self.events.put(("video_progress", (done, total, eta_seconds)))
+    def _queue_video_progress(self, done: int, total: int, eta_seconds: int, audio_name: str, background_name: str) -> None:
+        self.events.put(("video_progress", (done, total, eta_seconds, audio_name, background_name)))
 
     def _queue_progress(self, done: int, total: int) -> None:
         self.events.put(("progress", (done, total)))
@@ -4378,15 +4379,15 @@ class DoomerGeneratorApp:
                 self.progress_text.set(progress_msg)
                 self.upload_progress_text.set(progress_msg)
             elif event == "audio_progress":
-                done, total = payload  # type: ignore[misc]
+                done, total, file_name = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
                 self.progress_var.set(percent)
                 self.audio_progress_var.set(percent)
-                progress_msg = self._t("progress_generic", done=done, total=total)
+                progress_msg = self._t("progress_audio_file", done=done, total=total, name=file_name)
                 self.progress_text.set(progress_msg)
                 self.audio_progress_text.set(progress_msg)
             elif event == "video_progress":
-                done, total, eta_seconds = payload  # type: ignore[misc]
+                done, total, eta_seconds, audio_name, background_name = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
                 self.progress_var.set(percent)
                 self.video_progress_var.set(percent)
@@ -4397,7 +4398,7 @@ class DoomerGeneratorApp:
                 seconds = eta_seconds % 60
                 eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-                progress_msg = self._t("progress_video_file", done=done, total=total, eta=eta_formatted)
+                progress_msg = self._t("progress_video_detailed", done=done, total=total, eta=eta_formatted, audio=audio_name, bg=background_name)
                 self.progress_text.set(progress_msg)
                 self.video_progress_text.set(progress_msg)
             elif event == "progress":

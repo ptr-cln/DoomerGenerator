@@ -146,6 +146,8 @@ TRANSLATIONS = {
     "progress_download_file": "डाउनलोड प्रगति पर: {index}/{total} - {percent:.1f}% लिंक का",
     "progress_upload_file": "अपलोड {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s - कुल शेष: {eta}",
     "progress_video_file": "वीडियो {done}/{total} - कुल शेष: {eta}",
+    "progress_video_detailed": "वीडियो {done}/{total} - ऑडियो: {audio} - पृष्ठभूमि: {bg} - शेष: {eta}",
+    "progress_audio_file": "ऑडियो {done}/{total} - फ़ाइल: {name}",
     "progress_generic": "प्रगति: {done}/{total}",
     "progress_download_done": "डाउनलोड पूर्ण - ठीक: {ok}, त्रुटियाँ: {err}",
     "progress_upload_done": "अपलोड पूर्ण - ठीक: {ok}, त्रुटियाँ: {err}",

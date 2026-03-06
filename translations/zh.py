@@ -146,6 +146,8 @@ TRANSLATIONS = {
     "progress_download_file": "下载进行中: {index}/{total} - {percent:.1f}% 链接",
     "progress_upload_file": "上传 {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s - 总剩余: {eta}",
     "progress_video_file": "视频 {done}/{total} - 总剩余: {eta}",
+    "progress_video_detailed": "视频 {done}/{total} - 音频: {audio} - 背景: {bg} - 剩余: {eta}",
+    "progress_audio_file": "音频 {done}/{total} - 文件: {name}",
     "progress_generic": "进度: {done}/{total}",
     "progress_download_done": "下载完成 - 成功: {ok}, 错误: {err}",
     "progress_upload_done": "上传完成 - 成功: {ok}, 错误: {err}",

@@ -146,6 +146,8 @@ TRANSLATIONS = {
     "progress_download_file": "التنزيل قيد التقدم: {index}/{total} - {percent:.1f}% من الرابط",
     "progress_upload_file": "رفع {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s - الإجمالي المتبقي: {eta}",
     "progress_video_file": "فيديو {done}/{total} - الإجمالي المتبقي: {eta}",
+    "progress_video_detailed": "فيديو {done}/{total} - صوت: {audio} - خلفية: {bg} - متبقي: {eta}",
+    "progress_audio_file": "صوت {done}/{total} - ملف: {name}",
     "progress_generic": "التقدم: {done}/{total}",
     "progress_download_done": "اكتمل التنزيل - موافق: {ok}، أخطاء: {err}",
     "progress_upload_done": "اكتمل الرفع - موافق: {ok}، أخطاء: {err}",
