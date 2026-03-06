@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+import dataclasses
 import datetime
 import urllib.error
 import urllib.request
@@ -361,6 +362,91 @@ class VideoSummary:
     total: int
     generated: int
     failed: int
+
+
+@dataclass
+class AudioPreset:
+    """Represents a saved audio effect preset."""
+    name: str
+    slowdown_percent: float
+    eq_band_gains: tuple[float, float, float, float, float, float, float]
+    vinyl_volume_percent: float
+    reverb_percent: float
+    fade_in_seconds: float
+    fade_out_seconds: float
+    output_format: str
+
+    @staticmethod
+    def from_settings(name: str, settings: AudioSettings) -> "AudioPreset":
+        """Create a preset from AudioSettings."""
+        return AudioPreset(
+            name=name,
+            slowdown_percent=settings.slowdown_percent,
+            eq_band_gains=settings.eq_band_gains,
+            vinyl_volume_percent=settings.vinyl_volume_percent,
+            reverb_percent=settings.reverb_percent,
+            fade_in_seconds=settings.fade_in_seconds,
+            fade_out_seconds=settings.fade_out_seconds,
+            output_format=settings.output_format,
+        )
+
+    def to_settings(self) -> AudioSettings:
+        """Convert preset to AudioSettings."""
+        return AudioSettings(
+            slowdown_percent=self.slowdown_percent,
+            eq_band_gains=self.eq_band_gains,
+            vinyl_volume_percent=self.vinyl_volume_percent,
+            reverb_percent=self.reverb_percent,
+            fade_in_seconds=self.fade_in_seconds,
+            fade_out_seconds=self.fade_out_seconds,
+            output_format=self.output_format,
+        )
+
+
+@dataclass
+class VideoPreset:
+    """Represents a saved video effect preset."""
+    name: str
+    fade_in_seconds: float
+    fade_out_seconds: float
+    noise_percent: float
+    distortion_percent: float
+    vhs_effect: float
+    chromatic_aberration: float
+    film_burn: float
+    glitch_effect: float
+    video_encoder: str
+
+    @staticmethod
+    def from_settings(name: str, settings: VideoSettings) -> "VideoPreset":
+        """Create a preset from VideoSettings."""
+        return VideoPreset(
+            name=name,
+            fade_in_seconds=settings.fade_in_seconds,
+            fade_out_seconds=settings.fade_out_seconds,
+            noise_percent=settings.noise_percent,
+            distortion_percent=settings.distortion_percent,
+            vhs_effect=settings.vhs_effect,
+            chromatic_aberration=settings.chromatic_aberration,
+            film_burn=settings.film_burn,
+            glitch_effect=settings.glitch_effect,
+            video_encoder=settings.video_encoder,
+        )
+
+    def to_settings(self, shutdown_after_generation: bool = False) -> VideoSettings:
+        """Convert preset to VideoSettings."""
+        return VideoSettings(
+            fade_in_seconds=self.fade_in_seconds,
+            fade_out_seconds=self.fade_out_seconds,
+            noise_percent=self.noise_percent,
+            distortion_percent=self.distortion_percent,
+            vhs_effect=self.vhs_effect,
+            chromatic_aberration=self.chromatic_aberration,
+            film_burn=self.film_burn,
+            glitch_effect=self.glitch_effect,
+            video_encoder=self.video_encoder,
+            shutdown_after_generation=shutdown_after_generation,
+        )
 
 
 @dataclass(frozen=True)
@@ -1730,6 +1816,13 @@ class DoomerGeneratorApp:
         self.video_paused = False
         self.upload_paused = False
 
+        # Preset system
+        self.presets_dir = self.project_dir / "presets"
+        self.presets_file = self.presets_dir / "presets.json"
+        self.audio_presets: dict[str, AudioPreset] = {}
+        self.video_presets: dict[str, VideoPreset] = {}
+        self._load_presets()
+
         self._ensure_default_filesystem()
         self._ensure_links_file()
 
@@ -1811,6 +1904,10 @@ class DoomerGeneratorApp:
         self.upload_progress_text = tk.StringVar(value=self._t("status_ready"))
         self.upload_timer_text = tk.StringVar(value="00:00:00")
         self.upload_start_time: float | None = None
+
+        # Preset UI variables
+        self.audio_preset_var = tk.StringVar(value="")
+        self.video_preset_var = tk.StringVar(value="")
 
         # build interface first so that all widgets (especially upload
         # controls) exist before we populate them with saved settings.  this
@@ -2266,6 +2363,50 @@ class DoomerGeneratorApp:
         ).pack(anchor="w", pady=(10, 0))
 
     def _build_audio_tab(self, parent: ttk.Frame) -> None:
+        # Preset management
+        presets_frame = ttk.LabelFrame(parent, text=self._t("audio_group_presets"), padding=8)
+        presets_frame.pack(fill=tk.X, pady=(0, 8))
+        presets_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(presets_frame, text=self._t("preset_label_select")).grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.audio_preset_combo = ttk.Combobox(
+            presets_frame,
+            textvariable=self.audio_preset_var,
+            values=self._get_audio_preset_names(),
+            state="readonly",
+        )
+        self.audio_preset_combo.grid(row=0, column=1, padx=6, pady=6, sticky="ew")
+        self.audio_preset_combo.bind("<<ComboboxSelected>>", lambda e: self._load_audio_preset())
+
+        preset_buttons = ttk.Frame(presets_frame)
+        preset_buttons.grid(row=0, column=2, padx=6, pady=6)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_save"),
+            command=self._save_audio_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_delete"),
+            command=self._delete_audio_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_export"),
+            command=self._export_audio_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_import"),
+            command=self._import_audio_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
         paths = ttk.LabelFrame(parent, text=self._t("audio_group_folders"), padding=8)
         paths.pack(fill=tk.X, pady=(0, 8))
         paths.columnconfigure(1, weight=1)
@@ -2405,6 +2546,50 @@ class DoomerGeneratorApp:
         ttk.Label(audio_progress_box, textvariable=self.audio_timer_text).pack(anchor="w", pady=(2, 0))
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
+        # Preset management
+        presets_frame = ttk.LabelFrame(parent, text=self._t("video_group_presets"), padding=8)
+        presets_frame.pack(fill=tk.X, pady=(0, 8))
+        presets_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(presets_frame, text=self._t("preset_label_select")).grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.video_preset_combo = ttk.Combobox(
+            presets_frame,
+            textvariable=self.video_preset_var,
+            values=self._get_video_preset_names(),
+            state="readonly",
+        )
+        self.video_preset_combo.grid(row=0, column=1, padx=6, pady=6, sticky="ew")
+        self.video_preset_combo.bind("<<ComboboxSelected>>", lambda e: self._load_video_preset())
+
+        preset_buttons = ttk.Frame(presets_frame)
+        preset_buttons.grid(row=0, column=2, padx=6, pady=6)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_save"),
+            command=self._save_video_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_delete"),
+            command=self._delete_video_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_export"),
+            command=self._export_video_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            preset_buttons,
+            text=self._t("preset_btn_import"),
+            command=self._import_video_preset,
+        ).pack(side=tk.LEFT, padx=2)
+
         resources_box = ttk.LabelFrame(parent, text=self._t("video_group_resources"), padding=8)
         resources_box.pack(fill=tk.X, pady=(0, 8))
         resources_box.columnconfigure(1, weight=1)
@@ -4021,6 +4206,431 @@ class DoomerGeneratorApp:
         except OSError as error:
             self._log(self._t("log_settings_save_error", error=error))
             return False
+
+    def _load_presets(self) -> None:
+        """Load audio and video presets from JSON file."""
+        try:
+            if not self.presets_file.exists():
+                self._log_debug("No presets file found, starting with empty presets")
+                return
+
+            data = json.loads(self.presets_file.read_text(encoding="utf-8"))
+
+            # Load audio presets
+            audio_presets_data = data.get("audio_presets", {})
+            for name, preset_dict in audio_presets_data.items():
+                try:
+                    # Convert eq_band_gains list to tuple
+                    eq_gains = preset_dict.get("eq_band_gains", list(EQ_DEFAULT_GAINS))
+                    preset_dict["eq_band_gains"] = tuple(eq_gains)
+                    self.audio_presets[name] = AudioPreset(**preset_dict)
+                except (TypeError, ValueError) as error:
+                    self._log_warning(f"Failed to load audio preset '{name}': {error}")
+
+            # Load video presets
+            video_presets_data = data.get("video_presets", {})
+            for name, preset_dict in video_presets_data.items():
+                try:
+                    self.video_presets[name] = VideoPreset(**preset_dict)
+                except (TypeError, ValueError) as error:
+                    self._log_warning(f"Failed to load video preset '{name}': {error}")
+
+            self._log_debug(f"Loaded {len(self.audio_presets)} audio presets and {len(self.video_presets)} video presets")
+        except (OSError, json.JSONDecodeError) as error:
+            self._log_warning(f"Failed to load presets: {error}")
+
+    def _save_presets(self) -> bool:
+        """Save audio and video presets to JSON file."""
+        try:
+            self.presets_dir.mkdir(parents=True, exist_ok=True)
+
+            # Convert presets to dictionaries
+            audio_presets_data = {}
+            for name, preset in self.audio_presets.items():
+                preset_dict = dataclasses.asdict(preset)
+                # Convert tuple to list for JSON serialization
+                preset_dict["eq_band_gains"] = list(preset_dict["eq_band_gains"])
+                audio_presets_data[name] = preset_dict
+
+            video_presets_data = {}
+            for name, preset in self.video_presets.items():
+                video_presets_data[name] = dataclasses.asdict(preset)
+
+            data = {
+                "audio_presets": audio_presets_data,
+                "video_presets": video_presets_data,
+            }
+
+            self.presets_file.write_text(
+                json.dumps(data, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            self._log_debug(f"Saved {len(self.audio_presets)} audio presets and {len(self.video_presets)} video presets")
+            return True
+        except OSError as error:
+            self._log_error(f"Failed to save presets: {error}")
+            return False
+
+    def _get_audio_preset_names(self) -> list[str]:
+        """Get list of audio preset names."""
+        return sorted(self.audio_presets.keys())
+
+    def _get_video_preset_names(self) -> list[str]:
+        """Get list of video preset names."""
+        return sorted(self.video_presets.keys())
+
+    def _save_audio_preset(self) -> None:
+        """Save current audio settings as a preset."""
+        from tkinter import simpledialog
+
+        name = simpledialog.askstring(
+            self._t("preset_save_title"),
+            self._t("preset_save_prompt"),
+            parent=self.root,
+        )
+
+        if not name or not name.strip():
+            return
+
+        name = name.strip()
+
+        # Get current audio settings
+        settings = self._build_audio_settings()
+        preset = AudioPreset.from_settings(name, settings)
+
+        # Save preset
+        self.audio_presets[name] = preset
+        self._save_presets()
+
+        # Update combobox
+        self.audio_preset_combo["values"] = self._get_audio_preset_names()
+        self.audio_preset_var.set(name)
+
+        self._log(self._t("log_preset_saved", name=name))
+
+    def _load_audio_preset(self) -> None:
+        """Load selected audio preset."""
+        name = self.audio_preset_var.get()
+        if not name or name not in self.audio_presets:
+            return
+
+        preset = self.audio_presets[name]
+        settings = preset.to_settings()
+
+        # Apply settings to UI
+        self.slowdown_var.set(settings.slowdown_percent)
+        self.vinyl_var.set(settings.vinyl_volume_percent)
+        self.reverb_var.set(settings.reverb_percent)
+        self.audio_fade_in_var.set(settings.fade_in_seconds)
+        self.audio_fade_out_var.set(settings.fade_out_seconds)
+        self.audio_format_var.set(settings.output_format)
+
+        for i, gain in enumerate(settings.eq_band_gains):
+            if i < len(self.eq_band_vars):
+                self.eq_band_vars[i].set(gain)
+
+        self._log(self._t("log_preset_loaded", name=name))
+
+    def _delete_audio_preset(self) -> None:
+        """Delete selected audio preset."""
+        name = self.audio_preset_var.get()
+        if not name or name not in self.audio_presets:
+            messagebox.showwarning(
+                self._t("preset_delete_title"),
+                self._t("preset_delete_no_selection"),
+                parent=self.root,
+            )
+            return
+
+        # Confirm deletion
+        if not messagebox.askyesno(
+            self._t("preset_delete_title"),
+            self._t("preset_delete_confirm", name=name),
+            parent=self.root,
+        ):
+            return
+
+        # Delete preset
+        del self.audio_presets[name]
+        self._save_presets()
+
+        # Update combobox
+        self.audio_preset_combo["values"] = self._get_audio_preset_names()
+        self.audio_preset_var.set("")
+
+        self._log(self._t("log_preset_deleted", name=name))
+
+    def _export_audio_preset(self) -> None:
+        """Export selected audio preset to JSON file."""
+        name = self.audio_preset_var.get()
+        if not name or name not in self.audio_presets:
+            messagebox.showwarning(
+                self._t("preset_export_title"),
+                self._t("preset_export_no_selection"),
+                parent=self.root,
+            )
+            return
+
+        # Ask for save location
+        file_path = filedialog.asksaveasfilename(
+            title=self._t("preset_export_title"),
+            defaultextension=".json",
+            filetypes=[(self._t("preset_export_filetype"), "*.json"), (self._t("export_logs_all_files"), "*.*")],
+            initialfile=f"{name}.json",
+            parent=self.root,
+        )
+
+        if not file_path:
+            return
+
+        try:
+            preset = self.audio_presets[name]
+            preset_dict = dataclasses.asdict(preset)
+            preset_dict["eq_band_gains"] = list(preset_dict["eq_band_gains"])
+
+            Path(file_path).write_text(
+                json.dumps(preset_dict, indent=2),
+                encoding="utf-8",
+            )
+
+            self._log(self._t("log_preset_exported", name=name, path=file_path))
+            messagebox.showinfo(
+                self._t("preset_export_title"),
+                self._t("preset_export_success", path=file_path),
+                parent=self.root,
+            )
+        except OSError as error:
+            self._log_error(f"Failed to export preset: {error}")
+            messagebox.showerror(
+                self._t("preset_export_title"),
+                self._t("preset_export_error", error=error),
+                parent=self.root,
+            )
+
+    def _import_audio_preset(self) -> None:
+        """Import audio preset from JSON file."""
+        file_path = filedialog.askopenfilename(
+            title=self._t("preset_import_title"),
+            filetypes=[(self._t("preset_export_filetype"), "*.json"), (self._t("export_logs_all_files"), "*.*")],
+            parent=self.root,
+        )
+
+        if not file_path:
+            return
+
+        try:
+            data = json.loads(Path(file_path).read_text(encoding="utf-8"))
+
+            # Convert eq_band_gains list to tuple
+            eq_gains = data.get("eq_band_gains", list(EQ_DEFAULT_GAINS))
+            data["eq_band_gains"] = tuple(eq_gains)
+
+            preset = AudioPreset(**data)
+            name = preset.name
+
+            # Check if preset already exists
+            if name in self.audio_presets:
+                if not messagebox.askyesno(
+                    self._t("preset_import_title"),
+                    self._t("preset_import_overwrite", name=name),
+                    parent=self.root,
+                ):
+                    return
+
+            # Save preset
+            self.audio_presets[name] = preset
+            self._save_presets()
+
+            # Update combobox
+            self.audio_preset_combo["values"] = self._get_audio_preset_names()
+            self.audio_preset_var.set(name)
+
+            self._log(self._t("log_preset_imported", name=name))
+            messagebox.showinfo(
+                self._t("preset_import_title"),
+                self._t("preset_import_success", name=name),
+                parent=self.root,
+            )
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
+            self._log_error(f"Failed to import preset: {error}")
+            messagebox.showerror(
+                self._t("preset_import_title"),
+                self._t("preset_import_error", error=error),
+                parent=self.root,
+            )
+
+    def _save_video_preset(self) -> None:
+        """Save current video settings as a preset."""
+        from tkinter import simpledialog
+
+        name = simpledialog.askstring(
+            self._t("preset_save_title"),
+            self._t("preset_save_prompt"),
+            parent=self.root,
+        )
+
+        if not name or not name.strip():
+            return
+
+        name = name.strip()
+
+        # Get current video settings
+        settings = self._build_video_settings()
+        preset = VideoPreset.from_settings(name, settings)
+
+        # Save preset
+        self.video_presets[name] = preset
+        self._save_presets()
+
+        # Update combobox
+        self.video_preset_combo["values"] = self._get_video_preset_names()
+        self.video_preset_var.set(name)
+
+        self._log(self._t("log_preset_saved", name=name))
+
+    def _load_video_preset(self) -> None:
+        """Load selected video preset."""
+        name = self.video_preset_var.get()
+        if not name or name not in self.video_presets:
+            return
+
+        preset = self.video_presets[name]
+        settings = preset.to_settings()
+
+        # Apply settings to UI
+        self.video_fade_in_var.set(settings.fade_in_seconds)
+        self.video_fade_out_var.set(settings.fade_out_seconds)
+        self.video_noise_var.set(settings.noise_percent)
+        self.video_distortion_var.set(settings.distortion_percent)
+        self.video_vhs_var.set(settings.vhs_effect)
+        self.video_chromatic_var.set(settings.chromatic_aberration)
+        self.video_film_burn_var.set(settings.film_burn)
+        self.video_glitch_var.set(settings.glitch_effect)
+        self.video_encoder_var.set(settings.video_encoder)
+
+        self._log(self._t("log_preset_loaded", name=name))
+
+    def _delete_video_preset(self) -> None:
+        """Delete selected video preset."""
+        name = self.video_preset_var.get()
+        if not name or name not in self.video_presets:
+            messagebox.showwarning(
+                self._t("preset_delete_title"),
+                self._t("preset_delete_no_selection"),
+                parent=self.root,
+            )
+            return
+
+        # Confirm deletion
+        if not messagebox.askyesno(
+            self._t("preset_delete_title"),
+            self._t("preset_delete_confirm", name=name),
+            parent=self.root,
+        ):
+            return
+
+        # Delete preset
+        del self.video_presets[name]
+        self._save_presets()
+
+        # Update combobox
+        self.video_preset_combo["values"] = self._get_video_preset_names()
+        self.video_preset_var.set("")
+
+        self._log(self._t("log_preset_deleted", name=name))
+
+    def _export_video_preset(self) -> None:
+        """Export selected video preset to JSON file."""
+        name = self.video_preset_var.get()
+        if not name or name not in self.video_presets:
+            messagebox.showwarning(
+                self._t("preset_export_title"),
+                self._t("preset_export_no_selection"),
+                parent=self.root,
+            )
+            return
+
+        # Ask for save location
+        file_path = filedialog.asksaveasfilename(
+            title=self._t("preset_export_title"),
+            defaultextension=".json",
+            filetypes=[(self._t("preset_export_filetype"), "*.json"), (self._t("export_logs_all_files"), "*.*")],
+            initialfile=f"{name}.json",
+            parent=self.root,
+        )
+
+        if not file_path:
+            return
+
+        try:
+            preset = self.video_presets[name]
+            preset_dict = dataclasses.asdict(preset)
+
+            Path(file_path).write_text(
+                json.dumps(preset_dict, indent=2),
+                encoding="utf-8",
+            )
+
+            self._log(self._t("log_preset_exported", name=name, path=file_path))
+            messagebox.showinfo(
+                self._t("preset_export_title"),
+                self._t("preset_export_success", path=file_path),
+                parent=self.root,
+            )
+        except OSError as error:
+            self._log_error(f"Failed to export preset: {error}")
+            messagebox.showerror(
+                self._t("preset_export_title"),
+                self._t("preset_export_error", error=error),
+                parent=self.root,
+            )
+
+    def _import_video_preset(self) -> None:
+        """Import video preset from JSON file."""
+        file_path = filedialog.askopenfilename(
+            title=self._t("preset_import_title"),
+            filetypes=[(self._t("preset_export_filetype"), "*.json"), (self._t("export_logs_all_files"), "*.*")],
+            parent=self.root,
+        )
+
+        if not file_path:
+            return
+
+        try:
+            data = json.loads(Path(file_path).read_text(encoding="utf-8"))
+            preset = VideoPreset(**data)
+            name = preset.name
+
+            # Check if preset already exists
+            if name in self.video_presets:
+                if not messagebox.askyesno(
+                    self._t("preset_import_title"),
+                    self._t("preset_import_overwrite", name=name),
+                    parent=self.root,
+                ):
+                    return
+
+            # Save preset
+            self.video_presets[name] = preset
+            self._save_presets()
+
+            # Update combobox
+            self.video_preset_combo["values"] = self._get_video_preset_names()
+            self.video_preset_var.set(name)
+
+            self._log(self._t("log_preset_imported", name=name))
+            messagebox.showinfo(
+                self._t("preset_import_title"),
+                self._t("preset_import_success", name=name),
+                parent=self.root,
+            )
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
+            self._log_error(f"Failed to import preset: {error}")
+            messagebox.showerror(
+                self._t("preset_import_title"),
+                self._t("preset_import_error", error=error),
+                parent=self.root,
+            )
 
     def _apply_audio_settings(self, audio: dict[str, object]) -> None:
         audio_input = audio.get("input_dir")
