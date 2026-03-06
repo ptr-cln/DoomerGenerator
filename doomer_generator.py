@@ -1940,8 +1940,6 @@ class DoomerGeneratorApp:
         # fully built, so that the schedule label/entry exist when the callback
         # fires.
         self.language_var = tk.StringVar(value=LANGUAGE_CODE_TO_LABEL[self.current_language])
-        self.shutdown_after_upload_requested = False
-        self.shutdown_after_video_requested = False
 
         # Global progress bar (kept for backward compatibility)
         self.progress_var = tk.DoubleVar(value=0.0)
@@ -3277,7 +3275,7 @@ class DoomerGeneratorApp:
             shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
         )
 
-        self.shutdown_after_video_requested = self.video_shutdown_after_generation_var.get()
+        # Don't capture shutdown flag here - we'll check it when video finishes
         self.video_processing = True
         self._start_timer("video")
         self._set_action_buttons_enabled()
@@ -3315,7 +3313,6 @@ class DoomerGeneratorApp:
     def _start_youtube_upload(self) -> None:
         if self.uploading or self.youtube_authenticating:
             return
-        self.shutdown_after_upload_requested = False
 
         if not self._try_prepare_youtube_oauth_file():
             return
@@ -3331,7 +3328,7 @@ class DoomerGeneratorApp:
             return
 
         settings = self._collect_upload_settings()
-        self.shutdown_after_upload_requested = settings.shutdown_after_upload
+        # Don't capture shutdown flag here - we'll check it when upload finishes
         self.uploading = True
         self._start_timer("upload")
         self._set_action_buttons_enabled()
@@ -4025,6 +4022,8 @@ class DoomerGeneratorApp:
         self.video_reset_button.configure(state=video_state)
         self.video_save_button.configure(state=video_state)
         self.video_encoder_combo.configure(state="readonly" if not self.video_processing else "disabled")
+        # Shutdown checkbox is always enabled so users can toggle it during video generation
+        self.video_shutdown_after_generation_check.configure(state=tk.NORMAL)
 
         # Upload tab buttons - disabled when uploading or authenticating
         upload_state = tk.NORMAL if not (self.uploading or self.youtube_authenticating) else tk.DISABLED
@@ -4034,7 +4033,8 @@ class DoomerGeneratorApp:
         self.pick_upload_video_button.configure(state=upload_state)
         self.pick_client_secret_button.configure(state=upload_state)
         self.youtube_smart_tags_check.configure(state=upload_state)
-        self.youtube_shutdown_after_upload_check.configure(state=upload_state)
+        # Shutdown checkbox is always enabled so users can toggle it during upload
+        self.youtube_shutdown_after_upload_check.configure(state=tk.NORMAL)
         self.youtube_openai_model_entry.configure(state=upload_state)
         self.youtube_openai_key_entry.configure(state=upload_state)
 
@@ -4170,13 +4170,13 @@ class DoomerGeneratorApp:
                         err=summary.failed,
                     )
                 )
-                if self.shutdown_after_upload_requested:
+                # Check shutdown checkbox value at completion time (not at start)
+                if self.youtube_shutdown_after_upload_var.get():
                     # Only shutdown if no other operations are running
                     if not (self.downloading or self.audio_processing or self.video_processing or self.youtube_authenticating):
                         self._schedule_shutdown()
                     else:
                         self._log(self._t("log_shutdown_skipped_busy"))
-                    self.shutdown_after_upload_requested = False
             elif event == "upload_runtime_error":
                 self.uploading = False
                 self._stop_timer("upload")
@@ -4239,13 +4239,13 @@ class DoomerGeneratorApp:
                         err=summary.failed,
                     )
                 )
-                if self.shutdown_after_video_requested:
+                # Check shutdown checkbox value at completion time (not at start)
+                if self.video_shutdown_after_generation_var.get():
                     # Only shutdown if no other operations are running
                     if not (self.downloading or self.audio_processing or self.uploading or self.youtube_authenticating):
                         self._schedule_shutdown()
                     else:
                         self._log(self._t("log_shutdown_skipped_busy"))
-                    self.shutdown_after_video_requested = False
 
         self.root.after(120, self._poll_events)
 
