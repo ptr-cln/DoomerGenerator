@@ -1393,6 +1393,8 @@ class YouTubeUploader:
 
                         progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
 
+                        self.log(f"  DEBUG: progress() returned, continuing loop...")
+
                     uploaded += 1
                     video_id = response.get("id", "N/A")
                     self.log(f"  OK -> https://youtu.be/{video_id}")
