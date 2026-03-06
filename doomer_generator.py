@@ -3915,6 +3915,7 @@ class DoomerGeneratorApp:
 
         # Add files to queue (batch mode - refresh only once at the end)
         audio_files = _collect_files(input_dir, AUDIO_EXTENSIONS)
+        self._log_debug(f"Audio conversion starting: clearing current_queue_items (had {len(self.current_queue_items)} items), queue_items has {len(self.queue_items)} items")
         self.current_queue_items.clear()
         for audio_file in audio_files:
             item = self._add_queue_item(str(audio_file), "Audio", refresh=False)
@@ -3977,6 +3978,7 @@ class DoomerGeneratorApp:
 
         # Add files to queue (batch mode - refresh only once at the end)
         audio_files = _collect_files(input_audio_dir, AUDIO_EXTENSIONS)
+        self._log_debug(f"Video generation starting: clearing current_queue_items (had {len(self.current_queue_items)} items), queue_items has {len(self.queue_items)} items")
         self.current_queue_items.clear()
         for audio_file in audio_files:
             item = self._add_queue_item(str(audio_file), "Video", refresh=False)
@@ -4237,6 +4239,7 @@ class DoomerGeneratorApp:
 
         # Add files to queue (batch mode - refresh only once at the end)
         video_files = _collect_files(video_dir, VIDEO_EXTENSIONS)
+        self._log_debug(f"Upload starting: clearing current_queue_items (had {len(self.current_queue_items)} items), queue_items has {len(self.queue_items)} items")
         self.current_queue_items.clear()
         for video_file in video_files:
             item = self._add_queue_item(str(video_file), "Upload", refresh=False)
@@ -5550,6 +5553,13 @@ class DoomerGeneratorApp:
 
         # Add filtered items
         with self.queue_lock:
+            # Debug: log queue_items details
+            if len(self.queue_items) > 0:
+                status_counts = {}
+                for item in self.queue_items:
+                    status_counts[item.status] = status_counts.get(item.status, 0) + 1
+                self._log_debug(f"Queue items status breakdown: {status_counts}")
+
             filtered_items = [
                 item for item in self.queue_items
                 if filter_status == "all" or item.status == filter_status
