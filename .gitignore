@@ -18,3 +18,10 @@ youtube_client_secret.json
 youtube_links.txt
 app_settings.json
 .usage_memory.json
+
+# Logs
+logs/
+
+# User-generated files
+logs/
+presets/presets.json

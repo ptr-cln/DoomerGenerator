@@ -1,5 +1,29 @@
 {
-  "audio_presets": {},
+  "audio_presets": {
+    "Test": {
+      "bitcrush_amount": 0.0,
+      "chorus_intensity": 0.0,
+      "compressor_intensity": 0.0,
+      "distortion_amount": 0.0,
+      "eq_band_gains": [
+        5.5,
+        4.0,
+        3.0,
+        1.0,
+        -11.0,
+        -11.5,
+        -12.0
+      ],
+      "fade_in_seconds": 1.5,
+      "fade_out_seconds": 1.5,
+      "name": "Test",
+      "output_format": "mp3",
+      "reverb_percent": 25.0,
+      "slowdown_percent": 20.0,
+      "stereo_width": 0.0,
+      "vinyl_volume_percent": 10.0
+    }
+  },
   "video_presets": {
     "Test": {
       "chromatic_aberration": 0.0,
