@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "Ошибка при экспорте журналов:\n{error}",
     "log_export_success": "Журналы экспортированы в: {path}",
     "log_export_error": "Ошибка при экспорте журналов: {error}",
+    # Pause/Resume
+    "btn_pause": "Пауза",
+    "btn_resume": "Возобновить",
+    "log_download_paused": "Загрузка приостановлена",
+    "log_download_resumed": "Загрузка возобновлена",
+    "log_audio_paused": "Обработка аудио приостановлена",
+    "log_audio_resumed": "Обработка аудио возобновлена",
+    "log_video_paused": "Генерация видео приостановлена",
+    "log_video_resumed": "Генерация видео возобновлена",
+    "log_upload_paused": "Загрузка приостановлена",
+    "log_upload_resumed": "Загрузка возобновлена",
 }
 

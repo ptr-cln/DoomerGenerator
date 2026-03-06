@@ -1039,6 +1039,7 @@ class YouTubeUploader:
         settings: UploadSettings,
         progress: Callable[[float, int, int, float, str, float, int], None],
         on_uploaded: Callable[[Path], None] | None = None,
+        check_pause: Callable[[], bool] | None = None,
     ) -> UploadSummary:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         total = len(files)
@@ -1069,6 +1070,11 @@ class YouTubeUploader:
             first_batch = False
 
             for video_file in current_files:
+                # Check for pause
+                if check_pause:
+                    while check_pause():
+                        time.sleep(0.1)
+
                 # Recalculate total on each iteration to account for new videos detected during upload
                 all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
                 total = uploaded + failed + len(all_pending)
@@ -1235,6 +1241,7 @@ class DoomerBatchConverter:
         output_dir: Path,
         settings: AudioSettings,
         progress: Callable[[int, int, str], None],
+        check_pause: Callable[[], bool] | None = None,
     ) -> ConversionSummary:
         files = _collect_files(input_dir, AUDIO_EXTENSIONS)
         total = len(files)
@@ -1251,6 +1258,11 @@ class DoomerBatchConverter:
         output_suffix = f".{settings.output_format.lower()}"
 
         for index, source_file in enumerate(files, start=1):
+            # Check for pause
+            if check_pause:
+                while check_pause():
+                    time.sleep(0.1)
+
             relative = source_file.relative_to(input_dir)
             output_name = f"{_with_doomer_suffix(relative.stem)}{output_suffix}"
             destination = output_dir / relative.parent / output_name
@@ -1356,6 +1368,7 @@ class DoomerVideoGenerator:
         video_output_dir: Path,
         settings: VideoSettings,
         progress: Callable[[int, int, int, str, str], None],
+        check_pause: Callable[[], bool] | None = None,
     ) -> VideoSummary:
         audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
         total = len(audio_files)
@@ -1385,6 +1398,11 @@ class DoomerVideoGenerator:
         generation_times: list[float] = []
 
         for index, audio_file in enumerate(audio_files, start=1):
+            # Check for pause
+            if check_pause:
+                while check_pause():
+                    time.sleep(0.1)
+
             relative = audio_file.relative_to(audio_input_dir)
             destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1705,6 +1723,12 @@ class DoomerGeneratorApp:
         self.video_processing = False
         self.uploading = False
         self.youtube_authenticating = False
+
+        # Pause/Resume flags
+        self.download_paused = False
+        self.audio_paused = False
+        self.video_paused = False
+        self.upload_paused = False
 
         self._ensure_default_filesystem()
         self._ensure_links_file()
@@ -2225,7 +2249,9 @@ class DoomerGeneratorApp:
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X, pady=(10, 0))
         self.download_button = ttk.Button(actions, text=self._t("download_btn_download_mp3"), command=self._start_download)
-        self.download_button.pack(side=tk.LEFT)
+        self.download_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.download_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_download_pause, state=tk.DISABLED)
+        self.download_pause_button.pack(side=tk.LEFT)
 
         # Download progress bar and timer
         download_progress_box = ttk.LabelFrame(parent, text=self._t("status_group_download"), padding=8)
@@ -2343,7 +2369,9 @@ class DoomerGeneratorApp:
             text=self._t("audio_btn_convert"),
             command=self._start_audio_conversion,
         )
-        self.audio_convert_button.pack(side=tk.LEFT)
+        self.audio_convert_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.audio_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_audio_pause, state=tk.DISABLED)
+        self.audio_pause_button.pack(side=tk.LEFT)
         self.audio_reset_button = ttk.Button(
             actions,
             text=self._t("audio_btn_reset"),
@@ -2525,7 +2553,9 @@ class DoomerGeneratorApp:
             text=self._t("video_btn_generate"),
             command=self._start_video_generation,
         )
-        self.video_generate_button.pack(side=tk.LEFT)
+        self.video_generate_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.video_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_video_pause, state=tk.DISABLED)
+        self.video_pause_button.pack(side=tk.LEFT)
         self.video_play_test_button = ttk.Button(
             actions,
             text=self._t("video_btn_play_test"),
@@ -2686,7 +2716,9 @@ class DoomerGeneratorApp:
             text=self._t("upload_btn_upload"),
             command=self._start_youtube_upload,
         )
-        self.youtube_upload_button.pack(side=tk.LEFT, padx=8)
+        self.youtube_upload_button.pack(side=tk.LEFT, padx=(8, 5))
+        self.upload_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_upload_pause, state=tk.DISABLED)
+        self.upload_pause_button.pack(side=tk.LEFT)
         self.upload_save_button = ttk.Button(
             actions,
             text=self._t("save_settings_btn"),
@@ -3614,6 +3646,7 @@ class DoomerGeneratorApp:
                 settings=settings,
                 progress=self._queue_upload_progress,
                 on_uploaded=self._cleanup_after_successful_upload,
+                check_pause=lambda: self.upload_paused,
             )
             self.events.put(("upload_finished", summary))
         except Exception as error:  # noqa: BLE001
@@ -3635,6 +3668,10 @@ class DoomerGeneratorApp:
             percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
 
             for index, target in enumerate(targets, start=1):
+                # Check for pause
+                while self.download_paused:
+                    time.sleep(0.1)
+
                 self.events.put(("log", f"[{index}/{total}] Download: {target.source_url}"))
                 if target.playlist_id and target.playlist_index:
                     self.events.put(
@@ -3764,6 +3801,7 @@ class DoomerGeneratorApp:
                 output_dir=output_dir,
                 settings=settings,
                 progress=self._queue_audio_progress,
+                check_pause=lambda: self.audio_paused,
             )
             self.events.put(("audio_finished", summary))
         except Exception as error:  # noqa: BLE001
@@ -3790,6 +3828,7 @@ class DoomerGeneratorApp:
                 video_output_dir=output_video_dir,
                 settings=settings,
                 progress=self._queue_video_progress,
+                check_pause=lambda: self.video_paused,
             )
             self.events.put(("video_finished", summary))
         except Exception as error:  # noqa: BLE001
@@ -4276,6 +4315,38 @@ class DoomerGeneratorApp:
             or self.youtube_authenticating
         )
 
+    def _toggle_download_pause(self) -> None:
+        """Toggle pause/resume for download operation."""
+        self.download_paused = not self.download_paused
+        button_text = self._t("btn_resume") if self.download_paused else self._t("btn_pause")
+        self.download_pause_button.configure(text=button_text)
+        status = "paused" if self.download_paused else "resumed"
+        self._log(self._t(f"log_download_{status}"))
+
+    def _toggle_audio_pause(self) -> None:
+        """Toggle pause/resume for audio operation."""
+        self.audio_paused = not self.audio_paused
+        button_text = self._t("btn_resume") if self.audio_paused else self._t("btn_pause")
+        self.audio_pause_button.configure(text=button_text)
+        status = "paused" if self.audio_paused else "resumed"
+        self._log(self._t(f"log_audio_{status}"))
+
+    def _toggle_video_pause(self) -> None:
+        """Toggle pause/resume for video operation."""
+        self.video_paused = not self.video_paused
+        button_text = self._t("btn_resume") if self.video_paused else self._t("btn_pause")
+        self.video_pause_button.configure(text=button_text)
+        status = "paused" if self.video_paused else "resumed"
+        self._log(self._t(f"log_video_{status}"))
+
+    def _toggle_upload_pause(self) -> None:
+        """Toggle pause/resume for upload operation."""
+        self.upload_paused = not self.upload_paused
+        button_text = self._t("btn_resume") if self.upload_paused else self._t("btn_pause")
+        self.upload_pause_button.configure(text=button_text)
+        status = "paused" if self.upload_paused else "resumed"
+        self._log(self._t(f"log_upload_{status}"))
+
     def _set_action_buttons_enabled(self) -> None:
         """Update button states based on current operations.
 
@@ -4286,6 +4357,8 @@ class DoomerGeneratorApp:
         download_state = tk.NORMAL if not self.downloading else tk.DISABLED
         self.download_button.configure(state=download_state)
         self.open_links_button.configure(state=download_state)
+        # Pause button enabled only when downloading
+        self.download_pause_button.configure(state=tk.NORMAL if self.downloading else tk.DISABLED)
 
         # Audio tab buttons - disabled only when processing audio
         audio_state = tk.NORMAL if not self.audio_processing else tk.DISABLED
@@ -4294,6 +4367,8 @@ class DoomerGeneratorApp:
         self.audio_save_button.configure(state=audio_state)
         self.audio_test_play_button.configure(state=audio_state)
         self.audio_test_stop_button.configure(state=audio_state)
+        # Pause button enabled only when processing audio
+        self.audio_pause_button.configure(state=tk.NORMAL if self.audio_processing else tk.DISABLED)
 
         # Video tab buttons - disabled only when processing video
         video_state = tk.NORMAL if not self.video_processing else tk.DISABLED
@@ -4303,6 +4378,8 @@ class DoomerGeneratorApp:
         self.video_encoder_combo.configure(state="readonly" if not self.video_processing else "disabled")
         # Shutdown checkbox is always enabled so users can toggle it during video generation
         self.video_shutdown_after_generation_check.configure(state=tk.NORMAL)
+        # Pause button enabled only when processing video
+        self.video_pause_button.configure(state=tk.NORMAL if self.video_processing else tk.DISABLED)
 
         # Upload tab buttons - disabled when uploading or authenticating
         upload_state = tk.NORMAL if not (self.uploading or self.youtube_authenticating) else tk.DISABLED
@@ -4316,6 +4393,8 @@ class DoomerGeneratorApp:
         self.youtube_shutdown_after_upload_check.configure(state=tk.NORMAL)
         self.youtube_openai_model_entry.configure(state=upload_state)
         self.youtube_openai_key_entry.configure(state=upload_state)
+        # Pause button enabled only when uploading
+        self.upload_pause_button.configure(state=tk.NORMAL if self.uploading else tk.DISABLED)
 
         # General tab buttons - disabled if ANY operation is running
         any_busy = self._is_busy()

@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "লগ রপ্তানি করতে ত্রুটি:\n{error}",
     "log_export_success": "লগ রপ্তানি করা হয়েছে: {path}",
     "log_export_error": "লগ রপ্তানি করতে ত্রুটি: {error}",
+    # Pause/Resume
+    "btn_pause": "বিরতি",
+    "btn_resume": "পুনরায় শুরু করুন",
+    "log_download_paused": "ডাউনলোড বিরতি দেওয়া হয়েছে",
+    "log_download_resumed": "ডাউনলোড পুনরায় শুরু হয়েছে",
+    "log_audio_paused": "অডিও প্রসেসিং বিরতি দেওয়া হয়েছে",
+    "log_audio_resumed": "অডিও প্রসেসিং পুনরায় শুরু হয়েছে",
+    "log_video_paused": "ভিডিও জেনারেশন বিরতি দেওয়া হয়েছে",
+    "log_video_resumed": "ভিডিও জেনারেশন পুনরায় শুরু হয়েছে",
+    "log_upload_paused": "আপলোড বিরতি দেওয়া হয়েছে",
+    "log_upload_resumed": "আপলোড পুনরায় শুরু হয়েছে",
 }
 

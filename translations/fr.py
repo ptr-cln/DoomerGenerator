@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "Erreur lors de l'exportation des journaux:\n{error}",
     "log_export_success": "Journaux exportés vers: {path}",
     "log_export_error": "Erreur lors de l'exportation des journaux: {error}",
+    # Pause/Resume
+    "btn_pause": "Pause",
+    "btn_resume": "Reprendre",
+    "log_download_paused": "Téléchargement en pause",
+    "log_download_resumed": "Téléchargement repris",
+    "log_audio_paused": "Traitement audio en pause",
+    "log_audio_resumed": "Traitement audio repris",
+    "log_video_paused": "Génération vidéo en pause",
+    "log_video_resumed": "Génération vidéo reprise",
+    "log_upload_paused": "Téléversement en pause",
+    "log_upload_resumed": "Téléversement repris",
 }
 

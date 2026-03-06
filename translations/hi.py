@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "लॉग निर्यात करते समय त्रुटि:\n{error}",
     "log_export_success": "लॉग निर्यात किए गए: {path}",
     "log_export_error": "लॉग निर्यात करते समय त्रुटि: {error}",
+    # Pause/Resume
+    "btn_pause": "रोकें",
+    "btn_resume": "फिर से शुरू करें",
+    "log_download_paused": "डाउनलोड रोका गया",
+    "log_download_resumed": "डाउनलोड फिर से शुरू किया गया",
+    "log_audio_paused": "ऑडियो प्रोसेसिंग रोकी गई",
+    "log_audio_resumed": "ऑडियो प्रोसेसिंग फिर से शुरू की गई",
+    "log_video_paused": "वीडियो जनरेशन रोका गया",
+    "log_video_resumed": "वीडियो जनरेशन फिर से शुरू किया गया",
+    "log_upload_paused": "अपलोड रोका गया",
+    "log_upload_resumed": "अपलोड फिर से शुरू किया गया",
 }
 

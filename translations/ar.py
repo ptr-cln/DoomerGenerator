@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "خطأ في تصدير السجلات:\n{error}",
     "log_export_success": "تم تصدير السجلات إلى: {path}",
     "log_export_error": "خطأ في تصدير السجلات: {error}",
+    # Pause/Resume
+    "btn_pause": "إيقاف مؤقت",
+    "btn_resume": "استئناف",
+    "log_download_paused": "تم إيقاف التنزيل مؤقتاً",
+    "log_download_resumed": "تم استئناف التنزيل",
+    "log_audio_paused": "تم إيقاف معالجة الصوت مؤقتاً",
+    "log_audio_resumed": "تم استئناف معالجة الصوت",
+    "log_video_paused": "تم إيقاف إنشاء الفيديو مؤقتاً",
+    "log_video_resumed": "تم استئناف إنشاء الفيديو",
+    "log_upload_paused": "تم إيقاف الرفع مؤقتاً",
+    "log_upload_resumed": "تم استئناف الرفع",
 }
 

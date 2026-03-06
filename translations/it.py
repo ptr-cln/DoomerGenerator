@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "Errore durante l'esportazione dei log:\n{error}",
     "log_export_success": "Log esportati in: {path}",
     "log_export_error": "Errore durante l'esportazione dei log: {error}",
+    # Pause/Resume
+    "btn_pause": "Pausa",
+    "btn_resume": "Riprendi",
+    "log_download_paused": "Download in pausa",
+    "log_download_resumed": "Download ripreso",
+    "log_audio_paused": "Elaborazione audio in pausa",
+    "log_audio_resumed": "Elaborazione audio ripresa",
+    "log_video_paused": "Generazione video in pausa",
+    "log_video_resumed": "Generazione video ripresa",
+    "log_upload_paused": "Upload in pausa",
+    "log_upload_resumed": "Upload ripreso",
 }
 

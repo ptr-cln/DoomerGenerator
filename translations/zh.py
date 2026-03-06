@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "导出日志时出错:\n{error}",
     "log_export_success": "日志已导出到: {path}",
     "log_export_error": "导出日志时出错: {error}",
+    # Pause/Resume
+    "btn_pause": "暂停",
+    "btn_resume": "恢复",
+    "log_download_paused": "下载已暂停",
+    "log_download_resumed": "下载已恢复",
+    "log_audio_paused": "音频处理已暂停",
+    "log_audio_resumed": "音频处理已恢复",
+    "log_video_paused": "视频生成已暂停",
+    "log_video_resumed": "视频生成已恢复",
+    "log_upload_paused": "上传已暂停",
+    "log_upload_resumed": "上传已恢复",
 }
 

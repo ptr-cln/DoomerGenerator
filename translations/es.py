@@ -223,5 +223,16 @@ TRANSLATIONS = {
     "export_logs_error": "Error al exportar registros:\n{error}",
     "log_export_success": "Registros exportados a: {path}",
     "log_export_error": "Error al exportar registros: {error}",
+    # Pause/Resume
+    "btn_pause": "Pausar",
+    "btn_resume": "Reanudar",
+    "log_download_paused": "Descarga pausada",
+    "log_download_resumed": "Descarga reanudada",
+    "log_audio_paused": "Procesamiento de audio pausado",
+    "log_audio_resumed": "Procesamiento de audio reanudado",
+    "log_video_paused": "Generación de video pausada",
+    "log_video_resumed": "Generación de video reanudada",
+    "log_upload_paused": "Subida pausada",
+    "log_upload_resumed": "Subida reanudada",
 }
 
