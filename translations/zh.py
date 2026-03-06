@@ -315,5 +315,18 @@ TRANSLATIONS = {
     "log_backup_restored": "备份已恢复: {name}",
     "log_backup_cleanup": "旧备份已删除",
     "dialog_cancel": "取消",
+    # Update System
+    "general_group_update": "更新",
+    "update_current_version": "当前版本：{version}",
+    "update_btn_check": "检查更新",
+    "update_check_auto_check": "启动时自动检查",
+    "update_dialog_title": "软件更新",
+    "update_available_title": "新版本可用：{version}",
+    "update_release_notes": "发布说明：",
+    "update_no_notes": "无发布说明。",
+    "update_btn_download": "下载更新",
+    "update_no_update_message": "您已在使用最新版本（{version}）。",
+    "update_check_error": "检查更新失败：\n{error}",
+    "log_update_available": "更新可用：版本 {version}",
 }
 

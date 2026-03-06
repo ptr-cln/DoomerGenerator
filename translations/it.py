@@ -315,5 +315,18 @@ TRANSLATIONS = {
     "log_backup_restored": "Backup ripristinato: {name}",
     "log_backup_cleanup": "Backup vecchi rimossi",
     "dialog_cancel": "Annulla",
+    # Update System
+    "general_group_update": "Aggiornamenti",
+    "update_current_version": "Versione corrente: {version}",
+    "update_btn_check": "Controlla Aggiornamenti",
+    "update_check_auto_check": "Controlla automaticamente all'avvio",
+    "update_dialog_title": "Aggiornamento Software",
+    "update_available_title": "Nuova versione disponibile: {version}",
+    "update_release_notes": "Note di rilascio:",
+    "update_no_notes": "Nessuna nota di rilascio disponibile.",
+    "update_btn_download": "Scarica Aggiornamento",
+    "update_no_update_message": "Stai già utilizzando l'ultima versione ({version}).",
+    "update_check_error": "Impossibile controllare gli aggiornamenti:\n{error}",
+    "log_update_available": "Aggiornamento disponibile: versione {version}",
 }
 

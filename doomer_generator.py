@@ -49,6 +49,10 @@ DOOMER_OVERLAY_HEIGHT = 980
 DOOMER_OVERLAY_LEFT = 36
 APP_SETTINGS_FILE = "app_settings.json"
 AUDIO_OUTPUT_FORMATS = {"mp3", "wav", "flac", "ogg"}
+APP_VERSION = "1.8.0"  # Current application version
+GITHUB_REPO = "ptr-cln/DoomerGenerator"  # GitHub repository
+UPDATE_CHECK_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+UPDATE_CHECK_TIMEOUT = 5  # Timeout for update check in seconds
 EQ_BAND_FREQUENCIES = (90, 250, 500, 1500, 3000, 5000, 8000)
 EQ_DEFAULT_GAINS = (4.0, 2.0, 1.0, 0.0, -2.5, -4.0, -5.5)
 VIDEO_ENCODER_OPTIONS = {"auto", "cpu", "nvidia", "intel", "amd"}
@@ -1962,6 +1966,8 @@ class DoomerGeneratorApp:
         self.progress_text.set(self._t("status_ready"))
         self.root.after(100, self._poll_events)
         self.root.after(1000, self._update_timers)
+        # Check for updates on startup (after 2 seconds to let UI load)
+        self.root.after(2000, lambda: self._check_for_updates(show_no_update=False))
 
     def _t(self, key: str, **kwargs: object) -> str:
         """Translate a key using the current language, with fallback to English."""
@@ -2485,6 +2491,33 @@ class DoomerGeneratorApp:
         backup_info_text = self._t("backup_info", count=backup_count)
         self.backup_info_label = ttk.Label(backup_box, text=backup_info_text)
         self.backup_info_label.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+
+        # Update System section
+        update_box = ttk.LabelFrame(parent, text=self._t("general_group_update"), padding=8)
+        update_box.pack(fill=tk.X, pady=(10, 0))
+        update_box.columnconfigure(1, weight=1)
+
+        # Version info
+        version_text = self._t("update_current_version", version=APP_VERSION)
+        self.version_label = ttk.Label(update_box, text=version_text)
+        self.version_label.grid(row=0, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+
+        # Check for updates button
+        self.check_updates_button = ttk.Button(
+            update_box,
+            text=self._t("update_btn_check"),
+            command=lambda: self._check_for_updates(show_no_update=True),
+        )
+        self.check_updates_button.grid(row=1, column=0, padx=6, pady=6, sticky="w")
+
+        # Auto-check checkbox
+        self.auto_check_updates_var = tk.BooleanVar(value=True)
+        self.auto_check_updates_check = ttk.Checkbutton(
+            update_box,
+            text=self._t("update_check_auto_check"),
+            variable=self.auto_check_updates_var,
+        )
+        self.auto_check_updates_check.grid(row=1, column=1, padx=6, pady=6, sticky="w")
 
         info = ttk.LabelFrame(parent, text=self._t("general_group_paths"), padding=8)
         info.pack(fill=tk.X, pady=(10, 0))
@@ -5334,6 +5367,153 @@ class DoomerGeneratorApp:
             return False
         return True
 
+    # ============================================================================
+    # Update System Methods
+    # ============================================================================
+
+    def _check_for_updates(self, show_no_update: bool = False) -> None:
+        """Check for updates on GitHub in a background thread."""
+        def check_thread():
+            try:
+                self._log_debug("Checking for updates...")
+
+                # Make HTTP request to GitHub API
+                req = urllib.request.Request(UPDATE_CHECK_URL)
+                req.add_header("Accept", "application/vnd.github.v3+json")
+
+                with urllib.request.urlopen(req, timeout=UPDATE_CHECK_TIMEOUT) as response:
+                    data = json.loads(response.read().decode())
+
+                latest_version = data.get("tag_name", "").lstrip("v")
+                release_url = data.get("html_url", "")
+                release_notes = data.get("body", "")
+
+                if not latest_version:
+                    self._log_debug("Could not determine latest version")
+                    if show_no_update:
+                        self.events.put(("update_check_failed", "Could not determine latest version"))
+                    return
+
+                # Compare versions
+                if self._is_newer_version(latest_version, APP_VERSION):
+                    self._log_debug(f"Update available: {latest_version} (current: {APP_VERSION})")
+                    self.events.put(("update_available", {
+                        "version": latest_version,
+                        "url": release_url,
+                        "notes": release_notes
+                    }))
+                else:
+                    self._log_debug(f"Already on latest version: {APP_VERSION}")
+                    if show_no_update:
+                        self.events.put(("update_no_update", APP_VERSION))
+
+            except urllib.error.URLError as error:
+                self._log_debug(f"Update check failed: {error}")
+                if show_no_update:
+                    self.events.put(("update_check_failed", str(error)))
+            except Exception as error:  # noqa: BLE001
+                self._log_debug(f"Update check error: {error}")
+                if show_no_update:
+                    self.events.put(("update_check_failed", str(error)))
+
+        thread = threading.Thread(target=check_thread, daemon=True)
+        thread.start()
+
+    def _is_newer_version(self, latest: str, current: str) -> bool:
+        """Compare two semantic version strings (e.g., '1.8.0' vs '1.7.5')."""
+        try:
+            latest_parts = [int(x) for x in latest.split(".")]
+            current_parts = [int(x) for x in current.split(".")]
+
+            # Pad with zeros if needed
+            while len(latest_parts) < 3:
+                latest_parts.append(0)
+            while len(current_parts) < 3:
+                current_parts.append(0)
+
+            return latest_parts > current_parts
+        except (ValueError, AttributeError):
+            return False
+
+    def _show_update_dialog(self, update_info: dict) -> None:
+        """Show update notification dialog."""
+        version = update_info.get("version", "unknown")
+        url = update_info.get("url", "")
+        notes = update_info.get("notes", "")
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self._t("update_dialog_title"))
+        dialog.geometry("600x400")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (400 // 2)
+        dialog.geometry(f"600x400+{x}+{y}")
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        title_label = ttk.Label(
+            main_frame,
+            text=self._t("update_available_title", version=version),
+            font=("TkDefaultFont", 12, "bold")
+        )
+        title_label.pack(pady=(0, 10))
+
+        # Current version
+        current_label = ttk.Label(
+            main_frame,
+            text=self._t("update_current_version", version=APP_VERSION)
+        )
+        current_label.pack(pady=(0, 20))
+
+        # Release notes
+        notes_label = ttk.Label(main_frame, text=self._t("update_release_notes"))
+        notes_label.pack(anchor="w", pady=(0, 5))
+
+        notes_frame = ttk.Frame(main_frame)
+        notes_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+
+        notes_text = tk.Text(notes_frame, wrap=tk.WORD, height=10)
+        notes_scrollbar = ttk.Scrollbar(notes_frame, command=notes_text.yview)
+        notes_text.configure(yscrollcommand=notes_scrollbar.set)
+
+        notes_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        notes_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        notes_text.insert("1.0", notes if notes else self._t("update_no_notes"))
+        notes_text.configure(state="disabled")
+
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+
+        def open_release():
+            import webbrowser
+            webbrowser.open(url)
+            dialog.destroy()
+
+        download_btn = ttk.Button(
+            button_frame,
+            text=self._t("update_btn_download"),
+            command=open_release
+        )
+        download_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+        close_btn = ttk.Button(
+            button_frame,
+            text=self._t("dialog_cancel"),
+            command=dialog.destroy
+        )
+        close_btn.pack(side=tk.LEFT)
+
     def _apply_audio_settings(self, audio: dict[str, object]) -> None:
         audio_input = audio.get("input_dir")
         if isinstance(audio_input, str) and audio_input.strip():
@@ -5932,6 +6112,22 @@ class DoomerGeneratorApp:
                         self._schedule_shutdown()
                     else:
                         self._log(self._t("log_shutdown_skipped_busy"))
+            elif event == "update_available":
+                update_info = payload  # type: ignore[assignment]
+                self._log(self._t("log_update_available", version=update_info.get("version", "unknown")))
+                self._show_update_dialog(update_info)
+            elif event == "update_no_update":
+                version = str(payload)
+                messagebox.showinfo(
+                    self._t("update_dialog_title"),
+                    self._t("update_no_update_message", version=version)
+                )
+            elif event == "update_check_failed":
+                error = str(payload)
+                messagebox.showerror(
+                    self._t("update_dialog_title"),
+                    self._t("update_check_error", error=error)
+                )
 
         self.root.after(120, self._poll_events)
 

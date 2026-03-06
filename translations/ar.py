@@ -315,5 +315,18 @@ TRANSLATIONS = {
     "log_backup_restored": "تمت استعادة النسخة الاحتياطية: {name}",
     "log_backup_cleanup": "تم حذف النسخ الاحتياطية القديمة",
     "dialog_cancel": "إلغاء",
+    # Update System
+    "general_group_update": "التحديثات",
+    "update_current_version": "الإصدار الحالي: {version}",
+    "update_btn_check": "التحقق من التحديثات",
+    "update_check_auto_check": "التحقق تلقائيًا عند بدء التشغيل",
+    "update_dialog_title": "تحديث البرنامج",
+    "update_available_title": "إصدار جديد متاح: {version}",
+    "update_release_notes": "ملاحظات الإصدار:",
+    "update_no_notes": "لا توجد ملاحظات إصدار متاحة.",
+    "update_btn_download": "تنزيل التحديث",
+    "update_no_update_message": "أنت تستخدم بالفعل أحدث إصدار ({version}).",
+    "update_check_error": "فشل التحقق من التحديثات:\n{error}",
+    "log_update_available": "تحديث متاح: الإصدار {version}",
 }
 

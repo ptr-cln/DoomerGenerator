@@ -315,5 +315,18 @@ TRANSLATIONS = {
     "log_backup_restored": "Резервная копия восстановлена: {name}",
     "log_backup_cleanup": "Старые резервные копии удалены",
     "dialog_cancel": "Отмена",
+    # Update System
+    "general_group_update": "Обновления",
+    "update_current_version": "Текущая версия: {version}",
+    "update_btn_check": "Проверить Обновления",
+    "update_check_auto_check": "Проверять автоматически при запуске",
+    "update_dialog_title": "Обновление Программы",
+    "update_available_title": "Доступна новая версия: {version}",
+    "update_release_notes": "Примечания к выпуску:",
+    "update_no_notes": "Примечания к выпуску отсутствуют.",
+    "update_btn_download": "Скачать Обновление",
+    "update_no_update_message": "Вы уже используете последнюю версию ({version}).",
+    "update_check_error": "Не удалось проверить обновления:\n{error}",
+    "log_update_available": "Доступно обновление: версия {version}",
 }
 

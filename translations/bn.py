@@ -315,5 +315,18 @@ TRANSLATIONS = {
     "log_backup_restored": "ব্যাকআপ পুনরুদ্ধার করা হয়েছে: {name}",
     "log_backup_cleanup": "পুরানো ব্যাকআপ মুছে ফেলা হয়েছে",
     "dialog_cancel": "বাতিল করুন",
+    # Update System
+    "general_group_update": "আপডেট",
+    "update_current_version": "বর্তমান সংস্করণ: {version}",
+    "update_btn_check": "আপডেট পরীক্ষা করুন",
+    "update_check_auto_check": "স্টার্টআপে স্বয়ংক্রিয়ভাবে পরীক্ষা করুন",
+    "update_dialog_title": "সফটওয়্যার আপডেট",
+    "update_available_title": "নতুন সংস্করণ উপলব্ধ: {version}",
+    "update_release_notes": "রিলিজ নোট:",
+    "update_no_notes": "কোনো রিলিজ নোট উপলব্ধ নেই।",
+    "update_btn_download": "আপডেট ডাউনলোড করুন",
+    "update_no_update_message": "আপনি ইতিমধ্যে সর্বশেষ সংস্করণ ({version}) ব্যবহার করছেন।",
+    "update_check_error": "আপডেট পরীক্ষা করতে ব্যর্থ:\n{error}",
+    "log_update_available": "আপডেট উপলব্ধ: সংস্করণ {version}",
 }
 
