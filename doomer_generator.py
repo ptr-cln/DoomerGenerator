@@ -149,7 +149,11 @@ UI_TEXTS = {
         "video_desc_glitch": "Disturbi digitali casuali e shift di colore.",
         "video_check_shutdown": "Spegni computer al termine (5m)",
         "video_btn_generate": "Genera video batch",
+        "video_btn_play_test": "▶ Play Test (10s)",
         "video_btn_reset": "Reset default",
+        "video_play_test_generating": "Generazione preview in corso...",
+        "video_play_test_title": "Preview Effetti Video",
+        "video_play_test_error": "Errore durante la generazione del video di test",
         "upload_group_source": "Sorgente Upload",
         "upload_label_video_folder": "Cartella video",
         "upload_group_auth": "Autenticazione YouTube API",
@@ -351,7 +355,11 @@ UI_TEXTS = {
         "video_desc_glitch": "Random digital artifacts and color shifts.",
         "video_check_shutdown": "Turn off computer when done (5m)",
         "video_btn_generate": "Generate batch videos",
+        "video_btn_play_test": "▶ Play Test (10s)",
         "video_btn_reset": "Reset defaults",
+        "video_play_test_generating": "Generating preview...",
+        "video_play_test_title": "Video Effects Preview",
+        "video_play_test_error": "Error generating test video",
         "upload_group_source": "Upload Source",
         "upload_label_video_folder": "Video folder",
         "upload_group_auth": "YouTube API Authentication",
@@ -2679,12 +2687,18 @@ class DoomerGeneratorApp:
             command=self._start_video_generation,
         )
         self.video_generate_button.pack(side=tk.LEFT)
+        self.video_play_test_button = ttk.Button(
+            actions,
+            text=self._t("video_btn_play_test"),
+            command=self._show_video_play_test,
+        )
+        self.video_play_test_button.pack(side=tk.LEFT, padx=8)
         self.video_reset_button = ttk.Button(
             actions,
             text=self._t("video_btn_reset"),
             command=self._reset_video_defaults,
         )
-        self.video_reset_button.pack(side=tk.LEFT, padx=8)
+        self.video_reset_button.pack(side=tk.LEFT)
         self.video_save_button = ttk.Button(
             actions,
             text=self._t("save_settings_btn"),
@@ -3416,6 +3430,194 @@ class DoomerGeneratorApp:
             daemon=True,
         )
         thread.start()
+
+    def _show_video_play_test(self) -> None:
+        """Generate and display a 10-second preview video with current settings."""
+        ffmpeg_bin = self._resolve_ffmpeg()
+        if not ffmpeg_bin:
+            messagebox.showerror(
+                self._t("ffmpeg_missing_download_title"),
+                self._t("ffmpeg_missing_download_body"),
+            )
+            return
+
+        if not self.doomer_image_path.is_file():
+            messagebox.showerror(
+                self._t("dialog_invalid_input_title"),
+                f"Doomer image not found: {self.doomer_image_path}",
+            )
+            return
+
+        backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+        if not backgrounds:
+            messagebox.showerror(
+                self._t("dialog_invalid_input_title"),
+                f"No backgrounds found in: {self.backgrounds_dir}",
+            )
+            return
+
+        # Collect current settings (without saving them)
+        settings = VideoSettings(
+            fade_in_seconds=self.video_fade_in_var.get(),
+            fade_out_seconds=self.video_fade_out_var.get(),
+            noise_percent=self.video_noise_var.get(),
+            distortion_percent=self.video_distortion_var.get(),
+            vhs_effect=self.video_vhs_var.get(),
+            chromatic_aberration=self.video_chromatic_var.get(),
+            film_burn=self.video_burn_var.get(),
+            glitch_effect=self.video_glitch_var.get(),
+            video_encoder=self._sanitize_video_encoder(
+                self.video_encoder_var.get(),
+                self.default_video_settings.video_encoder,
+            ),
+            shutdown_after_generation=False,  # Never shutdown for preview
+        )
+
+        # Run generation in background thread
+        thread = threading.Thread(
+            target=self._generate_and_show_preview,
+            args=(ffmpeg_bin, backgrounds, settings),
+            daemon=True,
+        )
+        thread.start()
+
+    def _generate_and_show_preview(
+        self,
+        ffmpeg_bin: str,
+        backgrounds: list[Path],
+        settings: VideoSettings,
+    ) -> None:
+        """Background thread to generate preview video and show popup."""
+        temp_video = None
+        try:
+            # Create temporary file for the preview video
+            temp_fd, temp_path = tempfile.mkstemp(suffix=".mp4", prefix="doomer_preview_")
+            os.close(temp_fd)
+            temp_video = Path(temp_path)
+
+            # Pick a random background (don't update usage memory)
+            background = random.choice(backgrounds)
+
+            # Generate silent 10-second video
+            self.events.put(("log", self._t("video_play_test_generating")))
+            success = self._generate_preview_video(
+                ffmpeg_bin=ffmpeg_bin,
+                background=background,
+                output_path=temp_video,
+                settings=settings,
+                duration=10.0,
+            )
+
+            if success and temp_video.is_file():
+                # Show popup in main thread
+                self.root.after(0, lambda: self._open_video_player_popup(temp_video))
+            else:
+                self.root.after(
+                    0,
+                    lambda: messagebox.showerror(
+                        self._t("video_play_test_title"),
+                        self._t("video_play_test_error"),
+                    ),
+                )
+                if temp_video and temp_video.is_file():
+                    temp_video.unlink()
+
+        except Exception as error:  # noqa: BLE001
+            self.events.put(("log", f"Preview error: {error}"))
+            self.root.after(
+                0,
+                lambda: messagebox.showerror(
+                    self._t("video_play_test_title"),
+                    f"{self._t('video_play_test_error')}: {error}",
+                ),
+            )
+            if temp_video and temp_video.is_file():
+                temp_video.unlink()
+
+    def _generate_preview_video(
+        self,
+        ffmpeg_bin: str,
+        background: Path,
+        output_path: Path,
+        settings: VideoSettings,
+        duration: float,
+    ) -> bool:
+        """Generate a silent preview video with the given settings."""
+        # Build FFMPEG command for silent video (no audio input)
+        command = [
+            ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            str(background),
+            "-loop",
+            "1",
+            "-i",
+            str(self.doomer_image_path),
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=44100",  # Silent audio
+            "-filter_complex",
+            settings.build_filter_complex(audio_duration_seconds=duration),
+            "-map",
+            "[vout]",
+            "-map",
+            "[aout]",
+            "-c:v",
+            "libx264",  # Use CPU encoder for preview (fast and reliable)
+            "-preset",
+            "ultrafast",  # Fast encoding for preview
+            "-crf",
+            "28",  # Lower quality for faster encoding
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-t",
+            str(duration),  # Limit to specified duration
+            str(output_path),
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True)
+        return result.returncode == 0
+
+    def _open_video_player_popup(self, video_path: Path) -> None:
+        """Open a popup window with a looping video player."""
+        try:
+            # Use system default video player to open the file
+            if sys.platform == "darwin":  # macOS
+                subprocess.Popen(["open", str(video_path)])
+            elif sys.platform.startswith("linux"):
+                subprocess.Popen(["xdg-open", str(video_path)])
+            elif os.name == "nt":  # Windows
+                os.startfile(str(video_path))
+
+            # Schedule cleanup after 30 seconds (enough time for the video to be opened)
+            def cleanup():
+                time.sleep(30)
+                if video_path.is_file():
+                    try:
+                        video_path.unlink()
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            cleanup_thread = threading.Thread(target=cleanup, daemon=True)
+            cleanup_thread.start()
+
+        except Exception as error:  # noqa: BLE001
+            messagebox.showerror(
+                self._t("video_play_test_title"),
+                f"Error opening video: {error}",
+            )
+            if video_path.is_file():
+                video_path.unlink()
 
     def _start_youtube_login(self) -> None:
         if self.youtube_authenticating:
