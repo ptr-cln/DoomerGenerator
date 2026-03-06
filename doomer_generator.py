@@ -1380,6 +1380,10 @@ class YouTubeUploader:
 
                         link_percent = max(0.0, min(100.0, current_progress * 100.0))
                         overall_percent = ((index - 1) + current_progress) / total * 100.0
+
+                        # DEBUG: Log before calling progress callback
+                        self.log(f"  DEBUG: Calling progress - overall={overall_percent:.1f}%, file={link_percent:.1f}%, speed={speed_mbps:.2f}MB/s")
+
                         progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
 
                     uploaded += 1
