@@ -1330,25 +1330,17 @@ class YouTubeUploader:
                     all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files and f != video_file]
                     pending_size = sum(f.stat().st_size for f in all_pending)
 
-                    self.log(f"  Dimensione file: {file_size / (1024 * 1024):.1f} MB")
-
                     response = None
                     speed_mbps = 0.0  # Initialize speed
-                    iteration = 0
                     # Loop until we get a valid response dict (not None, not False)
                     while not isinstance(response, dict):
-                        iteration += 1
-                        self.log(f"  DEBUG: Iteration {iteration}, calling next_chunk()...")
                         status, response = insert_request.next_chunk(num_retries=3)
-                        self.log(f"  DEBUG: next_chunk() returned, status={status is not None}, response={response is not None}")
 
                         if status is None:
                             # First chunk, no progress yet
-                            self.log(f"  DEBUG: status is None, continuing...")
                             continue
 
                         chunk_count += 1
-                        self.log(f"  DEBUG: Chunk {chunk_count} received, status.progress()={status.progress()}")
 
                         # Calculate upload speed
                         current_progress = status.progress()
@@ -1388,12 +1380,7 @@ class YouTubeUploader:
                         link_percent = max(0.0, min(100.0, current_progress * 100.0))
                         overall_percent = ((index - 1) + current_progress) / total * 100.0
 
-                        # DEBUG: Log before calling progress callback
-                        self.log(f"  DEBUG: Calling progress - overall={overall_percent:.1f}%, file={link_percent:.1f}%, speed={speed_mbps:.2f}MB/s")
-
                         progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps, eta_seconds)
-
-                        self.log(f"  DEBUG: progress() returned, continuing loop...")
 
                     uploaded += 1
                     video_id = response.get("id", "N/A")
