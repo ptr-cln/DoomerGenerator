@@ -1,4 +1,41 @@
 {
-  "audio_presets": {},
-  "video_presets": {}
+  "audio_presets": {
+    "Doomer Standard": {
+      "bitcrush_amount": 5.0,
+      "chorus_intensity": 0.0,
+      "compressor_intensity": 25.0,
+      "distortion_amount": 20.0,
+      "eq_band_gains": [
+        8.0,
+        6.0,
+        3.0,
+        -1.0,
+        -8.5,
+        -10.5,
+        -15.0
+      ],
+      "fade_in_seconds": 1.5,
+      "fade_out_seconds": 1.5,
+      "name": "Doomer Standard",
+      "output_format": "mp3",
+      "reverb_percent": 25.0,
+      "slowdown_percent": 20.0,
+      "stereo_width": 60.0,
+      "vinyl_volume_percent": 12.0
+    }
+  },
+  "video_presets": {
+    "Doomer Standard": {
+      "chromatic_aberration": 80.0,
+      "distortion_percent": 95.0,
+      "fade_in_seconds": 4.0,
+      "fade_out_seconds": 4.0,
+      "film_burn": 1.0,
+      "glitch_effect": 5.0,
+      "name": "Doomer Standard",
+      "noise_percent": 95.0,
+      "vhs_effect": 90.0,
+      "video_encoder": "auto"
+    }
+  }
 }
