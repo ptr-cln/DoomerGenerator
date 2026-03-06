@@ -139,6 +139,14 @@ UI_TEXTS = {
         "video_desc_noise": "Grana/noise su tutto il frame.",
         "video_lbl_distortion": "Distorsione (%)",
         "video_desc_distortion": "Jitter/instabilita stile VHS su tutto il frame.",
+        "video_lbl_vhs": "Effetto VHS (%)",
+        "video_desc_vhs": "Effetto VHS vintage con color bleeding e tracking errors.",
+        "video_lbl_chromatic": "Aberrazione cromatica (%)",
+        "video_desc_chromatic": "Separazione dei canali RGB per effetto glitch ottico.",
+        "video_lbl_burn": "Bruciatura pellicola (%)",
+        "video_desc_burn": "Effetto bruciatura pellicola con macchie luminose.",
+        "video_lbl_glitch": "Glitch digitale (%)",
+        "video_desc_glitch": "Disturbi digitali casuali e shift di colore.",
         "video_check_shutdown": "Spegni computer al termine (5m)",
         "video_btn_generate": "Genera video batch",
         "video_btn_reset": "Reset default",
@@ -333,6 +341,14 @@ UI_TEXTS = {
         "video_desc_noise": "Film grain/noise across the full frame.",
         "video_lbl_distortion": "Distortion (%)",
         "video_desc_distortion": "VHS-style jitter/instability across the full frame.",
+        "video_lbl_vhs": "VHS Effect (%)",
+        "video_desc_vhs": "Vintage VHS effect with color bleeding and tracking errors.",
+        "video_lbl_chromatic": "Chromatic Aberration (%)",
+        "video_desc_chromatic": "RGB channel separation for optical glitch effect.",
+        "video_lbl_burn": "Film Burn (%)",
+        "video_desc_burn": "Film burn effect with bright spots and edge darkening.",
+        "video_lbl_glitch": "Digital Glitch (%)",
+        "video_desc_glitch": "Random digital artifacts and color shifts.",
         "video_check_shutdown": "Turn off computer when done (5m)",
         "video_btn_generate": "Generate batch videos",
         "video_btn_reset": "Reset defaults",
@@ -526,6 +542,10 @@ class VideoSettings:
     fade_out_seconds: float = 3.0
     noise_percent: float = 65.0
     distortion_percent: float = 75.0
+    vhs_effect: float = 0.0
+    chromatic_aberration: float = 0.0
+    film_burn: float = 0.0
+    glitch_effect: float = 0.0
     video_encoder: str = "auto"
     shutdown_after_generation: bool = False
 
@@ -535,6 +555,13 @@ class VideoSettings:
         scanline_alpha = round(0.03 + distortion_strength * 0.12, 3)
         blur_sigma = round(0.15 + distortion_strength * 0.9, 3)
         unsharp_amount = round(0.22 + distortion_strength * 0.25, 3)
+
+        # New effects
+        vhs_strength = max(0.0, min(1.0, self.vhs_effect / 100.0))
+        chroma_strength = max(0.0, min(1.0, self.chromatic_aberration / 100.0))
+        burn_strength = max(0.0, min(1.0, self.film_burn / 100.0))
+        glitch_strength = max(0.0, min(1.0, self.glitch_effect / 100.0))
+
         fade_in = max(0.0, self.fade_in_seconds)
         fade_out = max(0.0, self.fade_out_seconds)
         fade_out_start = None
@@ -566,6 +593,57 @@ class VideoSettings:
             "[vfx]"
         )
         cursor = "vfx"
+
+        # VHS Effect: color bleeding, tracking errors, horizontal distortion
+        if vhs_strength > 0.01:
+            vhs_blur = round(0.3 + vhs_strength * 1.2, 2)
+            vhs_sat = round(1.0 + vhs_strength * 0.3, 2)
+            parts.append(
+                f"[{cursor}]"
+                f"hue=s={vhs_sat},"
+                f"boxblur=lr={vhs_blur}:lp=0,"
+                f"noise=alls={int(10 + vhs_strength * 15)}:allf=t,"
+                f"eq=gamma=1.05:contrast=1.08"
+                "[vhs]"
+            )
+            cursor = "vhs"
+
+        # Chromatic Aberration: RGB channel separation
+        if chroma_strength > 0.01:
+            offset = int(1 + chroma_strength * 4)
+            parts.append(
+                f"[{cursor}]split=3[r][g][b];"
+                f"[r]lutrgb=g=0:b=0,pad=iw+{offset*2}:ih+{offset*2}:{offset}:{offset}[r_pad];"
+                f"[g]lutrgb=r=0:b=0,pad=iw+{offset*2}:ih+{offset*2}:0:0[g_pad];"
+                f"[b]lutrgb=r=0:g=0,pad=iw+{offset*2}:ih+{offset*2}:{offset*2}:{offset*2}[b_pad];"
+                f"[r_pad][g_pad]blend=all_mode=addition[rg];"
+                f"[rg][b_pad]blend=all_mode=addition,crop=iw-{offset*2}:ih-{offset*2}:{offset}:{offset}"
+                "[chroma]"
+            )
+            cursor = "chroma"
+
+        # Film Burn: bright spots and edge darkening
+        if burn_strength > 0.01:
+            burn_bright = round(0.05 + burn_strength * 0.25, 3)
+            burn_contrast = round(1.0 + burn_strength * 0.15, 2)
+            parts.append(
+                f"[{cursor}]"
+                f"eq=brightness={burn_bright}:contrast={burn_contrast},"
+                f"vignette=angle=PI/3:mode=forward"
+                "[burn]"
+            )
+            cursor = "burn"
+
+        # Glitch Effect: random noise bursts and color shifts
+        if glitch_strength > 0.01:
+            glitch_noise = int(20 + glitch_strength * 40)
+            parts.append(
+                f"[{cursor}]"
+                f"noise=alls={glitch_noise}:allf=t+u,"
+                f"hue=h=random(0)*{int(glitch_strength * 360)}:s=1.0+random(0)*{glitch_strength}"
+                "[glitch]"
+            )
+            cursor = "glitch"
 
         if fade_in > 0:
             parts.append(f"[{cursor}]fade=t=in:st=0:d={fade_in:.2f}[vfi]")
@@ -1917,6 +1995,10 @@ class DoomerGeneratorApp:
         self.video_fade_out_var = tk.DoubleVar(value=self.default_video_settings.fade_out_seconds)
         self.video_noise_var = tk.DoubleVar(value=self.default_video_settings.noise_percent)
         self.video_distortion_var = tk.DoubleVar(value=self.default_video_settings.distortion_percent)
+        self.video_vhs_var = tk.DoubleVar(value=self.default_video_settings.vhs_effect)
+        self.video_chromatic_var = tk.DoubleVar(value=self.default_video_settings.chromatic_aberration)
+        self.video_burn_var = tk.DoubleVar(value=self.default_video_settings.film_burn)
+        self.video_glitch_var = tk.DoubleVar(value=self.default_video_settings.glitch_effect)
         self.video_encoder_var = tk.StringVar(value=self.default_video_settings.video_encoder)
         self.video_shutdown_after_generation_var = tk.BooleanVar(
             value=self.default_video_settings.shutdown_after_generation
@@ -2542,6 +2624,42 @@ class DoomerGeneratorApp:
             maximum=100,
             row=3,
             description=self._t("video_desc_distortion"),
+        )
+        self._add_slider(
+            effects,
+            label=self._t("video_lbl_vhs"),
+            variable=self.video_vhs_var,
+            minimum=0,
+            maximum=100,
+            row=4,
+            description=self._t("video_desc_vhs"),
+        )
+        self._add_slider(
+            effects,
+            label=self._t("video_lbl_chromatic"),
+            variable=self.video_chromatic_var,
+            minimum=0,
+            maximum=100,
+            row=5,
+            description=self._t("video_desc_chromatic"),
+        )
+        self._add_slider(
+            effects,
+            label=self._t("video_lbl_burn"),
+            variable=self.video_burn_var,
+            minimum=0,
+            maximum=100,
+            row=6,
+            description=self._t("video_desc_burn"),
+        )
+        self._add_slider(
+            effects,
+            label=self._t("video_lbl_glitch"),
+            variable=self.video_glitch_var,
+            minimum=0,
+            maximum=100,
+            row=7,
+            description=self._t("video_desc_glitch"),
         )
 
         shutdown_box = ttk.Frame(parent)
@@ -3268,6 +3386,10 @@ class DoomerGeneratorApp:
             fade_out_seconds=self.video_fade_out_var.get(),
             noise_percent=self.video_noise_var.get(),
             distortion_percent=self.video_distortion_var.get(),
+            vhs_effect=self.video_vhs_var.get(),
+            chromatic_aberration=self.video_chromatic_var.get(),
+            film_burn=self.video_burn_var.get(),
+            glitch_effect=self.video_glitch_var.get(),
             video_encoder=self._sanitize_video_encoder(
                 self.video_encoder_var.get(),
                 self.default_video_settings.video_encoder,
@@ -3682,6 +3804,10 @@ class DoomerGeneratorApp:
             self.video_fade_out_var.set(defaults.fade_out_seconds)
             self.video_noise_var.set(defaults.noise_percent)
             self.video_distortion_var.set(defaults.distortion_percent)
+            self.video_vhs_var.set(defaults.vhs_effect)
+            self.video_chromatic_var.set(defaults.chromatic_aberration)
+            self.video_burn_var.set(defaults.film_burn)
+            self.video_glitch_var.set(defaults.glitch_effect)
             self.video_encoder_var.set(defaults.video_encoder)
             self.video_shutdown_after_generation_var.set(defaults.shutdown_after_generation)
         self._log(self._t("log_video_defaults_reset"))
@@ -3846,6 +3972,38 @@ class DoomerGeneratorApp:
                 100.0,
             )
         )
+        self.video_vhs_var.set(
+            self._coerce_float(
+                video.get("vhs_effect"),
+                self.default_video_settings.vhs_effect,
+                0.0,
+                100.0,
+            )
+        )
+        self.video_chromatic_var.set(
+            self._coerce_float(
+                video.get("chromatic_aberration"),
+                self.default_video_settings.chromatic_aberration,
+                0.0,
+                100.0,
+            )
+        )
+        self.video_burn_var.set(
+            self._coerce_float(
+                video.get("film_burn"),
+                self.default_video_settings.film_burn,
+                0.0,
+                100.0,
+            )
+        )
+        self.video_glitch_var.set(
+            self._coerce_float(
+                video.get("glitch_effect"),
+                self.default_video_settings.glitch_effect,
+                0.0,
+                100.0,
+            )
+        )
         self.video_encoder_var.set(
             self._sanitize_video_encoder(
                 video.get("video_encoder"),
@@ -3954,6 +4112,10 @@ class DoomerGeneratorApp:
             "fade_out_seconds": self.video_fade_out_var.get(),
             "noise_percent": self.video_noise_var.get(),
             "distortion_percent": self.video_distortion_var.get(),
+            "vhs_effect": self.video_vhs_var.get(),
+            "chromatic_aberration": self.video_chromatic_var.get(),
+            "film_burn": self.video_burn_var.get(),
+            "glitch_effect": self.video_glitch_var.get(),
             "video_encoder": self._sanitize_video_encoder(
                 self.video_encoder_var.get(),
                 self.default_video_settings.video_encoder,
