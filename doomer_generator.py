@@ -205,7 +205,7 @@ UI_TEXTS = {
         "progress_login_done": "Login YouTube completato",
         "progress_login_error": "Errore login YouTube",
         "progress_download_file": "Download in corso: {index}/{total} - {percent:.1f}% del link",
-        "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name})",
+        "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s",
         "progress_generic": "Progress: {done}/{total}",
         "progress_download_done": "Download completato - OK: {ok}, Errori: {err}",
         "progress_upload_done": "Upload completato - OK: {ok}, Errori: {err}",
@@ -411,7 +411,7 @@ UI_TEXTS = {
         "progress_login_done": "YouTube login completed",
         "progress_login_error": "YouTube login error",
         "progress_download_file": "Download in progress: {index}/{total} - {percent:.1f}% of link",
-        "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name})",
+        "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s",
         "progress_generic": "Progress: {done}/{total}",
         "progress_download_done": "Download completed - OK: {ok}, Errors: {err}",
         "progress_upload_done": "Upload completed - OK: {ok}, Errors: {err}",
@@ -1369,7 +1369,7 @@ class YouTubeUploader:
         self,
         video_dir: Path,
         settings: UploadSettings,
-        progress: Callable[[float, int, int, float, str], None],
+        progress: Callable[[float, int, int, float, str, float], None],
         on_uploaded: Callable[[Path], None] | None = None,
     ) -> UploadSummary:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
@@ -1446,14 +1446,39 @@ class YouTubeUploader:
                         media_body=media,
                     )
 
+                    # Track upload speed
+                    file_size = video_file.stat().st_size
+                    upload_start_time = time.time()
+                    last_progress = 0.0
+                    last_time = upload_start_time
+
                     response = None
                     while response is None:
                         status, response = insert_request.next_chunk(num_retries=3)
                         if status is None:
                             continue
-                        link_percent = max(0.0, min(100.0, status.progress() * 100.0))
-                        overall_percent = ((index - 1) + status.progress()) / total * 100.0
-                        progress(overall_percent, index, total, link_percent, video_file.name)
+
+                        # Calculate upload speed
+                        current_progress = status.progress()
+                        current_time = time.time()
+                        elapsed = current_time - last_time
+
+                        if elapsed > 0.5:  # Update speed every 0.5 seconds
+                            bytes_uploaded = (current_progress - last_progress) * file_size
+                            speed_mbps = (bytes_uploaded / elapsed) / (1024 * 1024)  # MB/s
+                            last_progress = current_progress
+                            last_time = current_time
+                        else:
+                            # Use average speed if not enough time has passed
+                            total_elapsed = current_time - upload_start_time
+                            if total_elapsed > 0:
+                                speed_mbps = (current_progress * file_size / total_elapsed) / (1024 * 1024)
+                            else:
+                                speed_mbps = 0.0
+
+                        link_percent = max(0.0, min(100.0, current_progress * 100.0))
+                        overall_percent = ((index - 1) + current_progress) / total * 100.0
+                        progress(overall_percent, index, total, link_percent, video_file.name, speed_mbps)
 
                     uploaded += 1
                     video_id = response.get("id", "N/A")
@@ -3917,11 +3942,12 @@ class DoomerGeneratorApp:
         total: int,
         file_percent: float,
         file_name: str,
+        speed_mbs: float,
     ) -> None:
         self.events.put(
             (
                 "upload_progress",
-                (overall_percent, index, total, file_percent, file_name),
+                (overall_percent, index, total, file_percent, file_name, speed_mbs),
             )
         )
 
@@ -4451,7 +4477,7 @@ class DoomerGeneratorApp:
                 self.progress_text.set(progress_msg)
                 self.download_progress_text.set(progress_msg)
             elif event == "upload_progress":
-                percent, index, total, file_percent, file_name = payload  # type: ignore[misc]
+                percent, index, total, file_percent, file_name, speed_mbs = payload  # type: ignore[misc]
                 self.progress_var.set(percent)
                 self.upload_progress_var.set(percent)
                 progress_msg = self._t(
@@ -4460,6 +4486,7 @@ class DoomerGeneratorApp:
                     total=total,
                     percent=file_percent,
                     name=file_name,
+                    speed=speed_mbs,
                 )
                 self.progress_text.set(progress_msg)
                 self.upload_progress_text.set(progress_msg)
