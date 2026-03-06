@@ -134,6 +134,7 @@ UI_TEXTS = {
         "video_desc_noise": "Grana/noise su tutto il frame.",
         "video_lbl_distortion": "Distorsione (%)",
         "video_desc_distortion": "Jitter/instabilita stile VHS su tutto il frame.",
+        "video_check_shutdown": "Spegni computer al termine (5m)",
         "video_btn_generate": "Genera video batch",
         "video_btn_reset": "Reset default",
         "upload_group_source": "Sorgente Upload",
@@ -146,7 +147,7 @@ UI_TEXTS = {
         "upload_label_publish_at": "Data pubblicazione (UTC)",
         "upload_label_category": "Categoria",
         "upload_check_auto_tags": "Tag automatici (AI + fallback smart)",
-        "upload_check_shutdown": "Spegni computer al termine (60s)",
+        "upload_check_shutdown": "Spegni computer al termine (5m)",
         "upload_label_extra_tags": "Tag extra (csv)",
         "upload_label_openai_model": "OpenAI model",
         "upload_label_openai_key": "OpenAI API key (opzionale)",
@@ -213,7 +214,7 @@ UI_TEXTS = {
         "log_video_finished": "Fine generazione video. Totale: {total}, OK: {ok}, Errori: {err}",
         "log_runtime_download_error": "Errore runtime download: {detail}",
         "log_runtime_upload_error": "Errore runtime upload: {detail}",
-        "log_shutdown_scheduled": "Spegnimento forzato pianificato tra 60 secondi. Annulla con: {cancel}",
+        "log_shutdown_scheduled": "Spegnimento forzato pianificato tra 5 minuti. Annulla con: {cancel}",
         "log_shutdown_skipped_errors": "Spegnimento non pianificato: upload non completato per tutti i file.",
         "log_shutdown_unsupported": "Spegnimento automatico non supportato su questo sistema.",
         "log_shutdown_error": "Errore pianificazione spegnimento: {detail}",
@@ -317,6 +318,7 @@ UI_TEXTS = {
         "video_desc_noise": "Film grain/noise across the full frame.",
         "video_lbl_distortion": "Distortion (%)",
         "video_desc_distortion": "VHS-style jitter/instability across the full frame.",
+        "video_check_shutdown": "Turn off computer when done (5m)",
         "video_btn_generate": "Generate batch videos",
         "video_btn_reset": "Reset defaults",
         "upload_group_source": "Upload Source",
@@ -329,7 +331,7 @@ UI_TEXTS = {
         "upload_label_publish_at": "Publish at (UTC)",
         "upload_label_category": "Category",
         "upload_check_auto_tags": "Automatic tags (AI + smart fallback)",
-        "upload_check_shutdown": "Turn off computer when done (60s)",
+        "upload_check_shutdown": "Turn off computer when done (5m)",
         "upload_label_extra_tags": "Extra tags (csv)",
         "upload_label_openai_model": "OpenAI model",
         "upload_label_openai_key": "OpenAI API key (optional)",
@@ -396,7 +398,7 @@ UI_TEXTS = {
         "log_video_finished": "Video generation finished. Total: {total}, OK: {ok}, Errors: {err}",
         "log_runtime_download_error": "Download runtime error: {detail}",
         "log_runtime_upload_error": "Upload runtime error: {detail}",
-        "log_shutdown_scheduled": "Forced shutdown scheduled in 60 seconds. Cancel with: {cancel}",
+        "log_shutdown_scheduled": "Forced shutdown scheduled in 5 minutes. Cancel with: {cancel}",
         "log_shutdown_skipped_errors": "Shutdown not scheduled: upload did not complete for all files.",
         "log_shutdown_unsupported": "Automatic shutdown is not supported on this system.",
         "log_shutdown_error": "Shutdown schedule error: {detail}",
@@ -505,6 +507,7 @@ class VideoSettings:
     noise_percent: float = 65.0
     distortion_percent: float = 75.0
     video_encoder: str = "auto"
+    shutdown_after_generation: bool = False
 
     def build_filter_complex(self, audio_duration_seconds: float | None) -> str:
         noise_amount = round(5.0 + (self.noise_percent / 100.0) * 38.0, 2)
@@ -1874,6 +1877,9 @@ class DoomerGeneratorApp:
         self.video_noise_var = tk.DoubleVar(value=self.default_video_settings.noise_percent)
         self.video_distortion_var = tk.DoubleVar(value=self.default_video_settings.distortion_percent)
         self.video_encoder_var = tk.StringVar(value=self.default_video_settings.video_encoder)
+        self.video_shutdown_after_generation_var = tk.BooleanVar(
+            value=self.default_video_settings.shutdown_after_generation
+        )
         self.upload_video_input_var = tk.StringVar(value=str(self.video_output_dir))
         self.youtube_client_secret_var = tk.StringVar(value=str(self.youtube_client_secret_path))
         self.youtube_token_var = tk.StringVar(value=str(self.youtube_token_path))
@@ -1894,6 +1900,7 @@ class DoomerGeneratorApp:
         # fires.
         self.language_var = tk.StringVar(value=LANGUAGE_CODE_TO_LABEL[self.current_language])
         self.shutdown_after_upload_requested = False
+        self.shutdown_after_video_requested = False
 
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value=self._t("status_ready"))
@@ -2409,6 +2416,15 @@ class DoomerGeneratorApp:
             description=self._t("video_desc_distortion"),
         )
 
+        shutdown_box = ttk.Frame(parent)
+        shutdown_box.pack(fill=tk.X, pady=(8, 0))
+        self.video_shutdown_after_generation_check = ttk.Checkbutton(
+            shutdown_box,
+            text=self._t("video_check_shutdown"),
+            variable=self.video_shutdown_after_generation_var,
+        )
+        self.video_shutdown_after_generation_check.pack(side=tk.LEFT)
+
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X)
         self.video_generate_button = ttk.Button(
@@ -2511,35 +2527,28 @@ class DoomerGeneratorApp:
             row=2, column=3, padx=6, pady=6, sticky="ew"
         )
 
-        self.youtube_shutdown_after_upload_check = ttk.Checkbutton(
-            options_box,
-            text=self._t("upload_check_shutdown"),
-            variable=self.youtube_shutdown_after_upload_var,
-        )
-        self.youtube_shutdown_after_upload_check.grid(row=3, column=0, columnspan=4, padx=6, pady=6, sticky="w")
-
-        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=4, column=0, padx=6, pady=6, sticky="w")
+        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=3, column=0, padx=6, pady=6, sticky="w")
         self.youtube_openai_model_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_model_var,
             width=16,
         )
-        self.youtube_openai_model_entry.grid(row=4, column=1, padx=6, pady=6, sticky="w")
+        self.youtube_openai_model_entry.grid(row=3, column=1, padx=6, pady=6, sticky="w")
 
         ttk.Label(options_box, text=self._t("upload_label_openai_key")).grid(
-            row=4, column=2, padx=6, pady=6, sticky="w"
+            row=3, column=2, padx=6, pady=6, sticky="w"
         )
         self.youtube_openai_key_entry = ttk.Entry(
             options_box,
             textvariable=self.youtube_openai_key_var,
             show="*",
         )
-        self.youtube_openai_key_entry.grid(row=4, column=3, padx=6, pady=6, sticky="ew")
+        self.youtube_openai_key_entry.grid(row=3, column=3, padx=6, pady=6, sticky="ew")
 
         ttk.Label(
             options_box,
             text=self._t("upload_openai_hint"),
-        ).grid(row=5, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
+        ).grid(row=4, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
         desc_box = ttk.LabelFrame(parent, text=self._t("upload_group_description"), padding=8)
         desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
@@ -2547,6 +2556,15 @@ class DoomerGeneratorApp:
         self.youtube_description_widget = tk.Text(desc_box, height=5, wrap=tk.WORD)
         self.youtube_description_widget.pack(fill=tk.BOTH, expand=True)
         self.youtube_description_widget.insert(tk.END, self.youtube_description_text)
+
+        shutdown_box = ttk.Frame(parent)
+        shutdown_box.pack(fill=tk.X, pady=(0, 8))
+        self.youtube_shutdown_after_upload_check = ttk.Checkbutton(
+            shutdown_box,
+            text=self._t("upload_check_shutdown"),
+            variable=self.youtube_shutdown_after_upload_var,
+        )
+        self.youtube_shutdown_after_upload_check.pack(side=tk.LEFT)
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X)
@@ -3104,8 +3122,10 @@ class DoomerGeneratorApp:
                 self.video_encoder_var.get(),
                 self.default_video_settings.video_encoder,
             ),
+            shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
         )
 
+        self.shutdown_after_video_requested = self.video_shutdown_after_generation_var.get()
         self.video_processing = True
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
@@ -3427,14 +3447,14 @@ class DoomerGeneratorApp:
         for path in removed:
             self._queue_log(f"    - {self._display_path(path)}")
 
-    def _schedule_shutdown_after_upload(self) -> None:
+    def _schedule_shutdown(self) -> None:
         if os.name == "nt":
             # Best-effort clear of any previous scheduled shutdown before scheduling a new one.
             subprocess.run(["shutdown", "/a"], capture_output=True, text=True)
-            command = ["shutdown", "/s", "/f", "/t", "60"]
+            command = ["shutdown", "/s", "/f", "/t", "300"]
             cancel_hint = "shutdown /a"
         elif sys.platform.startswith("linux"):
-            command = ["shutdown", "-h", "+1"]
+            command = ["shutdown", "-h", "+5"]
             cancel_hint = "shutdown -c"
         else:
             self._log(self._t("log_shutdown_unsupported"))
@@ -3492,6 +3512,7 @@ class DoomerGeneratorApp:
             self.video_noise_var.set(defaults.noise_percent)
             self.video_distortion_var.set(defaults.distortion_percent)
             self.video_encoder_var.set(defaults.video_encoder)
+            self.video_shutdown_after_generation_var.set(defaults.shutdown_after_generation)
         self._log(self._t("log_video_defaults_reset"))
 
     @staticmethod
@@ -3660,6 +3681,9 @@ class DoomerGeneratorApp:
                 self.default_video_settings.video_encoder,
             )
         )
+        shutdown_after_generation = video.get("shutdown_after_generation")
+        if isinstance(shutdown_after_generation, bool):
+            self.video_shutdown_after_generation_var.set(shutdown_after_generation)
 
     def _load_persisted_app_settings(self) -> None:
         payload = self._read_persisted_app_settings()
@@ -3759,6 +3783,7 @@ class DoomerGeneratorApp:
                 self.video_encoder_var.get(),
                 self.default_video_settings.video_encoder,
             ),
+            "shutdown_after_generation": self.video_shutdown_after_generation_var.get(),
         }
         if self._write_persisted_app_settings(payload):
             self._log(self._t("log_video_settings_saved", file=self.app_settings_path.name))
@@ -3921,7 +3946,7 @@ class DoomerGeneratorApp:
                     )
                 )
                 if self.shutdown_after_upload_requested:
-                    self._schedule_shutdown_after_upload()
+                    self._schedule_shutdown()
                     self.shutdown_after_upload_requested = False
             elif event == "upload_runtime_error":
                 detail = str(payload)
@@ -3959,6 +3984,9 @@ class DoomerGeneratorApp:
                         err=summary.failed,
                     )
                 )
+                if self.shutdown_after_video_requested:
+                    self._schedule_shutdown()
+                    self.shutdown_after_video_requested = False
 
         self.root.after(120, self._poll_events)
 
