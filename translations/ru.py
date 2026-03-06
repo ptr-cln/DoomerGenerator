@@ -337,6 +337,7 @@ TRANSLATIONS = {
     "update_no_notes": "Примечания к выпуску отсутствуют.",
     "update_btn_download": "Скачать Обновление",
     "update_no_update_message": "Вы уже используете последнюю версию ({version}).",
+    "update_no_releases_message": "Релизы еще не опубликованы.\nВы используете версию {version}.",
     "update_check_error": "Не удалось проверить обновления:\n{error}",
     "log_update_available": "Доступно обновление: версия {version}",
 }

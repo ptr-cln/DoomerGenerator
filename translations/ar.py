@@ -337,6 +337,7 @@ TRANSLATIONS = {
     "update_no_notes": "لا توجد ملاحظات إصدار متاحة.",
     "update_btn_download": "تنزيل التحديث",
     "update_no_update_message": "أنت تستخدم بالفعل أحدث إصدار ({version}).",
+    "update_no_releases_message": "لم يتم نشر أي إصدارات بعد.\nأنت تستخدم الإصدار {version}.",
     "update_check_error": "فشل التحقق من التحديثات:\n{error}",
     "log_update_available": "تحديث متاح: الإصدار {version}",
 }

@@ -5575,6 +5575,16 @@ class DoomerGeneratorApp:
                     if show_no_update:
                         self.events.put(("update_no_update", APP_VERSION))
 
+            except urllib.error.HTTPError as error:
+                if error.code == 404:
+                    # No releases published yet
+                    self._log_debug("No releases found on GitHub")
+                    if show_no_update:
+                        self.events.put(("update_no_releases", APP_VERSION))
+                else:
+                    self._log_debug(f"Update check HTTP error: {error}")
+                    if show_no_update:
+                        self.events.put(("update_check_failed", str(error)))
             except urllib.error.URLError as error:
                 self._log_debug(f"Update check failed: {error}")
                 if show_no_update:
@@ -6358,6 +6368,12 @@ class DoomerGeneratorApp:
                 messagebox.showerror(
                     self._t("update_dialog_title"),
                     self._t("update_check_error", error=error)
+                )
+            elif event == "update_no_releases":
+                version = str(payload)
+                messagebox.showinfo(
+                    self._t("update_dialog_title"),
+                    self._t("update_no_releases_message", version=version)
                 )
 
         self.root.after(120, self._poll_events)

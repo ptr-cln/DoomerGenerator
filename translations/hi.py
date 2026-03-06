@@ -337,6 +337,7 @@ TRANSLATIONS = {
     "update_no_notes": "कोई रिलीज़ नोट्स उपलब्ध नहीं।",
     "update_btn_download": "अपडेट डाउनलोड करें",
     "update_no_update_message": "आप पहले से ही नवीनतम संस्करण ({version}) का उपयोग कर रहे हैं।",
+    "update_no_releases_message": "अभी तक कोई रिलीज़ प्रकाशित नहीं की गई है।\nआप संस्करण {version} का उपयोग कर रहे हैं।",
     "update_check_error": "अपडेट जांचने में विफल:\n{error}",
     "log_update_available": "अपडेट उपलब्ध: संस्करण {version}",
 }

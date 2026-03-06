@@ -1,1 +1,17 @@
-{"audio": {}, "video": {}}
+{
+  "audio_presets": {},
+  "video_presets": {
+    "Test": {
+      "chromatic_aberration": 0.0,
+      "distortion_percent": 100.0,
+      "fade_in_seconds": 4.2,
+      "fade_out_seconds": 4.0,
+      "film_burn": 0.0,
+      "glitch_effect": 0.0,
+      "name": "Test",
+      "noise_percent": 100.0,
+      "vhs_effect": 0.0,
+      "video_encoder": "auto"
+    }
+  }
+}

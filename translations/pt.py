@@ -337,6 +337,7 @@ TRANSLATIONS = {
     "update_no_notes": "Nenhuma nota da versão disponível.",
     "update_btn_download": "Baixar Atualização",
     "update_no_update_message": "Você já está usando a versão mais recente ({version}).",
+    "update_no_releases_message": "Nenhuma versão foi publicada ainda.\nVocê está usando a versão {version}.",
     "update_check_error": "Falha ao verificar atualizações:\n{error}",
     "log_update_available": "Atualização disponível: versão {version}",
 }

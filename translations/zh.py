@@ -337,6 +337,7 @@ TRANSLATIONS = {
     "update_no_notes": "无发布说明。",
     "update_btn_download": "下载更新",
     "update_no_update_message": "您已在使用最新版本（{version}）。",
+    "update_no_releases_message": "尚未发布任何版本。\n您正在使用版本 {version}。",
     "update_check_error": "检查更新失败：\n{error}",
     "log_update_available": "更新可用：版本 {version}",
 }
