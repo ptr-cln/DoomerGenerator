@@ -2053,6 +2053,8 @@ class DoomerGeneratorApp:
         self._load_persisted_app_settings()
         # Apply theme after UI is built and settings are loaded
         self._apply_theme()
+        # Load default presets if they exist
+        self._load_default_presets_on_startup()
         # ensure UI reflects any scheduled value right away
         self._update_schedule_visibility()
         self.progress_text.set(self._t("status_ready"))
@@ -5003,6 +5005,22 @@ class DoomerGeneratorApp:
             self._log_debug(f"Loaded {len(self.audio_presets)} audio presets and {len(self.video_presets)} video presets")
         except (OSError, json.JSONDecodeError) as error:
             self._log_warning(f"Failed to load presets: {error}")
+
+    def _load_default_presets_on_startup(self) -> None:
+        """Load 'Doomer Standard' preset on startup if it exists."""
+        default_preset_name = "Doomer Standard"
+
+        # Load audio preset if it exists
+        if default_preset_name in self.audio_presets:
+            self.audio_preset_var.set(default_preset_name)
+            self._load_audio_preset()
+            self._log_debug(f"Loaded default audio preset: {default_preset_name}")
+
+        # Load video preset if it exists
+        if default_preset_name in self.video_presets:
+            self.video_preset_var.set(default_preset_name)
+            self._load_video_preset()
+            self._log_debug(f"Loaded default video preset: {default_preset_name}")
 
     def _save_presets(self) -> bool:
         """Save audio and video presets to JSON file."""
