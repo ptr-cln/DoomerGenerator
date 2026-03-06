@@ -1815,19 +1815,19 @@ class DoomerVideoGenerator:
                 "-rc",
                 "vbr",
                 "-cq",
-                "23",
+                "25",  # Increased from 23 for smaller files (higher = smaller)
                 "-b:v",
-                "4M",
+                "2.5M",  # Reduced from 4M for smaller files
                 "-maxrate",
-                "8M",
+                "5M",  # Reduced from 8M for smaller files
                 "-bufsize",
-                "16M",
+                "10M",  # Reduced from 16M for smaller files
             ]
         if encoder == "intel":
-            return ["-c:v", "h264_qsv", "-global_quality", "23"]
+            return ["-c:v", "h264_qsv", "-global_quality", "25"]  # Increased from 23 for smaller files
         if encoder == "amd":
-            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "22", "-qp_p", "24"]
-        return ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
+            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "24", "-qp_p", "26"]  # Increased from 22/24 for smaller files
+        return ["-c:v", "libx264", "-preset", "medium", "-crf", "23"]  # Increased from 18 for smaller files (23 is FFmpeg default)
 
     def _probe_duration_seconds(self, audio_file: Path) -> float | None:
         if not self.ffprobe_bin:
