@@ -3121,7 +3121,7 @@ class DoomerGeneratorApp:
         )
 
     def _start_download(self) -> None:
-        if self._is_busy():
+        if self.downloading:
             return
 
         self._ensure_links_file()
@@ -3173,7 +3173,7 @@ class DoomerGeneratorApp:
 
         self.downloading = True
         self._start_timer("download")
-        self._set_action_buttons_enabled(False)
+        self._set_action_buttons_enabled()
         self.progress_var.set(0)
         self.download_progress_var.set(0)
         running_msg = self._t("progress_download_running")
@@ -3193,7 +3193,7 @@ class DoomerGeneratorApp:
         thread.start()
 
     def _start_audio_conversion(self) -> None:
-        if self._is_busy():
+        if self.audio_processing:
             return
 
         ffmpeg_bin = self._resolve_ffmpeg()
@@ -3222,7 +3222,7 @@ class DoomerGeneratorApp:
 
         self.audio_processing = True
         self._start_timer("audio")
-        self._set_action_buttons_enabled(False)
+        self._set_action_buttons_enabled()
         self.progress_var.set(0)
         self.audio_progress_var.set(0)
         running_msg = self._t("progress_audio_running")
@@ -3239,7 +3239,7 @@ class DoomerGeneratorApp:
         thread.start()
 
     def _start_video_generation(self) -> None:
-        if self._is_busy():
+        if self.video_processing:
             return
 
         ffmpeg_bin = self._resolve_ffmpeg()
@@ -3272,7 +3272,7 @@ class DoomerGeneratorApp:
         self.shutdown_after_video_requested = self.video_shutdown_after_generation_var.get()
         self.video_processing = True
         self._start_timer("video")
-        self._set_action_buttons_enabled(False)
+        self._set_action_buttons_enabled()
         self.progress_var.set(0)
         self.video_progress_var.set(0)
         running_msg = self._t("progress_video_running")
@@ -3290,14 +3290,14 @@ class DoomerGeneratorApp:
         thread.start()
 
     def _start_youtube_login(self) -> None:
-        if self._is_busy():
+        if self.youtube_authenticating:
             return
 
         if not self._try_prepare_youtube_oauth_file():
             return
 
         self.youtube_authenticating = True
-        self._set_action_buttons_enabled(False)
+        self._set_action_buttons_enabled()
         self.progress_var.set(0)
         self.progress_text.set(self._t("progress_login_running"))
 
@@ -3305,7 +3305,7 @@ class DoomerGeneratorApp:
         thread.start()
 
     def _start_youtube_upload(self) -> None:
-        if self._is_busy():
+        if self.uploading or self.youtube_authenticating:
             return
         self.shutdown_after_upload_requested = False
 
@@ -3326,7 +3326,7 @@ class DoomerGeneratorApp:
         self.shutdown_after_upload_requested = settings.shutdown_after_upload
         self.uploading = True
         self._start_timer("upload")
-        self._set_action_buttons_enabled(False)
+        self._set_action_buttons_enabled()
         self.progress_var.set(0)
         self.upload_progress_var.set(0)
         running_msg = self._t("progress_upload_running")
@@ -3984,10 +3984,10 @@ class DoomerGeneratorApp:
             or self.youtube_authenticating
         )
 
-    def _set_action_buttons_enabled(self, enabled: bool) -> None:
+    def _set_action_buttons_enabled(self) -> None:
         """Update button states based on current operations.
 
-        This method now enables/disables buttons independently based on which
+        This method enables/disables buttons independently based on which
         operations are running, allowing parallel operations.
         """
         # Download tab buttons - disabled only when downloading
@@ -4099,7 +4099,7 @@ class DoomerGeneratorApp:
                 summary: DownloadSummary = payload  # type: ignore[assignment]
                 self.downloading = False
                 self._stop_timer("download")
-                self._set_action_buttons_enabled(True)
+                self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
                 self.progress_var.set(progress_val)
                 self.download_progress_var.set(progress_val)
@@ -4120,13 +4120,13 @@ class DoomerGeneratorApp:
                 self.progress_text.set(self._t("progress_runtime_download_error"))
             elif event == "youtube_login_ok":
                 self.youtube_authenticating = False
-                self._set_action_buttons_enabled(True)
+                self._set_action_buttons_enabled()
                 self.progress_var.set(100)
                 self.progress_text.set(self._t("progress_login_done"))
                 self._log(self._t("log_login_done"))
             elif event == "youtube_login_error":
                 self.youtube_authenticating = False
-                self._set_action_buttons_enabled(True)
+                self._set_action_buttons_enabled()
                 detail = str(payload)
                 self.progress_text.set(self._t("progress_login_error"))
                 self._log(self._t("log_login_error", detail=detail))
@@ -4135,7 +4135,7 @@ class DoomerGeneratorApp:
                 self.uploading = False
                 self._stop_timer("upload")
                 if not self.youtube_authenticating:
-                    self._set_action_buttons_enabled(True)
+                    self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
                 self.progress_var.set(progress_val)
                 self.upload_progress_var.set(progress_val)
@@ -4165,7 +4165,7 @@ class DoomerGeneratorApp:
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
                 self._stop_timer("audio")
-                self._set_action_buttons_enabled(True)
+                self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
                 self.progress_var.set(progress_val)
                 self.audio_progress_var.set(progress_val)
@@ -4184,7 +4184,7 @@ class DoomerGeneratorApp:
                 summary: VideoSummary = payload  # type: ignore[assignment]
                 self.video_processing = False
                 self._stop_timer("video")
-                self._set_action_buttons_enabled(True)
+                self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
                 self.progress_var.set(progress_val)
                 self.video_progress_var.set(progress_val)
