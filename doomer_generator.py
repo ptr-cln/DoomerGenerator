@@ -2038,6 +2038,9 @@ class DoomerGeneratorApp:
         self.audio_preset_var = tk.StringVar(value="")
         self.video_preset_var = tk.StringVar(value="")
 
+        # Load language preference BEFORE building UI so labels are in correct language
+        self._load_language_preference()
+
         # build interface first so that all widgets (especially upload
         # controls) exist before we populate them with saved settings.  this
         # avoids the previous race where changing the privacy variable while
@@ -5861,6 +5864,23 @@ class DoomerGeneratorApp:
         shutdown_after_generation = video.get("shutdown_after_generation")
         if isinstance(shutdown_after_generation, bool):
             self.video_shutdown_after_generation_var.set(shutdown_after_generation)
+
+    def _load_language_preference(self) -> None:
+        """Load language preference from settings BEFORE building UI."""
+        payload = self._read_persisted_app_settings()
+        if not payload:
+            return
+
+        general = payload.get("general")
+        if isinstance(general, dict):
+            language_code = self._sanitize_language_code(general.get("language"), self.current_language)
+            self.current_language = language_code
+            # Don't set language_var here - it will be set in _load_persisted_app_settings
+
+            # Also load theme preference early
+            theme = general.get("theme")
+            if isinstance(theme, str) and theme in THEMES:
+                self.current_theme = theme
 
     def _load_persisted_app_settings(self) -> None:
         payload = self._read_persisted_app_settings()
