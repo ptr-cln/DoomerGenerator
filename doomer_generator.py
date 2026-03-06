@@ -5541,7 +5541,9 @@ class DoomerGeneratorApp:
             if error is not None:
                 item.error = error
 
-            self._refresh_queue_display()
+            # Queue a refresh event instead of calling _refresh_queue_display() directly
+            # This prevents blocking when called from worker threads
+            self.events.put(("refresh_queue", None))
 
     def _remove_queue_item(self, item: QueueItem) -> None:
         """Remove an item from the queue."""
@@ -6564,6 +6566,9 @@ class DoomerGeneratorApp:
                     self._t("update_dialog_title"),
                     self._t("update_no_releases_message", version=version)
                 )
+            elif event == "refresh_queue":
+                # Refresh queue display from main thread (safe for Tkinter)
+                self._refresh_queue_display()
 
         self.root.after(120, self._poll_events)
 
