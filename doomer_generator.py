@@ -3904,6 +3904,10 @@ class DoomerGeneratorApp:
             description_template = upload.get("description_template")
             if isinstance(description_template, str) and description_template.strip():
                 self.youtube_description_text = description_template
+                # Update the widget if it already exists
+                if hasattr(self, "youtube_description_widget"):
+                    self.youtube_description_widget.delete("1.0", tk.END)
+                    self.youtube_description_widget.insert("1.0", description_template)
 
     def _save_audio_settings(self) -> None:
         payload = self._read_persisted_app_settings()
