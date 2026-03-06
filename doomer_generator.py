@@ -5324,7 +5324,7 @@ class DoomerGeneratorApp:
         self.video_distortion_var.set(settings.distortion_percent)
         self.video_vhs_var.set(settings.vhs_effect)
         self.video_chromatic_var.set(settings.chromatic_aberration)
-        self.video_film_burn_var.set(settings.film_burn)
+        self.video_burn_var.set(settings.film_burn)  # Fixed typo: was video_film_burn_var
         self.video_glitch_var.set(settings.glitch_effect)
         self.video_encoder_var.set(settings.video_encoder)
 
