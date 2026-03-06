@@ -3542,8 +3542,9 @@ class DoomerGeneratorApp:
         settings: VideoSettings,
         duration: float,
     ) -> bool:
-        """Generate a silent preview video with the given settings."""
+        """Generate a silent preview video with current settings (optimized for speed)."""
         # Build FFMPEG command for silent video (no audio input)
+        # Optimizations: 720p resolution, CRF 30, tune=fastdecode
         command = [
             ffmpeg_bin,
             "-hide_banner",
@@ -3563,7 +3564,7 @@ class DoomerGeneratorApp:
             "-i",
             "anullsrc=channel_layout=stereo:sample_rate=44100",  # Silent audio
             "-filter_complex",
-            settings.build_filter_complex(audio_duration_seconds=duration),
+            settings.build_filter_complex(audio_duration_seconds=duration) + ",scale=1280:720",  # 720p for speed
             "-map",
             "[vout]",
             "-map",
@@ -3572,14 +3573,16 @@ class DoomerGeneratorApp:
             "libx264",  # Use CPU encoder for preview (fast and reliable)
             "-preset",
             "ultrafast",  # Fast encoding for preview
+            "-tune",
+            "fastdecode",  # Optimize for fast decoding/playback
             "-crf",
-            "28",  # Lower quality for faster encoding
+            "30",  # Lower quality for faster encoding (was 28)
             "-pix_fmt",
             "yuv420p",
             "-c:a",
             "aac",
             "-b:a",
-            "128k",
+            "96k",  # Lower audio bitrate (was 128k)
             "-t",
             str(duration),  # Limit to specified duration
             str(output_path),
