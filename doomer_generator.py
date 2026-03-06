@@ -71,6 +71,11 @@ UI_TEXTS = {
         "tab_video": "Video",
         "tab_upload": "Upload",
         "status_group": "Stato",
+        "status_group_download": "Stato Download",
+        "status_group_audio": "Stato Audio",
+        "status_group_video": "Stato Video",
+        "status_group_upload": "Stato Upload",
+        "status_timer": "Tempo: {time}",
         "log_group": "Log",
         "general_group_language": "Lingua",
         "general_label_language": "Lingua interfaccia",
@@ -216,6 +221,7 @@ UI_TEXTS = {
         "log_runtime_upload_error": "Errore runtime upload: {detail}",
         "log_shutdown_scheduled": "Spegnimento forzato pianificato tra 5 minuti. Annulla con: {cancel}",
         "log_shutdown_skipped_errors": "Spegnimento non pianificato: upload non completato per tutti i file.",
+        "log_shutdown_skipped_busy": "Spegnimento non pianificato: altre operazioni in corso.",
         "log_shutdown_unsupported": "Spegnimento automatico non supportato su questo sistema.",
         "log_shutdown_error": "Errore pianificazione spegnimento: {detail}",
         "log_login_done": "Login YouTube completato e token salvato.",
@@ -255,6 +261,11 @@ UI_TEXTS = {
         "tab_video": "Video",
         "tab_upload": "Upload",
         "status_group": "Status",
+        "status_group_download": "Download Status",
+        "status_group_audio": "Audio Status",
+        "status_group_video": "Video Status",
+        "status_group_upload": "Upload Status",
+        "status_timer": "Time: {time}",
         "log_group": "Log",
         "general_group_language": "Language",
         "general_label_language": "UI language",
@@ -400,6 +411,7 @@ UI_TEXTS = {
         "log_runtime_upload_error": "Upload runtime error: {detail}",
         "log_shutdown_scheduled": "Forced shutdown scheduled in 5 minutes. Cancel with: {cancel}",
         "log_shutdown_skipped_errors": "Shutdown not scheduled: upload did not complete for all files.",
+        "log_shutdown_skipped_busy": "Shutdown not scheduled: other operations are still running.",
         "log_shutdown_unsupported": "Automatic shutdown is not supported on this system.",
         "log_shutdown_error": "Shutdown schedule error: {detail}",
         "log_login_done": "YouTube login completed and token saved.",
@@ -1278,75 +1290,96 @@ class YouTubeUploader:
 
         uploaded = 0
         failed = 0
-        for index, video_file in enumerate(files, start=1):
-            title = video_file.stem
-            cleanup_target: Path | None = None
-            media = None
-            insert_request = None
-            self.log(f"[{index}/{total}] Upload: {video_file.name}")
-            try:
-                try:
-                    description = settings.description_template.format(title=title)
-                except Exception:
-                    description = f"{title}\n\n{settings.description_template}"
-                tags = _compose_youtube_tags(title, settings, log=self.log)
+        processed_files: set[Path] = set()  # Track files we've already processed
+        first_batch = True
 
-                # build status dictionary taking care of scheduled uploads
-                status_dict: dict[str, object] = {
-                    "privacyStatus": settings.privacy_status,
-                    "selfDeclaredMadeForKids": False,
-                }
-                if settings.privacy_status == "scheduled":
-                    # YouTube requires privacyStatus to be "private" when using
-                    # publishAt; we also add the timestamp if provided.
-                    status_dict["privacyStatus"] = "private"
-                    if settings.publish_at:
-                        status_dict["publishAt"] = settings.publish_at
+        while True:
+            # Get current list of videos, excluding already processed ones
+            current_files = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
 
-                request_body = {
-                    "snippet": {
-                        "title": title,
-                        "description": description,
-                        "categoryId": settings.category_id,
-                        "tags": tags,
-                    },
-                    "status": status_dict,
-                }
-                media = MediaFileUpload(str(video_file), chunksize=8 * 1024 * 1024, resumable=True)
-                insert_request = service.videos().insert(
-                    part="snippet,status",
-                    body=request_body,
-                    media_body=media,
-                )
+            if not current_files:
+                # No new videos to upload
+                break
 
-                response = None
-                while response is None:
-                    status, response = insert_request.next_chunk(num_retries=3)
-                    if status is None:
-                        continue
-                    link_percent = max(0.0, min(100.0, status.progress() * 100.0))
-                    overall_percent = ((index - 1) + status.progress()) / total * 100.0
-                    progress(overall_percent, index, total, link_percent, video_file.name)
+            # Log when new videos are detected (after first batch)
+            if not first_batch:
+                self.log(f"Rilevati {len(current_files)} nuovi video pronti per l'upload...")
+            first_batch = False
 
-                uploaded += 1
-                video_id = response.get("id", "N/A")
-                self.log(f"  OK -> https://youtu.be/{video_id}")
-                cleanup_target = video_file
-            except HttpError as error:
-                failed += 1
-                self.log(f"  HTTP error: {error}")
-            except Exception as error:  # noqa: BLE001
-                failed += 1
-                self.log(f"  Upload error: {error}")
-            finally:
+            # Update total count for progress calculation
+            total = uploaded + failed + len(current_files)
+
+            for video_file in current_files:
+                index = uploaded + failed + 1
+                processed_files.add(video_file)  # Mark as processed immediately
+                title = video_file.stem
+                cleanup_target: Path | None = None
                 media = None
                 insert_request = None
-                progress((index / total) * 100.0, index, total, 100.0, video_file.name)
-                if cleanup_target is not None and on_uploaded is not None:
+                self.log(f"[{index}/{total}] Upload: {video_file.name}")
+                try:
                     try:
-                        on_uploaded(cleanup_target)
-                    except Exception as callback_error:  # noqa: BLE001
-                        self.log(f"  Cleanup warning: {callback_error}")
+                        description = settings.description_template.format(title=title)
+                    except Exception:
+                        description = f"{title}\n\n{settings.description_template}"
+                    tags = _compose_youtube_tags(title, settings, log=self.log)
+
+                    # build status dictionary taking care of scheduled uploads
+                    status_dict: dict[str, object] = {
+                        "privacyStatus": settings.privacy_status,
+                        "selfDeclaredMadeForKids": False,
+                    }
+                    if settings.privacy_status == "scheduled":
+                        # YouTube requires privacyStatus to be "private" when using
+                        # publishAt; we also add the timestamp if provided.
+                        status_dict["privacyStatus"] = "private"
+                        if settings.publish_at:
+                            status_dict["publishAt"] = settings.publish_at
+
+                    request_body = {
+                        "snippet": {
+                            "title": title,
+                            "description": description,
+                            "categoryId": settings.category_id,
+                            "tags": tags,
+                        },
+                        "status": status_dict,
+                    }
+                    media = MediaFileUpload(str(video_file), chunksize=8 * 1024 * 1024, resumable=True)
+                    insert_request = service.videos().insert(
+                        part="snippet,status",
+                        body=request_body,
+                        media_body=media,
+                    )
+
+                    response = None
+                    while response is None:
+                        status, response = insert_request.next_chunk(num_retries=3)
+                        if status is None:
+                            continue
+                        link_percent = max(0.0, min(100.0, status.progress() * 100.0))
+                        overall_percent = ((index - 1) + status.progress()) / total * 100.0
+                        progress(overall_percent, index, total, link_percent, video_file.name)
+
+                    uploaded += 1
+                    video_id = response.get("id", "N/A")
+                    self.log(f"  OK -> https://youtu.be/{video_id}")
+                    cleanup_target = video_file
+                except HttpError as error:
+                    failed += 1
+                    self.log(f"  HTTP error: {error}")
+                except Exception as error:  # noqa: BLE001
+                    failed += 1
+                    self.log(f"  Upload error: {error}")
+                finally:
+                    media = None
+                    insert_request = None
+                    progress((index / total) * 100.0, index, total, 100.0, video_file.name)
+                    if cleanup_target is not None and on_uploaded is not None:
+                        try:
+                            on_uploaded(cleanup_target)
+                        except Exception as callback_error:  # noqa: BLE001
+                            self.log(f"  Cleanup warning: {callback_error}")
 
         return UploadSummary(total=total, uploaded=uploaded, failed=failed)
 
@@ -1902,8 +1935,30 @@ class DoomerGeneratorApp:
         self.shutdown_after_upload_requested = False
         self.shutdown_after_video_requested = False
 
+        # Global progress bar (kept for backward compatibility)
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text = tk.StringVar(value=self._t("status_ready"))
+
+        # Independent progress bars for each tab
+        self.download_progress_var = tk.DoubleVar(value=0.0)
+        self.download_progress_text = tk.StringVar(value=self._t("status_ready"))
+        self.download_timer_text = tk.StringVar(value="00:00:00")
+        self.download_start_time: float | None = None
+
+        self.audio_progress_var = tk.DoubleVar(value=0.0)
+        self.audio_progress_text = tk.StringVar(value=self._t("status_ready"))
+        self.audio_timer_text = tk.StringVar(value="00:00:00")
+        self.audio_start_time: float | None = None
+
+        self.video_progress_var = tk.DoubleVar(value=0.0)
+        self.video_progress_text = tk.StringVar(value=self._t("status_ready"))
+        self.video_timer_text = tk.StringVar(value="00:00:00")
+        self.video_start_time: float | None = None
+
+        self.upload_progress_var = tk.DoubleVar(value=0.0)
+        self.upload_progress_text = tk.StringVar(value=self._t("status_ready"))
+        self.upload_timer_text = tk.StringVar(value="00:00:00")
+        self.upload_start_time: float | None = None
 
         # build interface first so that all widgets (especially upload
         # controls) exist before we populate them with saved settings.  this
@@ -1915,6 +1970,7 @@ class DoomerGeneratorApp:
         self._update_schedule_visibility()
         self.progress_text.set(self._t("status_ready"))
         self.root.after(100, self._poll_events)
+        self.root.after(1000, self._update_timers)
 
     def _t(self, key: str, **kwargs: object) -> str:
         table = UI_TEXTS.get(self.current_language, UI_TEXTS["it"])
@@ -1925,6 +1981,63 @@ class DoomerGeneratorApp:
             except Exception:
                 return template
         return template
+
+    def _format_elapsed_time(self, seconds: float) -> str:
+        """Format elapsed time as HH:MM:SS."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def _start_timer(self, operation: str) -> None:
+        """Start timer for a specific operation (download, audio, video, upload)."""
+        current_time = time.time()
+        if operation == "download":
+            self.download_start_time = current_time
+            self.download_timer_text.set("00:00:00")
+        elif operation == "audio":
+            self.audio_start_time = current_time
+            self.audio_timer_text.set("00:00:00")
+        elif operation == "video":
+            self.video_start_time = current_time
+            self.video_timer_text.set("00:00:00")
+        elif operation == "upload":
+            self.upload_start_time = current_time
+            self.upload_timer_text.set("00:00:00")
+
+    def _stop_timer(self, operation: str) -> None:
+        """Stop timer for a specific operation."""
+        if operation == "download":
+            self.download_start_time = None
+        elif operation == "audio":
+            self.audio_start_time = None
+        elif operation == "video":
+            self.video_start_time = None
+        elif operation == "upload":
+            self.upload_start_time = None
+
+    def _update_timers(self) -> None:
+        """Update all active timers."""
+        current_time = time.time()
+
+        if self.download_start_time is not None:
+            elapsed = current_time - self.download_start_time
+            self.download_timer_text.set(self._format_elapsed_time(elapsed))
+
+        if self.audio_start_time is not None:
+            elapsed = current_time - self.audio_start_time
+            self.audio_timer_text.set(self._format_elapsed_time(elapsed))
+
+        if self.video_start_time is not None:
+            elapsed = current_time - self.video_start_time
+            self.video_timer_text.set(self._format_elapsed_time(elapsed))
+
+        if self.upload_start_time is not None:
+            elapsed = current_time - self.upload_start_time
+            self.upload_timer_text.set(self._format_elapsed_time(elapsed))
+
+        # Schedule next update
+        self.root.after(1000, self._update_timers)
 
     def _persist_general_language(self) -> None:
         payload = self._read_persisted_app_settings()
@@ -1983,7 +2096,7 @@ class DoomerGeneratorApp:
         main.pack(fill=tk.BOTH, expand=True)
         main.columnconfigure(0, weight=1)
         main.rowconfigure(0, weight=4)
-        main.rowconfigure(2, weight=1)
+        main.rowconfigure(1, weight=1)
 
         notebook = ttk.Notebook(main)
         self.notebook_widget = notebook
@@ -2009,13 +2122,8 @@ class DoomerGeneratorApp:
         self._build_video_tab(video_tab)
         self._build_upload_tab(upload_tab)
 
-        progress_box = ttk.LabelFrame(main, text=self._t("status_group"), padding=8)
-        progress_box.grid(row=1, column=0, sticky="ew", pady=(10, 8))
-        ttk.Progressbar(progress_box, variable=self.progress_var, maximum=100).pack(fill=tk.X)
-        ttk.Label(progress_box, textvariable=self.progress_text).pack(anchor="w", pady=(6, 0))
-
         logs_frame = ttk.LabelFrame(main, text=self._t("log_group"), padding=8)
-        logs_frame.grid(row=2, column=0, sticky="nsew")
+        logs_frame.grid(row=1, column=0, sticky="nsew")
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(0, weight=1)
 
@@ -2184,6 +2292,13 @@ class DoomerGeneratorApp:
         self.download_button = ttk.Button(actions, text=self._t("download_btn_download_mp3"), command=self._start_download)
         self.download_button.pack(side=tk.LEFT)
 
+        # Download progress bar and timer
+        download_progress_box = ttk.LabelFrame(parent, text=self._t("status_group_download"), padding=8)
+        download_progress_box.pack(fill=tk.X, pady=(10, 0))
+        ttk.Progressbar(download_progress_box, variable=self.download_progress_var, maximum=100).pack(fill=tk.X)
+        ttk.Label(download_progress_box, textvariable=self.download_progress_text).pack(anchor="w", pady=(6, 0))
+        ttk.Label(download_progress_box, textvariable=self.download_timer_text).pack(anchor="w", pady=(2, 0))
+
         ttk.Label(
             parent,
             text=self._t("download_hint_target", path=self.audio_input_dir),
@@ -2319,6 +2434,13 @@ class DoomerGeneratorApp:
         )
         self.audio_test_stop_button.pack(side=tk.LEFT, padx=8)
 
+        # Audio progress bar and timer
+        audio_progress_box = ttk.LabelFrame(parent, text=self._t("status_group_audio"), padding=8)
+        audio_progress_box.pack(fill=tk.X, pady=(10, 0))
+        ttk.Progressbar(audio_progress_box, variable=self.audio_progress_var, maximum=100).pack(fill=tk.X)
+        ttk.Label(audio_progress_box, textvariable=self.audio_progress_text).pack(anchor="w", pady=(6, 0))
+        ttk.Label(audio_progress_box, textvariable=self.audio_timer_text).pack(anchor="w", pady=(2, 0))
+
     def _build_video_tab(self, parent: ttk.Frame) -> None:
         resources_box = ttk.LabelFrame(parent, text=self._t("video_group_resources"), padding=8)
         resources_box.pack(fill=tk.X, pady=(0, 8))
@@ -2445,6 +2567,13 @@ class DoomerGeneratorApp:
             command=self._save_video_settings,
         )
         self.video_save_button.pack(side=tk.LEFT, padx=8)
+
+        # Video progress bar and timer
+        video_progress_box = ttk.LabelFrame(parent, text=self._t("status_group_video"), padding=8)
+        video_progress_box.pack(fill=tk.X, pady=(10, 0))
+        ttk.Progressbar(video_progress_box, variable=self.video_progress_var, maximum=100).pack(fill=tk.X)
+        ttk.Label(video_progress_box, textvariable=self.video_progress_text).pack(anchor="w", pady=(6, 0))
+        ttk.Label(video_progress_box, textvariable=self.video_timer_text).pack(anchor="w", pady=(2, 0))
 
     def _build_upload_tab(self, parent: ttk.Frame) -> None:
         source_box = ttk.LabelFrame(parent, text=self._t("upload_group_source"), padding=8)
@@ -2587,6 +2716,13 @@ class DoomerGeneratorApp:
             command=self._save_upload_settings,
         )
         self.upload_save_button.pack(side=tk.LEFT, padx=8)
+
+        # Upload progress bar and timer
+        upload_progress_box = ttk.LabelFrame(parent, text=self._t("status_group_upload"), padding=8)
+        upload_progress_box.pack(fill=tk.X, pady=(10, 0))
+        ttk.Progressbar(upload_progress_box, variable=self.upload_progress_var, maximum=100).pack(fill=tk.X)
+        ttk.Label(upload_progress_box, textvariable=self.upload_progress_text).pack(anchor="w", pady=(6, 0))
+        ttk.Label(upload_progress_box, textvariable=self.upload_timer_text).pack(anchor="w", pady=(2, 0))
 
         # after creating the upload tab and its widgets we need to ensure the
         # schedule controls are shown/hidden correctly based on the current
@@ -3036,9 +3172,13 @@ class DoomerGeneratorApp:
         target_input.mkdir(parents=True, exist_ok=True)
 
         self.downloading = True
+        self._start_timer("download")
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set(self._t("progress_download_running"))
+        self.download_progress_var.set(0)
+        running_msg = self._t("progress_download_running")
+        self.progress_text.set(running_msg)
+        self.download_progress_text.set(running_msg)
         self._log(self._t("log_download_start", total=len(targets)))
         self._log(self._t("log_links_file", path=self.links_file))
         self._log(self._t("log_destination", path=target_input))
@@ -3081,9 +3221,13 @@ class DoomerGeneratorApp:
         self._stop_audio_test(log_action=False)
 
         self.audio_processing = True
+        self._start_timer("audio")
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set(self._t("progress_audio_running"))
+        self.audio_progress_var.set(0)
+        running_msg = self._t("progress_audio_running")
+        self.progress_text.set(running_msg)
+        self.audio_progress_text.set(running_msg)
         self._log(self._t("log_audio_start"))
         self._log(self._t("log_ffmpeg_using", path=ffmpeg_bin))
 
@@ -3127,9 +3271,13 @@ class DoomerGeneratorApp:
 
         self.shutdown_after_video_requested = self.video_shutdown_after_generation_var.get()
         self.video_processing = True
+        self._start_timer("video")
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set(self._t("progress_video_running"))
+        self.video_progress_var.set(0)
+        running_msg = self._t("progress_video_running")
+        self.progress_text.set(running_msg)
+        self.video_progress_text.set(running_msg)
         self._log(self._t("log_video_start"))
         self._log(self._t("log_input_audio", path=input_audio_dir))
         self._log(self._t("log_output_video", path=output_video_dir))
@@ -3177,9 +3325,13 @@ class DoomerGeneratorApp:
         settings = self._collect_upload_settings()
         self.shutdown_after_upload_requested = settings.shutdown_after_upload
         self.uploading = True
+        self._start_timer("upload")
         self._set_action_buttons_enabled(False)
         self.progress_var.set(0)
-        self.progress_text.set(self._t("progress_upload_running"))
+        self.upload_progress_var.set(0)
+        running_msg = self._t("progress_upload_running")
+        self.progress_text.set(running_msg)
+        self.upload_progress_text.set(running_msg)
         self._log(self._t("log_upload_start", path=video_dir))
 
         thread = threading.Thread(
@@ -3823,33 +3975,52 @@ class DoomerGeneratorApp:
         )
 
     def _set_action_buttons_enabled(self, enabled: bool) -> None:
-        state = tk.NORMAL if enabled else tk.DISABLED
-        self.download_button.configure(state=state)
-        self.audio_convert_button.configure(state=state)
-        self.audio_reset_button.configure(state=state)
-        self.audio_save_button.configure(state=state)
-        self.audio_test_play_button.configure(state=state)
-        self.audio_test_stop_button.configure(state=state)
-        self.video_generate_button.configure(state=state)
-        self.video_reset_button.configure(state=state)
-        self.video_save_button.configure(state=state)
-        self.video_encoder_combo.configure(state="readonly" if enabled else "disabled")
-        self.youtube_login_button.configure(state=state)
-        self.youtube_upload_button.configure(state=state)
-        self.upload_save_button.configure(state=state)
-        self.pick_upload_video_button.configure(state=state)
-        self.pick_client_secret_button.configure(state=state)
-        self.youtube_smart_tags_check.configure(state=state)
-        self.youtube_shutdown_after_upload_check.configure(state=state)
-        self.youtube_openai_model_entry.configure(state=state)
-        self.youtube_openai_key_entry.configure(state=state)
-        self.open_links_button.configure(state=state)
-        self.clear_audio_input_button.configure(state=state)
-        self.clear_audio_output_button.configure(state=state)
-        self.clear_video_output_button.configure(state=state)
-        self.clear_links_button.configure(state=state)
-        self.clear_all_button.configure(state=state)
-        self.language_combo.configure(state="readonly" if enabled else "disabled")
+        """Update button states based on current operations.
+
+        This method now enables/disables buttons independently based on which
+        operations are running, allowing parallel operations.
+        """
+        # Download tab buttons - disabled only when downloading
+        download_state = tk.NORMAL if not self.downloading else tk.DISABLED
+        self.download_button.configure(state=download_state)
+        self.open_links_button.configure(state=download_state)
+
+        # Audio tab buttons - disabled only when processing audio
+        audio_state = tk.NORMAL if not self.audio_processing else tk.DISABLED
+        self.audio_convert_button.configure(state=audio_state)
+        self.audio_reset_button.configure(state=audio_state)
+        self.audio_save_button.configure(state=audio_state)
+        self.audio_test_play_button.configure(state=audio_state)
+        self.audio_test_stop_button.configure(state=audio_state)
+
+        # Video tab buttons - disabled only when processing video
+        video_state = tk.NORMAL if not self.video_processing else tk.DISABLED
+        self.video_generate_button.configure(state=video_state)
+        self.video_reset_button.configure(state=video_state)
+        self.video_save_button.configure(state=video_state)
+        self.video_encoder_combo.configure(state="readonly" if not self.video_processing else "disabled")
+
+        # Upload tab buttons - disabled when uploading or authenticating
+        upload_state = tk.NORMAL if not (self.uploading or self.youtube_authenticating) else tk.DISABLED
+        self.youtube_login_button.configure(state=upload_state)
+        self.youtube_upload_button.configure(state=upload_state)
+        self.upload_save_button.configure(state=upload_state)
+        self.pick_upload_video_button.configure(state=upload_state)
+        self.pick_client_secret_button.configure(state=upload_state)
+        self.youtube_smart_tags_check.configure(state=upload_state)
+        self.youtube_shutdown_after_upload_check.configure(state=upload_state)
+        self.youtube_openai_model_entry.configure(state=upload_state)
+        self.youtube_openai_key_entry.configure(state=upload_state)
+
+        # General tab buttons - disabled if ANY operation is running
+        any_busy = self._is_busy()
+        general_state = tk.NORMAL if not any_busy else tk.DISABLED
+        self.clear_audio_input_button.configure(state=general_state)
+        self.clear_audio_output_button.configure(state=general_state)
+        self.clear_video_output_button.configure(state=general_state)
+        self.clear_links_button.configure(state=general_state)
+        self.clear_all_button.configure(state=general_state)
+        self.language_combo.configure(state="readonly" if not any_busy else "disabled")
 
     def _poll_events(self) -> None:
         while True:
@@ -3871,26 +4042,28 @@ class DoomerGeneratorApp:
             elif event == "download_progress":
                 percent, index, total, link_percent = payload  # type: ignore[misc]
                 self.progress_var.set(percent)
-                self.progress_text.set(
-                    self._t(
-                        "progress_download_file",
-                        index=index,
-                        total=total,
-                        percent=link_percent,
-                    )
+                self.download_progress_var.set(percent)
+                progress_msg = self._t(
+                    "progress_download_file",
+                    index=index,
+                    total=total,
+                    percent=link_percent,
                 )
+                self.progress_text.set(progress_msg)
+                self.download_progress_text.set(progress_msg)
             elif event == "upload_progress":
                 percent, index, total, file_percent, file_name = payload  # type: ignore[misc]
                 self.progress_var.set(percent)
-                self.progress_text.set(
-                    self._t(
-                        "progress_upload_file",
-                        index=index,
-                        total=total,
-                        percent=file_percent,
-                        name=file_name,
-                    )
+                self.upload_progress_var.set(percent)
+                progress_msg = self._t(
+                    "progress_upload_file",
+                    index=index,
+                    total=total,
+                    percent=file_percent,
+                    name=file_name,
                 )
+                self.progress_text.set(progress_msg)
+                self.upload_progress_text.set(progress_msg)
             elif event == "progress":
                 done, total = payload  # type: ignore[misc]
                 percent = 0 if total == 0 else (done / total) * 100
@@ -3899,11 +4072,14 @@ class DoomerGeneratorApp:
             elif event == "download_finished":
                 summary: DownloadSummary = payload  # type: ignore[assignment]
                 self.downloading = False
+                self._stop_timer("download")
                 self._set_action_buttons_enabled(True)
-                self.progress_var.set(100 if summary.total else 0)
-                self.progress_text.set(
-                    self._t("progress_download_done", ok=summary.downloaded, err=summary.failed)
-                )
+                progress_val = 100 if summary.total else 0
+                self.progress_var.set(progress_val)
+                self.download_progress_var.set(progress_val)
+                done_msg = self._t("progress_download_done", ok=summary.downloaded, err=summary.failed)
+                self.progress_text.set(done_msg)
+                self.download_progress_text.set(done_msg)
                 self._log(
                     self._t(
                         "log_download_finished",
@@ -3931,12 +4107,15 @@ class DoomerGeneratorApp:
             elif event == "upload_finished":
                 summary: UploadSummary = payload  # type: ignore[assignment]
                 self.uploading = False
+                self._stop_timer("upload")
                 if not self.youtube_authenticating:
                     self._set_action_buttons_enabled(True)
-                self.progress_var.set(100 if summary.total else 0)
-                self.progress_text.set(
-                    self._t("progress_upload_done", ok=summary.uploaded, err=summary.failed)
-                )
+                progress_val = 100 if summary.total else 0
+                self.progress_var.set(progress_val)
+                self.upload_progress_var.set(progress_val)
+                done_msg = self._t("progress_upload_done", ok=summary.uploaded, err=summary.failed)
+                self.progress_text.set(done_msg)
+                self.upload_progress_text.set(done_msg)
                 self._log(
                     self._t(
                         "log_upload_finished",
@@ -3946,7 +4125,11 @@ class DoomerGeneratorApp:
                     )
                 )
                 if self.shutdown_after_upload_requested:
-                    self._schedule_shutdown()
+                    # Only shutdown if no other operations are running
+                    if not (self.downloading or self.audio_processing or self.video_processing or self.youtube_authenticating):
+                        self._schedule_shutdown()
+                    else:
+                        self._log(self._t("log_shutdown_skipped_busy"))
                     self.shutdown_after_upload_requested = False
             elif event == "upload_runtime_error":
                 detail = str(payload)
@@ -3955,11 +4138,14 @@ class DoomerGeneratorApp:
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
+                self._stop_timer("audio")
                 self._set_action_buttons_enabled(True)
-                self.progress_var.set(100 if summary.total else 0)
-                self.progress_text.set(
-                    self._t("progress_audio_done", ok=summary.converted, err=summary.failed)
-                )
+                progress_val = 100 if summary.total else 0
+                self.progress_var.set(progress_val)
+                self.audio_progress_var.set(progress_val)
+                done_msg = self._t("progress_audio_done", ok=summary.converted, err=summary.failed)
+                self.progress_text.set(done_msg)
+                self.audio_progress_text.set(done_msg)
                 self._log(
                     self._t(
                         "log_audio_finished",
@@ -3971,11 +4157,14 @@ class DoomerGeneratorApp:
             elif event == "video_finished":
                 summary: VideoSummary = payload  # type: ignore[assignment]
                 self.video_processing = False
+                self._stop_timer("video")
                 self._set_action_buttons_enabled(True)
-                self.progress_var.set(100 if summary.total else 0)
-                self.progress_text.set(
-                    self._t("progress_video_done", ok=summary.generated, err=summary.failed)
-                )
+                progress_val = 100 if summary.total else 0
+                self.progress_var.set(progress_val)
+                self.video_progress_var.set(progress_val)
+                done_msg = self._t("progress_video_done", ok=summary.generated, err=summary.failed)
+                self.progress_text.set(done_msg)
+                self.video_progress_text.set(done_msg)
                 self._log(
                     self._t(
                         "log_video_finished",
@@ -3985,7 +4174,11 @@ class DoomerGeneratorApp:
                     )
                 )
                 if self.shutdown_after_video_requested:
-                    self._schedule_shutdown()
+                    # Only shutdown if no other operations are running
+                    if not (self.downloading or self.audio_processing or self.uploading or self.youtube_authenticating):
+                        self._schedule_shutdown()
+                    else:
+                        self._log(self._t("log_shutdown_skipped_busy"))
                     self.shutdown_after_video_requested = False
 
         self.root.after(120, self._poll_events)
