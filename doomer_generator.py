@@ -1334,8 +1334,12 @@ class YouTubeUploader:
 
                     response = None
                     speed_mbps = 0.0  # Initialize speed
+                    iteration = 0
                     while response is None:
+                        iteration += 1
+                        self.log(f"  DEBUG: Iteration {iteration}, calling next_chunk()...")
                         status, response = insert_request.next_chunk(num_retries=3)
+                        self.log(f"  DEBUG: next_chunk() returned, status={status is not None}, response={response is not None}")
 
                         if status is None:
                             # First chunk, no progress yet
