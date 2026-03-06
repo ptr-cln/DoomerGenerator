@@ -293,6 +293,9 @@ TRANSLATIONS = {
     "queue_operation_audio": "صوت",
     "queue_operation_video": "فيديو",
     "queue_operation_upload": "رفع",
+    "queue_operation_Audio": "صوت",  # Capitalized version for compatibility
+    "queue_operation_Video": "فيديو",  # Capitalized version for compatibility
+    "queue_operation_Upload": "رفع",  # Capitalized version for compatibility
     "queue_status_pending": "قيد الانتظار",
     "queue_status_processing": "قيد المعالجة",
     "queue_status_complete": "مكتمل",

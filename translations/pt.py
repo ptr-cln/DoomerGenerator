@@ -293,6 +293,9 @@ TRANSLATIONS = {
     "queue_operation_audio": "Áudio",
     "queue_operation_video": "Vídeo",
     "queue_operation_upload": "Upload",
+    "queue_operation_Audio": "Áudio",  # Capitalized version for compatibility
+    "queue_operation_Video": "Vídeo",  # Capitalized version for compatibility
+    "queue_operation_Upload": "Upload",  # Capitalized version for compatibility
     "queue_status_pending": "Pendente",
     "queue_status_processing": "Processando",
     "queue_status_complete": "Concluído",

@@ -293,6 +293,9 @@ TRANSLATIONS = {
     "queue_operation_audio": "ऑडियो",
     "queue_operation_video": "वीडियो",
     "queue_operation_upload": "अपलोड",
+    "queue_operation_Audio": "ऑडियो",  # Capitalized version for compatibility
+    "queue_operation_Video": "वीडियो",  # Capitalized version for compatibility
+    "queue_operation_Upload": "अपलोड",  # Capitalized version for compatibility
     "queue_status_pending": "लंबित",
     "queue_status_processing": "प्रसंस्करण",
     "queue_status_complete": "पूर्ण",

@@ -293,6 +293,9 @@ TRANSLATIONS = {
     "queue_operation_audio": "Аудио",
     "queue_operation_video": "Видео",
     "queue_operation_upload": "Выгрузка",
+    "queue_operation_Audio": "Аудио",  # Capitalized version for compatibility
+    "queue_operation_Video": "Видео",  # Capitalized version for compatibility
+    "queue_operation_Upload": "Выгрузка",  # Capitalized version for compatibility
     "queue_status_pending": "Ожидание",
     "queue_status_processing": "Обработка",
     "queue_status_complete": "Завершено",

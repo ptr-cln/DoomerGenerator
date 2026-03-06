@@ -293,6 +293,9 @@ TRANSLATIONS = {
     "queue_operation_audio": "音频",
     "queue_operation_video": "视频",
     "queue_operation_upload": "上传",
+    "queue_operation_Audio": "音频",  # Capitalized version for compatibility
+    "queue_operation_Video": "视频",  # Capitalized version for compatibility
+    "queue_operation_Upload": "上传",  # Capitalized version for compatibility
     "queue_status_pending": "待处理",
     "queue_status_processing": "处理中",
     "queue_status_complete": "已完成",
