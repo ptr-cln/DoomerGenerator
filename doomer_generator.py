@@ -1240,16 +1240,12 @@ class YouTubeUploader:
         _, _, _, build, HttpError, MediaFileUpload, httplib2 = _import_youtube_modules()
         credentials = self._authenticate(interactive=False)
 
-        # Configure socket timeout globally to prevent hanging (60 seconds)
+        # Configure socket timeout to prevent hanging (60 seconds)
+        # Applied only during service creation to avoid slowing down uploads
         import socket
-        original_timeout = socket.getdefaulttimeout()
         socket.setdefaulttimeout(60)
 
-        try:
-            service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
-        finally:
-            # Restore original timeout
-            socket.setdefaulttimeout(original_timeout)
+        service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
         uploaded = 0
         failed = 0
@@ -1313,9 +1309,9 @@ class YouTubeUploader:
                         },
                         "status": status_dict,
                     }
-                    # Use 1MB chunks for better stability (reduced from 8MB to prevent timeout issues)
-                    # Smaller chunks = more frequent progress updates and less chance of timeout
-                    media = MediaFileUpload(str(video_file), chunksize=1 * 1024 * 1024, resumable=True)
+                    # Use 4MB chunks for optimal balance between speed and stability
+                    # 4MB provides good progress updates without excessive HTTP overhead
+                    media = MediaFileUpload(str(video_file), chunksize=4 * 1024 * 1024, resumable=True)
                     insert_request = service.videos().insert(
                         part="snippet,status",
                         body=request_body,
