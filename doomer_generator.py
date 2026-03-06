@@ -2825,12 +2825,12 @@ class DoomerGeneratorApp:
             scale = tk.Scale(
                 band_frame,
                 variable=variable,
-                from_=12,
-                to=-12,
+                from_=18,
+                to=-18,
                 orient=tk.VERTICAL,
                 resolution=0.5,
                 showvalue=True,
-                length=220,
+                length=300,
                 width=18,
             )
             scale.pack()
