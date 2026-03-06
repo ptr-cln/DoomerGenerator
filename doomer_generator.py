@@ -1449,11 +1449,6 @@ class DoomerBatchConverter:
         output_suffix = f".{settings.output_format.lower()}"
 
         for index, source_file in enumerate(files, start=1):
-            # Check for pause
-            if check_pause:
-                while check_pause():
-                    time.sleep(0.1)
-
             relative = source_file.relative_to(input_dir)
             output_name = f"{_with_doomer_suffix(relative.stem)}{output_suffix}"
             destination = output_dir / relative.parent / output_name
@@ -1478,6 +1473,11 @@ class DoomerBatchConverter:
                 self.log(f"  ERRORE -> {source_file.name}")
 
             progress(index, total, source_file.name)
+
+            # Check for pause AFTER processing the file to avoid re-processing
+            if check_pause:
+                while check_pause():
+                    time.sleep(0.1)
 
         return ConversionSummary(total=total, converted=converted, failed=failed)
 
@@ -1589,11 +1589,6 @@ class DoomerVideoGenerator:
         generation_times: list[float] = []
 
         for index, audio_file in enumerate(audio_files, start=1):
-            # Check for pause
-            if check_pause:
-                while check_pause():
-                    time.sleep(0.1)
-
             relative = audio_file.relative_to(audio_input_dir)
             destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1630,6 +1625,11 @@ class DoomerVideoGenerator:
 
             background_name = background.name if background else "N/A"
             progress(index, total, eta_seconds, audio_file.name, background_name)
+
+            # Check for pause AFTER processing the file to avoid re-processing
+            if check_pause:
+                while check_pause():
+                    time.sleep(0.1)
 
         return VideoSummary(total=total, generated=generated, failed=failed)
 
