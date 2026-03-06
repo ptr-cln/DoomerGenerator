@@ -1931,6 +1931,8 @@ class DoomerGeneratorApp:
         self.queue_lock = threading.Lock()
         self.queue_tree: ttk.Treeview | None = None
         self.queue_filter_var: tk.StringVar | None = None
+        self.current_queue_items: dict[str, QueueItem] = {}  # Maps file paths to queue items
+        self.last_processed_file: str | None = None  # Track last file being processed
 
         # Backup & Recovery system
         self.backups_dir = self.project_dir / "backups"
@@ -3908,6 +3910,13 @@ class DoomerGeneratorApp:
         settings = self._collect_audio_settings_from_ui()
         self._stop_audio_test(log_action=False)
 
+        # Add files to queue
+        audio_files = _collect_files(input_dir, AUDIO_EXTENSIONS)
+        self.current_queue_items.clear()
+        for audio_file in audio_files:
+            item = self._add_queue_item(str(audio_file), "Audio")
+            self.current_queue_items[audio_file.name] = item
+
         self.audio_processing = True
         self._start_timer("audio")
         self._set_action_buttons_enabled()
@@ -3960,6 +3969,13 @@ class DoomerGeneratorApp:
             ),
             shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
         )
+
+        # Add files to queue
+        audio_files = _collect_files(input_audio_dir, AUDIO_EXTENSIONS)
+        self.current_queue_items.clear()
+        for audio_file in audio_files:
+            item = self._add_queue_item(str(audio_file), "Video")
+            self.current_queue_items[audio_file.name] = item
 
         # Don't capture shutdown flag here - we'll check it when video finishes
         self.video_processing = True
@@ -4211,6 +4227,14 @@ class DoomerGeneratorApp:
             return
 
         settings = self._collect_upload_settings()
+
+        # Add files to queue
+        video_files = _collect_files(video_dir, VIDEO_EXTENSIONS)
+        self.current_queue_items.clear()
+        for video_file in video_files:
+            item = self._add_queue_item(str(video_file), "Upload")
+            self.current_queue_items[video_file.name] = item
+
         # Don't capture shutdown flag here - we'll check it when upload finishes
         self.uploading = True
         self._start_timer("upload")
@@ -4461,8 +4485,36 @@ class DoomerGeneratorApp:
     def _queue_audio_progress(self, done: int, total: int, file_name: str) -> None:
         self.events.put(("audio_progress", (done, total, file_name)))
 
+        # Mark previous file as complete when moving to next file
+        if self.last_processed_file and self.last_processed_file != file_name:
+            if self.last_processed_file in self.current_queue_items:
+                prev_item = self.current_queue_items[self.last_processed_file]
+                self._update_queue_item(prev_item, status="complete", progress=100.0, message="Done")
+
+        # Update current file status
+        if file_name in self.current_queue_items:
+            item = self.current_queue_items[file_name]
+            progress = (done / total * 100) if total > 0 else 0
+            self._update_queue_item(item, status="processing", progress=progress, message=f"{done}/{total}")
+
+        self.last_processed_file = file_name
+
     def _queue_video_progress(self, done: int, total: int, eta_seconds: int, audio_name: str, background_name: str) -> None:
         self.events.put(("video_progress", (done, total, eta_seconds, audio_name, background_name)))
+
+        # Mark previous file as complete when moving to next file
+        if self.last_processed_file and self.last_processed_file != audio_name:
+            if self.last_processed_file in self.current_queue_items:
+                prev_item = self.current_queue_items[self.last_processed_file]
+                self._update_queue_item(prev_item, status="complete", progress=100.0, message="Done")
+
+        # Update current file status
+        if audio_name in self.current_queue_items:
+            item = self.current_queue_items[audio_name]
+            progress = (done / total * 100) if total > 0 else 0
+            self._update_queue_item(item, status="processing", progress=progress, message=f"{done}/{total}")
+
+        self.last_processed_file = audio_name
 
     def _queue_progress(self, done: int, total: int) -> None:
         self.events.put(("progress", (done, total)))
@@ -4483,6 +4535,19 @@ class DoomerGeneratorApp:
                 (overall_percent, index, total, file_percent, file_name, speed_mbs, eta_seconds),
             )
         )
+
+        # Mark previous file as complete when moving to next file
+        if self.last_processed_file and self.last_processed_file != file_name:
+            if self.last_processed_file in self.current_queue_items:
+                prev_item = self.current_queue_items[self.last_processed_file]
+                self._update_queue_item(prev_item, status="complete", progress=100.0, message="Uploaded")
+
+        # Update current file status
+        if file_name in self.current_queue_items:
+            item = self.current_queue_items[file_name]
+            self._update_queue_item(item, status="processing", progress=file_percent, message=f"{file_percent:.0f}%")
+
+        self.last_processed_file = file_name
 
     def _build_youtube_uploader(self) -> YouTubeUploader:
         client_secret = Path(self.youtube_client_secret_var.get().strip())
@@ -6281,6 +6346,13 @@ class DoomerGeneratorApp:
                 summary: UploadSummary = payload  # type: ignore[assignment]
                 self.uploading = False
                 self.upload_paused = False  # Reset pause flag
+
+                # Mark last file as complete
+                if self.last_processed_file and self.last_processed_file in self.current_queue_items:
+                    item = self.current_queue_items[self.last_processed_file]
+                    self._update_queue_item(item, status="complete", progress=100.0, message="Uploaded")
+                self.last_processed_file = None
+
                 self._stop_timer("upload")
                 if not self.youtube_authenticating:
                     self._set_action_buttons_enabled()
@@ -6325,6 +6397,13 @@ class DoomerGeneratorApp:
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
                 self.audio_paused = False  # Reset pause flag
+
+                # Mark last file as complete
+                if self.last_processed_file and self.last_processed_file in self.current_queue_items:
+                    item = self.current_queue_items[self.last_processed_file]
+                    self._update_queue_item(item, status="complete", progress=100.0, message="Done")
+                self.last_processed_file = None
+
                 self._stop_timer("audio")
                 self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
@@ -6353,6 +6432,13 @@ class DoomerGeneratorApp:
                 summary: VideoSummary = payload  # type: ignore[assignment]
                 self.video_processing = False
                 self.video_paused = False  # Reset pause flag
+
+                # Mark last file as complete
+                if self.last_processed_file and self.last_processed_file in self.current_queue_items:
+                    item = self.current_queue_items[self.last_processed_file]
+                    self._update_queue_item(item, status="complete", progress=100.0, message="Done")
+                self.last_processed_file = None
+
                 self._stop_timer("video")
                 self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
