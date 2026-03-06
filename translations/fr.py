@@ -210,5 +210,15 @@ TRANSLATIONS = {
     "oauth_missing_body": "Sélectionnez le fichier JSON du client OAuth téléchargé depuis Google Cloud.",
     "oauth_file_missing_title": "Fichier OAuth manquant",
     "oauth_file_missing_body": "Aucun fichier JSON valide sélectionné.\nChoisissez un fichier d'informations d'identification OAuth de bureau avant de vous connecter.",
+    # Logging
+    "general_btn_export_logs": "Exporter les Journaux",
+    "export_logs_title": "Exporter les Journaux",
+    "export_logs_filetype": "Fichiers texte",
+    "export_logs_all_files": "Tous les fichiers",
+    "export_logs_no_file": "Aucun fichier journal trouvé.",
+    "export_logs_success": "Journaux exportés avec succès vers:\n{path}",
+    "export_logs_error": "Erreur lors de l'exportation des journaux:\n{error}",
+    "log_export_success": "Journaux exportés vers: {path}",
+    "log_export_error": "Erreur lors de l'exportation des journaux: {error}",
 }
 

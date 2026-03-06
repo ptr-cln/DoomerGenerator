@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import logging.handlers
 import os
 import queue
 import random
@@ -1652,6 +1654,10 @@ class DoomerGeneratorApp:
         self.youtube_token_path = self.project_dir / "youtube_token.json"
         self.app_settings_path = self.project_dir / APP_SETTINGS_FILE
         self.usage_memory_path = self.project_dir / ".usage_memory.json"
+        self.logs_dir = self.project_dir / "logs"
+
+        # Setup logging system
+        self._setup_logging()
 
         self.default_audio_settings = AudioSettings()
         self.default_video_settings = VideoSettings()
@@ -2064,6 +2070,9 @@ class DoomerGeneratorApp:
 
         self.clear_all_button = ttk.Button(actions, text=self._t("general_btn_clear_all"), command=self._clear_all_outputs)
         self.clear_all_button.grid(row=2, column=0, padx=6, pady=6, sticky="w")
+
+        self.export_logs_button = ttk.Button(actions, text=self._t("general_btn_export_logs"), command=self._export_logs)
+        self.export_logs_button.grid(row=2, column=1, padx=6, pady=6, sticky="w")
 
         info = ttk.LabelFrame(parent, text=self._t("general_group_paths"), padding=8)
         info.pack(fill=tk.X, pady=(10, 0))
@@ -2980,6 +2989,43 @@ class DoomerGeneratorApp:
                 video_count=video_removed,
             ),
         )
+
+    def _export_logs(self) -> None:
+        """Export current log file to a user-selected location."""
+        log_file = self.logs_dir / "doomer_generator.log"
+
+        if not log_file.exists():
+            messagebox.showinfo(
+                self._t("dialog_info_title"),
+                self._t("export_logs_no_file"),
+            )
+            return
+
+        # Ask user where to save
+        export_path = filedialog.asksaveasfilename(
+            title=self._t("export_logs_title"),
+            defaultextension=".txt",
+            filetypes=[(self._t("export_logs_filetype"), "*.txt"), (self._t("export_logs_all_files"), "*.*")],
+            initialfile=f"doomer_logs_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+        )
+
+        if not export_path:
+            return  # User cancelled
+
+        try:
+            # Copy log file to selected location
+            shutil.copy2(log_file, export_path)
+            self._log(self._t("log_export_success", path=export_path))
+            messagebox.showinfo(
+                self._t("dialog_completed_title"),
+                self._t("export_logs_success", path=export_path),
+            )
+        except OSError as error:
+            self._log_error(self._t("log_export_error", error=error))
+            messagebox.showerror(
+                self._t("dialog_error_title"),
+                self._t("export_logs_error", error=error),
+            )
 
     def _start_download(self) -> None:
         if self.downloading:
@@ -4523,11 +4569,76 @@ class DoomerGeneratorApp:
             links.append(line)
         return links
 
-    def _log(self, message: str) -> None:
+    def _setup_logging(self) -> None:
+        """Setup file-based logging with rotation."""
+        # Create logs directory
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create logger
+        self.logger = logging.getLogger("DoomerGenerator")
+        self.logger.setLevel(logging.DEBUG)
+
+        # Remove existing handlers to avoid duplicates
+        self.logger.handlers.clear()
+
+        # File handler with rotation (max 10MB, keep 5 backups)
+        log_file = self.logs_dir / "doomer_generator.log"
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(logging.DEBUG)
+
+        # Format: [2024-03-06 15:30:45] [INFO] Message
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        file_handler.setFormatter(formatter)
+
+        self.logger.addHandler(file_handler)
+
+        # Log startup
+        self.logger.info("=" * 60)
+        self.logger.info("Doomer Generator started")
+        self.logger.info(f"Python version: {sys.version}")
+        self.logger.info(f"Platform: {sys.platform}")
+        self.logger.info("=" * 60)
+
+    def _log(self, message: str, level: str = "INFO") -> None:
+        """Log message to both UI widget and file."""
+        # Write to UI
         self.log_widget.configure(state=tk.NORMAL)
         self.log_widget.insert(tk.END, message + "\n")
         self.log_widget.see(tk.END)
         self.log_widget.configure(state=tk.DISABLED)
+
+        # Write to file with appropriate level
+        if hasattr(self, "logger"):
+            level_upper = level.upper()
+            if level_upper == "DEBUG":
+                self.logger.debug(message)
+            elif level_upper == "WARNING":
+                self.logger.warning(message)
+            elif level_upper == "ERROR":
+                self.logger.error(message)
+            else:  # INFO or default
+                self.logger.info(message)
+
+    def _log_debug(self, message: str) -> None:
+        """Log debug message (file only, not shown in UI)."""
+        if hasattr(self, "logger"):
+            self.logger.debug(message)
+
+    def _log_warning(self, message: str) -> None:
+        """Log warning message to both UI and file."""
+        self._log(f"⚠️ {message}", "WARNING")
+
+    def _log_error(self, message: str) -> None:
+        """Log error message to both UI and file."""
+        self._log(f"❌ {message}", "ERROR")
 
 
 def main() -> None:

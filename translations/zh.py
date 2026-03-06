@@ -210,5 +210,15 @@ TRANSLATIONS = {
     "oauth_missing_body": "请选择从Google Cloud下载的OAuth客户端JSON文件。",
     "oauth_file_missing_title": "缺少OAuth文件",
     "oauth_file_missing_body": "未选择有效的JSON文件。\n请在登录前选择桌面OAuth凭据文件。",
+    # Logging
+    "general_btn_export_logs": "导出日志",
+    "export_logs_title": "导出日志",
+    "export_logs_filetype": "文本文件",
+    "export_logs_all_files": "所有文件",
+    "export_logs_no_file": "未找到日志文件。",
+    "export_logs_success": "日志已成功导出到:\n{path}",
+    "export_logs_error": "导出日志时出错:\n{error}",
+    "log_export_success": "日志已导出到: {path}",
+    "log_export_error": "导出日志时出错: {error}",
 }
 

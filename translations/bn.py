@@ -210,5 +210,15 @@ TRANSLATIONS = {
     "oauth_missing_body": "Google Cloud থেকে ডাউনলোড করা OAuth ক্লায়েন্ট JSON ফাইল নির্বাচন করুন।",
     "oauth_file_missing_title": "OAuth ফাইল অনুপস্থিত",
     "oauth_file_missing_body": "কোনো বৈধ JSON ফাইল নির্বাচন করা হয়নি।\nলগইন করার আগে ডেস্কটপ OAuth শংসাপত্র ফাইল নির্বাচন করুন।",
+    # Logging
+    "general_btn_export_logs": "লগ রপ্তানি করুন",
+    "export_logs_title": "লগ রপ্তানি করুন",
+    "export_logs_filetype": "টেক্সট ফাইল",
+    "export_logs_all_files": "সমস্ত ফাইল",
+    "export_logs_no_file": "কোনো লগ ফাইল পাওয়া যায়নি।",
+    "export_logs_success": "লগ সফলভাবে রপ্তানি করা হয়েছে:\n{path}",
+    "export_logs_error": "লগ রপ্তানি করতে ত্রুটি:\n{error}",
+    "log_export_success": "লগ রপ্তানি করা হয়েছে: {path}",
+    "log_export_error": "লগ রপ্তানি করতে ত্রুটি: {error}",
 }
 

@@ -210,5 +210,15 @@ TRANSLATIONS = {
     "oauth_missing_body": "حدد ملف OAuth عميل JSON المنزل من Google Cloud.",
     "oauth_file_missing_title": "ملف OAuth مفقود",
     "oauth_file_missing_body": "لم يتم تحديد ملف JSON صالح.\nاختر ملف بيانات اعتماد OAuth لسطح المكتب قبل تسجيل الدخول.",
+    # Logging
+    "general_btn_export_logs": "تصدير السجلات",
+    "export_logs_title": "تصدير السجلات",
+    "export_logs_filetype": "ملفات نصية",
+    "export_logs_all_files": "جميع الملفات",
+    "export_logs_no_file": "لم يتم العثور على ملف سجل.",
+    "export_logs_success": "تم تصدير السجلات بنجاح إلى:\n{path}",
+    "export_logs_error": "خطأ في تصدير السجلات:\n{error}",
+    "log_export_success": "تم تصدير السجلات إلى: {path}",
+    "log_export_error": "خطأ في تصدير السجلات: {error}",
 }
 
