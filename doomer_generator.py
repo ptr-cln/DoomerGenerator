@@ -1302,9 +1302,9 @@ class YouTubeUploader:
                         },
                         "status": status_dict,
                     }
-                    # Use 32MB chunks for faster uploads on modern connections (was 8MB)
-                    # Larger chunks = fewer HTTP requests = better throughput
-                    media = MediaFileUpload(str(video_file), chunksize=32 * 1024 * 1024, resumable=True)
+                    # Use 10MB chunks - balanced between speed and reliability
+                    # Too large (32MB) can cause timeouts, too small (1MB) is slow
+                    media = MediaFileUpload(str(video_file), chunksize=10 * 1024 * 1024, resumable=True)
                     insert_request = service.videos().insert(
                         part="snippet,status",
                         body=request_body,
