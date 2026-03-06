@@ -1392,10 +1392,10 @@ class YouTubeUploader:
                 self.log(f"Rilevati {len(current_files)} nuovi video pronti per l'upload...")
             first_batch = False
 
-            # Update total count for progress calculation
-            total = uploaded + failed + len(current_files)
-
             for video_file in current_files:
+                # Recalculate total on each iteration to account for new videos detected during upload
+                all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
+                total = uploaded + failed + len(all_pending)
                 index = uploaded + failed + 1
                 processed_files.add(video_file)  # Mark as processed immediately
                 title = video_file.stem
