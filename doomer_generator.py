@@ -1240,11 +1240,6 @@ class YouTubeUploader:
         _, _, _, build, HttpError, MediaFileUpload, httplib2 = _import_youtube_modules()
         credentials = self._authenticate(interactive=False)
 
-        # Configure socket timeout to prevent hanging (60 seconds)
-        # Applied only during service creation to avoid slowing down uploads
-        import socket
-        socket.setdefaulttimeout(60)
-
         service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
         uploaded = 0
