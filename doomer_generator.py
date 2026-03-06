@@ -6280,6 +6280,7 @@ class DoomerGeneratorApp:
             elif event == "upload_finished":
                 summary: UploadSummary = payload  # type: ignore[assignment]
                 self.uploading = False
+                self.upload_paused = False  # Reset pause flag
                 self._stop_timer("upload")
                 if not self.youtube_authenticating:
                     self._set_action_buttons_enabled()
@@ -6323,6 +6324,7 @@ class DoomerGeneratorApp:
             elif event == "audio_finished":
                 summary: ConversionSummary = payload  # type: ignore[assignment]
                 self.audio_processing = False
+                self.audio_paused = False  # Reset pause flag
                 self._stop_timer("audio")
                 self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
@@ -6350,6 +6352,7 @@ class DoomerGeneratorApp:
             elif event == "video_finished":
                 summary: VideoSummary = payload  # type: ignore[assignment]
                 self.video_processing = False
+                self.video_paused = False  # Reset pause flag
                 self._stop_timer("video")
                 self._set_action_buttons_enabled()
                 progress_val = 100 if summary.total else 0
