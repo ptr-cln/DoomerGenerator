@@ -1332,15 +1332,28 @@ class YouTubeUploader:
 
                     response = None
                     speed_mbps = 0.0  # Initialize speed
+                    max_retries = 5
+                    retry_count = 0
+
                     # Loop until we get a valid response dict (not None, not False)
                     while not isinstance(response, dict):
-                        status, response = insert_request.next_chunk(num_retries=3)
+                        try:
+                            status, response = insert_request.next_chunk(num_retries=3)
+                        except Exception as chunk_error:  # noqa: BLE001
+                            # Handle SSL errors and other network issues with retry
+                            retry_count += 1
+                            if retry_count > max_retries:
+                                raise
+                            self.log(f"  Errore chunk (tentativo {retry_count}/{max_retries}): {chunk_error}")
+                            time.sleep(2 ** retry_count)  # Exponential backoff: 2, 4, 8, 16, 32 seconds
+                            continue
 
                         if status is None:
                             # First chunk, no progress yet
                             continue
 
                         chunk_count += 1
+                        retry_count = 0  # Reset retry count on successful chunk
 
                         # Calculate upload speed
                         current_progress = status.progress()
