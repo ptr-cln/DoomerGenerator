@@ -4806,9 +4806,9 @@ class DoomerGeneratorApp:
         """Automatically save settings periodically."""
         current_time = time.time()
         if current_time - self.last_auto_save_time >= (self.auto_save_interval_ms / 1000):
-            self._save_audio_settings()
-            self._save_video_settings()
-            self._save_upload_settings()
+            self._save_audio_settings(silent=True)
+            self._save_video_settings(silent=True)
+            self._save_upload_settings(silent=True)
             self.last_auto_save_time = current_time
             self._log_debug("Auto-save completed")
 
@@ -6141,7 +6141,7 @@ class DoomerGeneratorApp:
                     self.youtube_description_widget.delete("1.0", tk.END)
                     self.youtube_description_widget.insert("1.0", description_template)
 
-    def _save_audio_settings(self) -> None:
+    def _save_audio_settings(self, silent: bool = False) -> None:
         payload = self._read_persisted_app_settings()
         payload["audio"] = {
             "input_dir": self.audio_input_var.get().strip(),
@@ -6160,10 +6160,10 @@ class DoomerGeneratorApp:
             "distortion_amount": self.distortion_var.get(),
             "compressor_intensity": self.compressor_var.get(),
         }
-        if self._write_persisted_app_settings(payload):
+        if self._write_persisted_app_settings(payload) and not silent:
             self._log(self._t("log_audio_settings_saved", file=self.app_settings_path.name))
 
-    def _save_video_settings(self) -> None:
+    def _save_video_settings(self, silent: bool = False) -> None:
         payload = self._read_persisted_app_settings()
         payload["video"] = {
             "audio_input_dir": self.video_audio_input_var.get().strip(),
@@ -6182,10 +6182,10 @@ class DoomerGeneratorApp:
             ),
             "shutdown_after_generation": self.video_shutdown_after_generation_var.get(),
         }
-        if self._write_persisted_app_settings(payload):
+        if self._write_persisted_app_settings(payload) and not silent:
             self._log(self._t("log_video_settings_saved", file=self.app_settings_path.name))
 
-    def _save_upload_settings(self) -> None:
+    def _save_upload_settings(self, silent: bool = False) -> None:
         payload = self._read_persisted_app_settings()
         description_template = self.youtube_description_widget.get("1.0", tk.END).strip()
         if not description_template:
@@ -6207,7 +6207,7 @@ class DoomerGeneratorApp:
             "description_template": description_template,
         }
         payload["upload"] = upload_payload
-        if self._write_persisted_app_settings(payload):
+        if self._write_persisted_app_settings(payload) and not silent:
             self._log(self._t("log_upload_settings_saved", file=self.app_settings_path.name))
 
     def _is_busy(self) -> bool:
