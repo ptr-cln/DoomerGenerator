@@ -1360,6 +1360,13 @@ class YouTubeUploader:
             # Log when new videos are detected (after first batch)
             if not first_batch:
                 self.log(f"Rilevati {len(current_files)} nuovi video pronti per l'upload...")
+                # Add new files to queue
+                for video_file in current_files:
+                    if video_file.name not in self.current_queue_items:
+                        item = self._add_queue_item(str(video_file), "Upload", refresh=False)
+                        self.current_queue_items[video_file.name] = item
+                # Refresh queue display once after adding all new items
+                self._refresh_queue_display()
             first_batch = False
 
             for video_file in current_files:
@@ -1703,21 +1710,16 @@ class DoomerVideoGenerator:
         settings: VideoSettings,
         progress: Callable[[int, int, int, str, str], None],
         check_pause: Callable[[], bool] | None = None,
+        on_new_files: Callable[[list[Path]], None] | None = None,
     ) -> VideoSummary:
-        audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
-        total = len(audio_files)
-        if total == 0:
-            self.log("Nessun file audio disponibile per creare video.")
-            return VideoSummary(total=0, generated=0, failed=0)
-
         if not self.doomer_image.is_file():
             self.log(f"Doomer image mancante: {self.doomer_image}")
-            return VideoSummary(total=total, generated=0, failed=total)
+            return VideoSummary(total=0, generated=0, failed=0)
 
         backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
         if not backgrounds:
             self.log(f"Nessun background trovato in: {self.backgrounds_dir}")
-            return VideoSummary(total=total, generated=0, failed=total)
+            return VideoSummary(total=0, generated=0, failed=0)
 
         resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
         self.log(
@@ -1727,52 +1729,77 @@ class DoomerVideoGenerator:
 
         generated = 0
         failed = 0
+        processed_files: set[Path] = set()
 
         # Track generation times for ETA calculation
         generation_times: list[float] = []
 
-        for index, audio_file in enumerate(audio_files, start=1):
-            relative = audio_file.relative_to(audio_input_dir)
-            destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            memory = _check_and_reset_memory(self.usage_memory_path, backgrounds, "backgrounds")
-            background = _get_least_used_file(backgrounds, memory, "backgrounds")
-            if background:
-                _increment_usage(self.usage_memory_path, background, "backgrounds")
+        first_batch = True
 
-            self.log(f"[{index}/{total}] Video: {audio_file.name}")
-            if background:
-                self.log(f"  Background: {background.name}")
-            else:
-                self.log("  Background: Nessuno selezionato")
+        while True:
+            # Get current list of audio files, excluding already processed ones
+            current_files = [f for f in _collect_files(audio_input_dir, AUDIO_EXTENSIONS) if f not in processed_files]
 
-            # Track generation time
-            start_time = time.time()
-            success = self._generate_single_video(audio_file, background, destination, settings, resolved_encoder)
-            elapsed = time.time() - start_time
+            if not current_files:
+                # No new audio files to process
+                break
 
-            if success:
-                generated += 1
-                generation_times.append(elapsed)
-                self.log(f"  OK -> {destination.name}")
-            else:
-                failed += 1
-                self.log(f"  ERRORE -> {audio_file.name}")
+            # Log when new files are detected (after first batch)
+            if not first_batch:
+                self.log(f"Rilevati {len(current_files)} nuovi file audio pronti per la generazione video...")
+                # Notify caller about new files (for queue update)
+                if on_new_files:
+                    on_new_files(current_files)
+            first_batch = False
 
-            # Calculate ETA based on average generation time
-            eta_seconds = 0
-            if generation_times:
-                avg_time = sum(generation_times) / len(generation_times)
-                remaining_videos = total - index
-                eta_seconds = int(avg_time * remaining_videos)
+            for audio_file in current_files:
+                # Recalculate total on each iteration to account for new files detected during generation
+                all_pending = [f for f in _collect_files(audio_input_dir, AUDIO_EXTENSIONS) if f not in processed_files]
+                total = generated + failed + len(all_pending)
+                index = generated + failed + 1
+                processed_files.add(audio_file)  # Mark as processed immediately
 
-            background_name = background.name if background else "N/A"
-            progress(index, total, eta_seconds, audio_file.name, background_name)
+                relative = audio_file.relative_to(audio_input_dir)
+                destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                memory = _check_and_reset_memory(self.usage_memory_path, backgrounds, "backgrounds")
+                background = _get_least_used_file(backgrounds, memory, "backgrounds")
+                if background:
+                    _increment_usage(self.usage_memory_path, background, "backgrounds")
 
-            # Check for pause AFTER processing the file to avoid re-processing
-            if check_pause:
-                while check_pause():
-                    time.sleep(0.1)
+                self.log(f"[{index}/{total}] Video: {audio_file.name}")
+                if background:
+                    self.log(f"  Background: {background.name}")
+                else:
+                    self.log("  Background: Nessuno selezionato")
+
+                # Track generation time
+                start_time = time.time()
+                success = self._generate_single_video(audio_file, background, destination, settings, resolved_encoder)
+                elapsed = time.time() - start_time
+
+                if success:
+                    generated += 1
+                    generation_times.append(elapsed)
+                    self.log(f"  OK -> {destination.name}")
+                else:
+                    failed += 1
+                    self.log(f"  ERRORE -> {audio_file.name}")
+
+                # Calculate ETA based on average generation time
+                eta_seconds = 0
+                if generation_times:
+                    avg_time = sum(generation_times) / len(generation_times)
+                    remaining_videos = total - index
+                    eta_seconds = int(avg_time * remaining_videos)
+
+                background_name = background.name if background else "N/A"
+                progress(index, total, eta_seconds, audio_file.name, background_name)
+
+                # Check for pause AFTER processing the file to avoid re-processing
+                if check_pause:
+                    while check_pause():
+                        time.sleep(0.1)
 
         return VideoSummary(total=total, generated=generated, failed=failed)
 
@@ -4630,12 +4657,23 @@ class DoomerGeneratorApp:
                 usage_memory_path=self.usage_memory_path,
                 log=self._queue_log,
             )
+
+            def on_new_video_files(new_files: list[Path]) -> None:
+                """Callback when new audio files are detected during video generation."""
+                for audio_file in new_files:
+                    if audio_file.name not in self.current_queue_items:
+                        item = self._add_queue_item(str(audio_file), "Video", refresh=False)
+                        self.current_queue_items[audio_file.name] = item
+                # Refresh queue display once after adding all new items
+                self._refresh_queue_display()
+
             summary = generator.generate_from_audio_folder(
                 audio_input_dir=input_audio_dir,
                 video_output_dir=output_video_dir,
                 settings=settings,
                 progress=self._queue_video_progress,
                 check_pause=lambda: self.video_paused,
+                on_new_files=on_new_video_files,
             )
             self.events.put(("video_finished", summary))
         except Exception as error:  # noqa: BLE001
