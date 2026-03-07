@@ -3371,19 +3371,12 @@ class DoomerGeneratorApp:
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X)
-        self.youtube_login_button = ttk.Button(
-            actions,
-            text=self._t("upload_btn_login"),
-            command=self._start_youtube_login,
-        )
-        self.youtube_login_button.pack(side=tk.LEFT)
-
         self.youtube_upload_button = ttk.Button(
             actions,
             text=self._t("upload_btn_upload"),
             command=self._start_youtube_upload,
         )
-        self.youtube_upload_button.pack(side=tk.LEFT, padx=(8, 5))
+        self.youtube_upload_button.pack(side=tk.LEFT, padx=(0, 5))
         self.upload_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_upload_pause, state=tk.DISABLED)
         self.upload_pause_button.pack(side=tk.LEFT)
         self.upload_save_button = ttk.Button(
@@ -3392,6 +3385,12 @@ class DoomerGeneratorApp:
             command=self._save_upload_settings,
         )
         self.upload_save_button.pack(side=tk.LEFT, padx=8)
+        self.youtube_login_button = ttk.Button(
+            actions,
+            text=self._t("upload_btn_login"),
+            command=self._start_youtube_login,
+        )
+        self.youtube_login_button.pack(side=tk.LEFT)
 
         # Upload progress bar and timer
         upload_progress_box = ttk.LabelFrame(parent, text=self._t("status_group_upload"), padding=8)
