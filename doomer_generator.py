@@ -1230,9 +1230,87 @@ class YouTubeUploader:
         self.client_secret_path = client_secret_path
         self.token_path = token_path
         self.log = log
+        self._channel_videos_cache: list[str] = []  # Cache of existing video titles
+        self._cache_loaded = False
 
     def login(self) -> None:
         self._authenticate(interactive=True)
+
+    def _load_channel_videos(self, service) -> None:
+        """Load all video titles from the authenticated user's channel."""
+        if self._cache_loaded:
+            return
+
+        try:
+            self.log("Caricamento video esistenti dal canale...")
+
+            # Get the authenticated user's channel
+            channels_response = service.channels().list(
+                part="contentDetails",
+                mine=True
+            ).execute()
+
+            if not channels_response.get("items"):
+                self.log("  Nessun canale trovato per l'utente autenticato.")
+                self._cache_loaded = True
+                return
+
+            # Get the uploads playlist ID
+            uploads_playlist_id = channels_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+            # Fetch all videos from the uploads playlist
+            next_page_token = None
+            video_count = 0
+
+            while True:
+                playlist_response = service.playlistItems().list(
+                    part="snippet",
+                    playlistId=uploads_playlist_id,
+                    maxResults=50,
+                    pageToken=next_page_token
+                ).execute()
+
+                for item in playlist_response.get("items", []):
+                    title = item["snippet"]["title"]
+                    self._channel_videos_cache.append(title)
+                    video_count += 1
+
+                next_page_token = playlist_response.get("nextPageToken")
+                if not next_page_token:
+                    break
+
+            self.log(f"  Caricati {video_count} video dal canale.")
+            self._cache_loaded = True
+
+        except Exception as error:  # noqa: BLE001
+            self.log(f"  Errore durante il caricamento dei video: {error}")
+            self._cache_loaded = True  # Mark as loaded even on error to avoid retrying
+
+    def _video_exists_on_channel(self, title: str) -> bool:
+        """Check if a video with similar title already exists on the channel.
+
+        Extracts the core part (artist - song) from titles like:
+        "Artist - Song (Doomer Wave)" and checks for duplicates.
+        """
+        # Extract core title by removing " (Doomer Wave)" suffix
+        import re
+        core_title = title
+        match = re.match(r"^(.+?)\s*\(Doomer Wave\)\s*$", title, re.IGNORECASE)
+        if match:
+            core_title = match.group(1).strip()
+
+        # Check if any existing video has the same core title
+        for existing_title in self._channel_videos_cache:
+            existing_core = existing_title
+            match = re.match(r"^(.+?)\s*\(Doomer Wave\)\s*$", existing_title, re.IGNORECASE)
+            if match:
+                existing_core = match.group(1).strip()
+
+            # Case-insensitive comparison
+            if core_title.lower() == existing_core.lower():
+                return True
+
+        return False
 
     def upload_folder(
         self,
@@ -1258,8 +1336,12 @@ class YouTubeUploader:
 
         service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
+        # Load existing videos from channel to check for duplicates
+        self._load_channel_videos(service)
+
         uploaded = 0
         failed = 0
+        skipped = 0
         processed_files: set[Path] = set()  # Track files we've already processed
         first_batch = True
 
@@ -1284,14 +1366,21 @@ class YouTubeUploader:
 
                 # Recalculate total on each iteration to account for new videos detected during upload
                 all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
-                total = uploaded + failed + len(all_pending)
-                index = uploaded + failed + 1
+                total = uploaded + failed + skipped + len(all_pending)
+                index = uploaded + failed + skipped + 1
                 processed_files.add(video_file)  # Mark as processed immediately
                 title = video_file.stem
                 cleanup_target: Path | None = None
                 media = None
                 insert_request = None
                 self.log(f"[{index}/{total}] Upload: {video_file.name}")
+
+                # Check if video already exists on channel
+                if self._video_exists_on_channel(title):
+                    self.log(f"  SALTATO: Video già presente sul canale")
+                    skipped += 1
+                    continue
+
                 try:
                     try:
                         description = settings.description_template.format(title=title)
@@ -1428,6 +1517,9 @@ class YouTubeUploader:
                             on_uploaded(cleanup_target)
                         except Exception as callback_error:  # noqa: BLE001
                             self.log(f"  Cleanup warning: {callback_error}")
+
+        if skipped > 0:
+            self.log(f"\nRiepilogo: {uploaded} caricati, {failed} falliti, {skipped} saltati (già presenti)")
 
         return UploadSummary(total=total, uploaded=uploaded, failed=failed)
 
