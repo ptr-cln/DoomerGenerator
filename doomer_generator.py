@@ -736,12 +736,23 @@ def _build_download_target(link: str) -> DownloadTarget:
             )
 
     if video_id:
-        canonical_video = f"https://www.youtube.com/watch?v={video_id}"
-        return DownloadTarget(
-            source_url=source_url,
-            request_url=canonical_video,
-            dedupe_key=f"video:{video_id}",
-        )
+        # Preserve YouTube Music URLs for better yt-dlp extraction
+        host = parsed.netloc.lower()
+        if "music.youtube.com" in host:
+            # Keep original URL for YouTube Music
+            return DownloadTarget(
+                source_url=source_url,
+                request_url=source_url,
+                dedupe_key=f"video:{video_id}",
+            )
+        else:
+            # Normalize to canonical YouTube URL for regular videos
+            canonical_video = f"https://www.youtube.com/watch?v={video_id}"
+            return DownloadTarget(
+                source_url=source_url,
+                request_url=canonical_video,
+                dedupe_key=f"video:{video_id}",
+            )
 
     return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}")
 
