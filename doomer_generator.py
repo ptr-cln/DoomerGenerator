@@ -1389,6 +1389,13 @@ class YouTubeUploader:
                     failed += 1
                     self.log(f"  Upload error: {error}")
                 finally:
+                    # Close file handle before cleanup to avoid PermissionError on Windows
+                    # See: https://github.com/googleapis/google-api-python-client/issues/2489
+                    if media is not None and hasattr(media, '_fd') and media._fd is not None:
+                        try:
+                            media._fd.close()
+                        except Exception:  # noqa: BLE001
+                            pass
                     media = None
                     insert_request = None
                     progress((index / total) * 100.0, index, total, 100.0, video_file.name, 0.0, 0)
@@ -4584,6 +4591,7 @@ class DoomerGeneratorApp:
         return YouTubeUploader(client_secret_path=client_secret, token_path=token_path, log=self._queue_log)
 
     def _cleanup_after_successful_upload(self, uploaded_video_path: Path) -> None:
+        self._queue_log(f"  DEBUG: Cleanup callback chiamata per: {uploaded_video_path.name}")
         upload_root = Path(self.upload_video_input_var.get().strip())
         video_root = Path(self.video_output_var.get().strip())
         audio_in_root = Path(self.audio_input_var.get().strip())
