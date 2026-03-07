@@ -586,6 +586,7 @@ class DownloadTarget:
     dedupe_key: str
     playlist_id: str | None = None
     playlist_index: str | None = None
+    artist: str | None = None  # Custom artist name to prepend to filename
 
 
 def _safe_mtime(path: Path) -> float:
@@ -707,15 +708,15 @@ def _extract_youtube_video_id(parsed_url) -> str | None:
     return None
 
 
-def _build_download_target(link: str) -> DownloadTarget:
+def _build_download_target(link: str, artist: str | None = None) -> DownloadTarget:
     source_url = link.strip()
     if not source_url:
-        return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key="empty")
+        return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key="empty", artist=artist)
 
     try:
         parsed = urlparse(source_url)
     except ValueError:
-        return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}")
+        return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}", artist=artist)
 
     query = parse_qs(parsed.query)
     playlist_id = (query.get("list") or [None])[0]
@@ -733,6 +734,7 @@ def _build_download_target(link: str) -> DownloadTarget:
                 dedupe_key=f"playlist:{playlist_id}:{playlist_index}",
                 playlist_id=playlist_id,
                 playlist_index=playlist_index,
+                artist=artist,
             )
 
     if video_id:
@@ -744,6 +746,7 @@ def _build_download_target(link: str) -> DownloadTarget:
                 source_url=source_url,
                 request_url=source_url,
                 dedupe_key=f"video:{video_id}",
+                artist=artist,
             )
         else:
             # Normalize to canonical YouTube URL for regular videos
@@ -752,9 +755,10 @@ def _build_download_target(link: str) -> DownloadTarget:
                 source_url=source_url,
                 request_url=canonical_video,
                 dedupe_key=f"video:{video_id}",
+                artist=artist,
             )
 
-    return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}")
+    return DownloadTarget(source_url=source_url, request_url=source_url, dedupe_key=f"url:{source_url}", artist=artist)
 
 
 def _with_doomer_suffix(stem: str) -> str:
@@ -3970,8 +3974,8 @@ class DoomerGeneratorApp:
         targets: list[DownloadTarget] = []
         seen_keys: set[str] = set()
         duplicates = 0
-        for link in links:
-            target = _build_download_target(link)
+        for url, artist in links:
+            target = _build_download_target(url, artist=artist)
             if target.dedupe_key in seen_keys:
                 duplicates += 1
                 continue
@@ -4476,6 +4480,14 @@ class DoomerGeneratorApp:
                             f"  Playlist mode: list={target.playlist_id} item={target.playlist_index}",
                         )
                     )
+
+                # Determine output template based on whether artist is specified
+                if target.artist:
+                    output_template = f"{target.artist} - %(title)s.%(ext)s"
+                    self.events.put(("log", f"  Artist: {target.artist}"))
+                else:
+                    output_template = "%(title)s.%(ext)s"
+
                 command = [
                     *ytdlp_command,
                     "--newline",
@@ -4499,7 +4511,7 @@ class DoomerGeneratorApp:
                     "--paths",
                     str(target_dir),
                     "--output",
-                    "%(title)s.%(ext)s",
+                    output_template,
                 ]
                 if target.playlist_id and target.playlist_index:
                     command.extend(["--yes-playlist", "--playlist-items", target.playlist_index])
@@ -6826,17 +6838,30 @@ class DoomerGeneratorApp:
             encoding="utf-8",
         )
 
-    def _read_youtube_links(self) -> list[str]:
+    def _read_youtube_links(self) -> list[tuple[str, str | None]]:
+        """Read YouTube links from file. Returns list of (url, artist_name) tuples.
+
+        Format: URL (Artist Name)
+        Example: https://music.youtube.com/watch?v=xxx (XXXTentacion)
+        """
         try:
             text = self.links_file.read_text(encoding="utf-8")
         except OSError:
             return []
-        links: list[str] = []
+        links: list[tuple[str, str | None]] = []
         for raw_line in text.splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
-            links.append(line)
+
+            # Check if artist name is specified in format: URL (Artist Name)
+            match = re.match(r"^(.+?)\s+\(([^)]+)\)\s*$", line)
+            if match:
+                url = match.group(1).strip()
+                artist = match.group(2).strip()
+                links.append((url, artist))
+            else:
+                links.append((line, None))
         return links
 
     def _setup_logging(self) -> None:
