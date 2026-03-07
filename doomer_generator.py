@@ -1391,7 +1391,7 @@ class YouTubeUploader:
                 finally:
                     media = None
                     insert_request = None
-                    progress((index / total) * 100.0, index, total, 100.0, video_file.name)
+                    progress((index / total) * 100.0, index, total, 100.0, video_file.name, 0.0, 0)
                     if cleanup_target is not None and on_uploaded is not None:
                         try:
                             on_uploaded(cleanup_target)
