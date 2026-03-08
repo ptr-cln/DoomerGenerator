@@ -4771,7 +4771,11 @@ class DoomerGeneratorApp:
             downloaded = 0
             failed = 0
             ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
+            # Pattern to match download progress (e.g., "[download]  45.2% of 10.5MiB")
             percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
+
+            # Debug: log that we're starting download batch
+            self.events.put(("log", f"Starting download batch with {total} targets"))
 
             for index, target in enumerate(targets, start=1):
                 # Check for pause
@@ -4843,6 +4847,11 @@ class DoomerGeneratorApp:
                         if not line:
                             continue
 
+                        # Debug: log all lines containing [download] to see the format
+                        if "[download]" in line:
+                            self.events.put(("log", f"  DEBUG: {line}"))
+
+                        # Check for progress percentage
                         match = percent_pattern.search(line)
                         if match:
                             link_percent = float(match.group(1))
