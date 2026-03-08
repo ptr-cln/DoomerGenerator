@@ -2752,8 +2752,39 @@ class DoomerGeneratorApp:
         self.theme_combo.grid(row=1, column=1, padx=6, pady=6, sticky="w")
         self.theme_combo.bind("<<ComboboxSelected>>", self._on_theme_changed)
 
+        # OpenAI settings
+        openai_box = ttk.LabelFrame(parent, text=self._t("general_group_openai"), padding=8)
+        openai_box.pack(fill=tk.X, pady=(10, 0))
+        openai_box.columnconfigure(1, weight=1)
+        openai_box.columnconfigure(3, weight=1)
+
+        ttk.Label(openai_box, text=self._t("upload_label_openai_model")).grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.youtube_openai_model_entry = ttk.Entry(
+            openai_box,
+            textvariable=self.youtube_openai_model_var,
+            width=16,
+        )
+        self.youtube_openai_model_entry.grid(row=0, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Label(openai_box, text=self._t("upload_label_openai_key")).grid(
+            row=0, column=2, padx=6, pady=6, sticky="w"
+        )
+        self.youtube_openai_key_entry = ttk.Entry(
+            openai_box,
+            textvariable=self.youtube_openai_key_var,
+            show="*",
+        )
+        self.youtube_openai_key_entry.grid(row=0, column=3, padx=6, pady=6, sticky="ew")
+
+        ttk.Label(
+            openai_box,
+            text=self._t("upload_openai_hint"),
+        ).grid(row=1, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
+
         actions = ttk.LabelFrame(parent, text=self._t("general_group_maintenance"), padding=8)
-        actions.pack(fill=tk.X)
+        actions.pack(fill=tk.X, pady=(10, 0))
 
         self.clear_audio_input_button = ttk.Button(
             actions,
@@ -3504,29 +3535,6 @@ class DoomerGeneratorApp:
         ttk.Entry(options_box, textvariable=self.youtube_extra_tags_var).grid(
             row=2, column=3, padx=6, pady=6, sticky="ew"
         )
-
-        ttk.Label(options_box, text=self._t("upload_label_openai_model")).grid(row=3, column=0, padx=6, pady=6, sticky="w")
-        self.youtube_openai_model_entry = ttk.Entry(
-            options_box,
-            textvariable=self.youtube_openai_model_var,
-            width=16,
-        )
-        self.youtube_openai_model_entry.grid(row=3, column=1, padx=6, pady=6, sticky="w")
-
-        ttk.Label(options_box, text=self._t("upload_label_openai_key")).grid(
-            row=3, column=2, padx=6, pady=6, sticky="w"
-        )
-        self.youtube_openai_key_entry = ttk.Entry(
-            options_box,
-            textvariable=self.youtube_openai_key_var,
-            show="*",
-        )
-        self.youtube_openai_key_entry.grid(row=3, column=3, padx=6, pady=6, sticky="ew")
-
-        ttk.Label(
-            options_box,
-            text=self._t("upload_openai_hint"),
-        ).grid(row=4, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
         desc_box = ttk.LabelFrame(parent, text=self._t("upload_group_description"), padding=8)
         desc_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
