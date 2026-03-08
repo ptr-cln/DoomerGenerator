@@ -1128,55 +1128,153 @@ def _build_ai_tags(
 
 
 def _build_smart_tags(title: str) -> list[str]:
-    base_tags = [
-        "doomer wave",
-        "doomer music",
-        "slowed",
+    """Generate high-quality SEO tags using sophisticated pattern matching and genre detection."""
+
+    # Core doomer wave tags (always included)
+    core_tags = [
+        "doomerwave",
+        "slowed and reverb",
         "slowed reverb",
-        "sad playlist",
-        "dark ambience",
-        "nostalgic",
-        "night drive",
-        "lonely night",
-        "melancholic",
-        "post punk vibes",
+        "slowed",
     ]
-    cleaned_title = re.sub(r"[_\-]+", " ", title)
-    tokens = re.findall(r"[A-Za-z0-9']+", cleaned_title.lower())
-    stop_words = {
-        "the",
-        "and",
-        "feat",
-        "official",
-        "video",
-        "audio",
-        "hd",
-        "remaster",
-        "lyrics",
-        "music",
-        "live",
-        "version",
+
+    # Genre detection patterns
+    genre_patterns = {
+        # Emo/Sad Rap
+        r"\b(lil peep|xxxtentacion|juice wrld|nothing nowhere|convolk|brennan savage|wicca phase)\b": [
+            "emo rap", "sad rap", "soundcloud rap", "sad boy", "emotional rap", "underground rap"
+        ],
+        # Post Punk / Goth
+        r"\b(the smiths|joy division|the cure|bauhaus|siouxsie|sisters of mercy|new order)\b": [
+            "post punk", "goth", "darkwave", "new wave", "80s alternative", "gothic rock"
+        ],
+        # Shoegaze / Dream Pop
+        r"\b(slowdive|my bloody valentine|cocteau twins|mazzy star|beach house)\b": [
+            "shoegaze", "dream pop", "ethereal", "ambient rock", "noise pop"
+        ],
+        # Indie / Alternative
+        r"\b(radiohead|arctic monkeys|the strokes|tame impala|mac demarco)\b": [
+            "indie rock", "alternative rock", "indie", "alternative", "indie music"
+        ],
+        # Vaporwave / Synthwave
+        r"\b(macintosh plus|saint pepsi|blank banshee|home|perturbator)\b": [
+            "vaporwave", "synthwave", "retrowave", "chillwave", "aesthetic music"
+        ],
+        # Lo-fi Hip Hop
+        r"\b(nujabes|jinsang|idealism|quickly quickly|j\^p\^n)\b": [
+            "lofi hip hop", "lo-fi", "lofi beats", "chill beats", "study beats"
+        ],
     }
+
+    # Mood and aesthetic tags
+    mood_tags = [
+        "sad music",
+        "melancholic",
+        "nostalgic",
+        "aesthetic",
+        "depressing music",
+        "emotional",
+        "dark ambient",
+        "atmospheric",
+    ]
+
+    # Vibe tags (SEO-friendly)
+    vibe_tags = [
+        "late night vibes",
+        "3am vibes",
+        "midnight drive",
+        "night drive",
+        "rainy day",
+        "lonely night",
+        "sad vibes",
+        "chill vibes",
+    ]
+
+    # Activity tags
+    activity_tags = [
+        "study music",
+        "sleep music",
+        "background music",
+        "relaxing music",
+        "focus music",
+    ]
+
+    # Clean and tokenize title
+    cleaned_title = re.sub(r"[_\-]+", " ", title)
+    title_lower = cleaned_title.lower()
+    tokens = re.findall(r"[A-Za-z0-9']+", title_lower)
+
+    # Stop words to exclude
+    stop_words = {
+        "the", "and", "feat", "ft", "official", "video", "audio", "hd",
+        "remaster", "lyrics", "music", "live", "version", "remix", "cover",
+        "doomer", "wave", "slowed", "reverb"
+    }
+
+    # Extract meaningful keywords
     keyword_tokens = []
     for token in tokens:
-        if len(token) < 3 or token in stop_words:
-            continue
-        if token not in keyword_tokens:
-            keyword_tokens.append(token)
+        if len(token) >= 3 and token not in stop_words:
+            if token not in keyword_tokens:
+                keyword_tokens.append(token)
 
-    dynamic_tags = [_sanitize_tag(cleaned_title)]
-    dynamic_tags.extend(_sanitize_tag(token) for token in keyword_tokens[:10])
-    dynamic_tags.extend(_sanitize_tag(f"{token} slowed") for token in keyword_tokens[:5])
-    dynamic_tags.extend(_sanitize_tag(f"{token} doomer wave") for token in keyword_tokens[:4])
+    # Build tag list with priority order
+    tags = []
 
-    ordered: list[str] = []
-    for tag in dynamic_tags + base_tags:
+    # 1. Core doomer wave tags (highest priority)
+    tags.extend(core_tags)
+
+    # 2. Detect and add genre-specific tags
+    genre_tags_added = []
+    for pattern, genre_tags in genre_patterns.items():
+        if re.search(pattern, title_lower):
+            genre_tags_added.extend(genre_tags[:4])  # Add top 4 genre tags
+            break  # Only match one genre to avoid tag spam
+
+    if genre_tags_added:
+        tags.extend(genre_tags_added)
+
+    # 3. Add artist and song name from title
+    # Try to extract "Artist - Song" pattern
+    artist_song_match = re.match(r"^(.+?)\s*[-–—]\s*(.+?)(?:\s*\(.*\))?$", cleaned_title)
+    if artist_song_match:
+        artist = artist_song_match.group(1).strip()
+        song = artist_song_match.group(2).strip()
+        tags.append(_sanitize_tag(artist))
+        tags.append(_sanitize_tag(song))
+
+    # 4. Add keyword-based tags
+    for token in keyword_tokens[:8]:
+        tags.append(_sanitize_tag(token))
+
+    # 5. Add mood tags (select 4-5)
+    tags.extend(mood_tags[:5])
+
+    # 6. Add vibe tags (select 3-4)
+    tags.extend(vibe_tags[:4])
+
+    # 7. Add activity tags (select 2-3)
+    tags.extend(activity_tags[:3])
+
+    # 8. Add keyword variations for SEO
+    for token in keyword_tokens[:3]:
+        tags.append(_sanitize_tag(f"{token} slowed"))
+
+    # Deduplicate while preserving order
+    unique_tags: list[str] = []
+    seen_lower: set[str] = set()
+
+    for tag in tags:
         sanitized = _sanitize_tag(tag)
-        if not sanitized:
+        if not sanitized or len(sanitized) > 30:
             continue
-        if sanitized.lower() not in [item.lower() for item in ordered]:
-            ordered.append(sanitized)
-    return ordered[:25]
+        tag_lower = sanitized.lower()
+        if tag_lower not in seen_lower:
+            unique_tags.append(sanitized)
+            seen_lower.add(tag_lower)
+
+    # Return top 20 tags (YouTube limit is ~500 chars, ~20 tags is safe)
+    return unique_tags[:20]
 
 
 def _compose_youtube_tags(
