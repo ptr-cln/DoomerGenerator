@@ -1128,6 +1128,101 @@ def _build_ai_tags(
     return tags[:20]
 
 
+def _generate_mood_with_ai(
+    filename: str,
+    settings: UploadSettings,
+    log: Callable[[str], None] | None = None,
+) -> str | None:
+    """Generate a short melancholic mood phrase using OpenAI API.
+
+    Returns the mood phrase (max 4 words) or None if generation fails.
+    """
+    api_key = settings.openai_api_key.strip() or os.getenv("OPENAI_API_KEY", "").strip()
+    model = settings.openai_model.strip()
+    if not api_key or not model:
+        return None
+
+    prompt = (
+        "Generate a short melancholic mood phrase for a doomer music video.\n"
+        "Maximum 4 words. Use lowercase.\n"
+        "Examples: empty city night, late night drive, rainy neon streets, lonely midnight walk.\n"
+        f"Song: {filename}\n\n"
+        "Respond with ONLY the mood phrase, nothing else."
+    )
+
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a creative writer specializing in melancholic, atmospheric mood descriptions for doomer wave music.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "temperature": 0.8,  # Higher temperature for more creative/varied responses
+        "max_tokens": 20,
+    }
+
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    timeout = max(5.0, float(settings.openai_timeout_seconds))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        if log:
+            log(f"  Mood AI non disponibile (HTTP {error.code})")
+        return None
+    except Exception as error:
+        if log:
+            log(f"  Mood AI non disponibile: {error}")
+        return None
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        if log:
+            log("  Mood AI non disponibile: risposta JSON non valida.")
+        return None
+
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        return None
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        return None
+
+    content_text = _extract_ai_content_text(message.get("content"))
+    if not content_text:
+        return None
+
+    # Clean up the mood phrase
+    mood = content_text.strip().lower()
+    # Remove quotes if present
+    mood = mood.strip('"\'')
+    # Limit to 4 words
+    words = mood.split()
+    if len(words) > 4:
+        mood = " ".join(words[:4])
+
+    return mood if mood else None
+
+
 def _build_smart_tags(title: str) -> list[str]:
     """Generate high-quality SEO tags using sophisticated pattern matching and genre detection."""
 
@@ -1342,6 +1437,7 @@ class YouTubeUploader:
         self.log = log
         self._channel_videos_cache: list[str] = []  # Cache of existing video titles
         self._cache_loaded = False
+        self._title_format_counter = 0  # Counter to alternate title formats
 
     def login(self) -> None:
         self._authenticate(interactive=True)
@@ -1399,23 +1495,31 @@ class YouTubeUploader:
     def _video_exists_on_channel(self, title: str) -> bool:
         """Check if a video with similar title already exists on the channel.
 
-        Extracts the core part (artist - song) from titles like:
-        "Artist - Song (Doomer Wave)" and checks for duplicates.
+        Extracts the core part (artist - song) from titles with various formats:
+        - "Artist - Song (Doomer Wave / Slowed + Reverb) | mood"
+        - "mood | Artist - Song (Doomer Wave / Slowed + Reverb)"
+        - "Artist - Song (Doomer Wave / Slowed + Reverb)"
+        - "Artist - Song (Doomer Wave)"
         """
-        # Extract core title by removing " (Doomer Wave)" suffix
         import re
-        core_title = title
-        match = re.match(r"^(.+?)\s*\(Doomer Wave\)\s*$", title, re.IGNORECASE)
-        if match:
-            core_title = match.group(1).strip()
+
+        def extract_core(t: str) -> str:
+            """Extract core filename from various title formats."""
+            # Remove mood prefix: "mood | filename (...)"
+            t = re.sub(r"^[^|]+\|\s*", "", t)
+            # Remove mood suffix: "filename (...) | mood"
+            t = re.sub(r"\s*\|[^|]+$", "", t)
+            # Remove "(Doomer Wave / Slowed + Reverb)"
+            t = re.sub(r"\s*\(Doomer Wave\s*/\s*Slowed\s*\+\s*Reverb\)\s*$", "", t, flags=re.IGNORECASE)
+            # Remove old "(Doomer Wave)" format
+            t = re.sub(r"\s*\(Doomer Wave\)\s*$", "", t, flags=re.IGNORECASE)
+            return t.strip()
+
+        core_title = extract_core(title)
 
         # Check if any existing video has the same core title
         for existing_title in self._channel_videos_cache:
-            existing_core = existing_title
-            match = re.match(r"^(.+?)\s*\(Doomer Wave\)\s*$", existing_title, re.IGNORECASE)
-            if match:
-                existing_core = match.group(1).strip()
-
+            existing_core = extract_core(existing_title)
             # Case-insensitive comparison
             if core_title.lower() == existing_core.lower():
                 return True
@@ -1484,7 +1588,26 @@ class YouTubeUploader:
                 total = uploaded + failed + skipped + len(all_pending)
                 index = uploaded + failed + skipped + 1
                 processed_files.add(video_file)  # Mark as processed immediately
-                title = video_file.stem
+
+                # Build title with AI-generated mood
+                base_filename = video_file.stem
+                mood = _generate_mood_with_ai(base_filename, settings, log=self.log)
+
+                if mood:
+                    # Alternate between two title formats
+                    if self._title_format_counter % 2 == 0:
+                        # Format 1: {fileName} (Doomer Wave / Slowed + Reverb) | {mood}
+                        title = f"{base_filename} (Doomer Wave / Slowed + Reverb) | {mood}"
+                    else:
+                        # Format 2: {mood} | {fileName} (Doomer Wave / Slowed + Reverb)
+                        title = f"{mood} | {base_filename} (Doomer Wave / Slowed + Reverb)"
+                    self._title_format_counter += 1
+                    self.log(f"  Mood generato: {mood}")
+                else:
+                    # Fallback if AI mood generation fails
+                    title = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
+                    self.log(f"  Mood non disponibile, uso titolo standard")
+
                 cleanup_target: Path | None = None
                 media = None
                 insert_request = None
@@ -1707,7 +1830,8 @@ class DoomerBatchConverter:
 
         for index, source_file in enumerate(files, start=1):
             relative = source_file.relative_to(input_dir)
-            output_name = f"{_with_doomer_suffix(relative.stem)}{output_suffix}"
+            # Keep original filename without adding "(Doomer Wave)" suffix
+            output_name = f"{relative.stem}{output_suffix}"
             destination = output_dir / relative.parent / output_name
             destination.parent.mkdir(parents=True, exist_ok=True)
 
