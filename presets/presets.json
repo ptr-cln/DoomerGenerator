@@ -10,9 +10,9 @@
         6.0,
         3.0,
         -1.0,
-        -8.5,
-        -10.5,
-        -15.0
+        -7.5,
+        -10.0,
+        -13.5
       ],
       "fade_in_seconds": 1.5,
       "fade_out_seconds": 1.5,
@@ -20,7 +20,7 @@
       "output_format": "mp3",
       "reverb_percent": 25.0,
       "slowdown_percent": 20.0,
-      "stereo_width": 60.0,
+      "stereo_width": 75.0,
       "vinyl_volume_percent": 12.0
     }
   },

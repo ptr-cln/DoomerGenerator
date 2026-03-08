@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from tkcalendar import DateEntry
 
 
 AUDIO_EXTENSIONS = {
@@ -2171,8 +2172,6 @@ class DoomerGeneratorApp:
         self.youtube_client_secret_var = tk.StringVar(value=str(self.youtube_client_secret_path))
         self.youtube_token_var = tk.StringVar(value=str(self.youtube_token_path))
         self.youtube_privacy_var = tk.StringVar(value=self.default_upload_settings.privacy_status)
-        # schedule timestamp (ISO UTC) for "scheduled" privacy status
-        self.youtube_schedule_var = tk.StringVar(value="")
         self.youtube_category_var = tk.StringVar(value=self.default_upload_settings.category_id)
         self.youtube_extra_tags_var = tk.StringVar(value=self.default_upload_settings.extra_tags_csv)
         self.youtube_smart_tags_var = tk.BooleanVar(value=self.default_upload_settings.smart_tags_enabled)
@@ -3340,14 +3339,40 @@ class DoomerGeneratorApp:
 
         # schedule controls start hidden, shown only when privacy == scheduled
         self.youtube_schedule_label = ttk.Label(options_box, text=self._t("upload_label_publish_at"))
-        self.youtube_schedule_entry = ttk.Entry(options_box, textvariable=self.youtube_schedule_var, width=20)
+
+        # Create a frame to hold date and time pickers
+        self.youtube_schedule_frame = ttk.Frame(options_box)
+
+        # Date picker (calendar widget)
+        self.youtube_schedule_date = DateEntry(
+            self.youtube_schedule_frame,
+            width=12,
+            background='darkblue',
+            foreground='white',
+            borderwidth=2,
+            date_pattern='yyyy-mm-dd',
+            mindate=datetime.date.today(),  # Can't schedule in the past
+        )
+        self.youtube_schedule_date.pack(side=tk.LEFT, padx=(0, 5))
+
+        # Time picker (hour and minute)
+        time_frame = ttk.Frame(self.youtube_schedule_frame)
+        time_frame.pack(side=tk.LEFT)
+
+        self.youtube_schedule_hour_var = tk.StringVar(value="12")
+        self.youtube_schedule_minute_var = tk.StringVar(value="00")
+
+        ttk.Entry(time_frame, textvariable=self.youtube_schedule_hour_var, width=3).pack(side=tk.LEFT)
+        ttk.Label(time_frame, text=":").pack(side=tk.LEFT)
+        ttk.Entry(time_frame, textvariable=self.youtube_schedule_minute_var, width=3).pack(side=tk.LEFT)
+
         # place them immediately below the first row; row indices below will be
         # bumped accordingly
         self.youtube_schedule_label.grid(row=1, column=0, padx=6, pady=6, sticky="w")
-        self.youtube_schedule_entry.grid(row=1, column=1, padx=6, pady=6, sticky="w")
+        self.youtube_schedule_frame.grid(row=1, column=1, columnspan=2, padx=6, pady=6, sticky="w")
         # hide initially
         self.youtube_schedule_label.grid_remove()
-        self.youtube_schedule_entry.grid_remove()
+        self.youtube_schedule_frame.grid_remove()
 
         self.youtube_smart_tags_check = ttk.Checkbutton(
             options_box,
@@ -3540,20 +3565,23 @@ class DoomerGeneratorApp:
         # behavior when hasattr somehow propagates AttributeError.
         if (
             getattr(self, "youtube_schedule_label", None) is None
-            or getattr(self, "youtube_schedule_entry", None) is None
+            or getattr(self, "youtube_schedule_frame", None) is None
         ):
             return
 
         status = self.youtube_privacy_var.get().strip()
         if status == "scheduled":
-            # set a sensible default if field is empty
-            if not self.youtube_schedule_var.get().strip():
-                self.youtube_schedule_var.set(self._default_schedule_iso())
+            # Reset date/time to tomorrow 12:00 when switching to scheduled
+            # (field must always be empty/default on mode change)
+            tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+            self.youtube_schedule_date.set_date(tomorrow)
+            self.youtube_schedule_hour_var.set("12")
+            self.youtube_schedule_minute_var.set("00")
             self.youtube_schedule_label.grid()
-            self.youtube_schedule_entry.grid()
+            self.youtube_schedule_frame.grid()
         else:
             self.youtube_schedule_label.grid_remove()
-            self.youtube_schedule_entry.grid_remove()
+            self.youtube_schedule_frame.grid_remove()
 
     def _add_slider(
         self,
@@ -4409,6 +4437,46 @@ class DoomerGeneratorApp:
             messagebox.showerror(self._t("dialog_invalid_category_title"), self._t("dialog_invalid_category_body"))
             return
 
+        # Validate scheduled date if privacy is "scheduled"
+        if self.youtube_privacy_var.get().strip() == "scheduled":
+            selected_date = self.youtube_schedule_date.get_date()
+            today = datetime.date.today()
+
+            # Check if date is in the past
+            if selected_date < today:
+                messagebox.showerror(
+                    "Data non valida",
+                    "La data di pubblicazione non può essere nel passato.\n\n"
+                    "Seleziona una data futura dal calendario."
+                )
+                return
+
+            # Validate time fields
+            hour_str = self.youtube_schedule_hour_var.get().strip()
+            minute_str = self.youtube_schedule_minute_var.get().strip()
+
+            if not hour_str or not minute_str:
+                messagebox.showerror(
+                    "Orario non valido",
+                    "Devi specificare l'orario di pubblicazione (ore e minuti).\n\n"
+                    "Formato: HH:MM (es. 12:00)"
+                )
+                return
+
+            try:
+                hour = int(hour_str)
+                minute = int(minute_str)
+                if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror(
+                    "Orario non valido",
+                    "L'orario deve essere nel formato HH:MM.\n\n"
+                    "Ore: 0-23, Minuti: 0-59\n"
+                    "Esempio: 12:00"
+                )
+                return
+
         settings = self._collect_upload_settings()
 
         # Add files to queue (batch mode - refresh only once at the end)
@@ -4445,9 +4513,36 @@ class DoomerGeneratorApp:
             description_template = self.default_upload_settings.description_template
         publish_at: str | None = None
         if self.youtube_privacy_var.get().strip() == "scheduled":
-            publish_at = self.youtube_schedule_var.get().strip() or None
-            if not publish_at:
-                publish_at = self._default_schedule_iso()
+            # Build ISO timestamp from date and time pickers
+            selected_date = self.youtube_schedule_date.get_date()
+            hour_str = self.youtube_schedule_hour_var.get().strip()
+            minute_str = self.youtube_schedule_minute_var.get().strip()
+
+            try:
+                hour = int(hour_str) if hour_str else 12
+                minute = int(minute_str) if minute_str else 0
+                # Clamp values to valid ranges
+                hour = max(0, min(23, hour))
+                minute = max(0, min(59, minute))
+            except ValueError:
+                hour = 12
+                minute = 0
+
+            # Combine date and time
+            target = datetime.datetime.combine(
+                selected_date,
+                datetime.time(hour=hour, minute=minute)
+            )
+
+            # Convert to UTC
+            try:
+                target_utc = target.astimezone(datetime.timezone.utc)
+            except Exception:
+                # if naive datetime cannot be converted, assume it already is UTC
+                target_utc = target
+
+            publish_at = target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
         return UploadSettings(
             privacy_status=self.youtube_privacy_var.get().strip(),
             category_id=self.youtube_category_var.get().strip(),
