@@ -1,0 +1,4 @@
+# Inserisci un link YouTube per riga.
+# Le righe vuote o con # all'inizio vengono ignorate.
+# Esempio:
+# https://www.youtube.com/watch?v=XXXXXXXXXXX
