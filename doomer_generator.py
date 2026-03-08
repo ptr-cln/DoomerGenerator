@@ -3344,26 +3344,16 @@ class DoomerGeneratorApp:
         self.youtube_schedule_frame = ttk.Frame(options_box)
 
         # Date picker - button that opens calendar popup
-        self.youtube_schedule_date_var = tk.StringVar(value="")
         self.youtube_schedule_date_selected = False
         self.youtube_selected_date = None  # Store the actual date object
 
-        date_button_frame = ttk.Frame(self.youtube_schedule_frame)
-        date_button_frame.pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            date_button_frame,
-            text="📅",
-            width=3,
+        # Button that shows "Seleziona data..." or the selected date
+        self.youtube_date_btn = ttk.Button(
+            self.youtube_schedule_frame,
+            text="Seleziona data...",
             command=self._open_calendar_popup
-        ).pack(side=tk.LEFT)
-
-        ttk.Label(
-            date_button_frame,
-            textvariable=self.youtube_schedule_date_var,
-            width=12,
-            relief="sunken"
-        ).pack(side=tk.LEFT, padx=(2, 0))
+        )
+        self.youtube_date_btn.pack(side=tk.LEFT, padx=(0, 5))
 
         # Time picker (hour and minute) - NO DEFAULT VALUES
         time_frame = ttk.Frame(self.youtube_schedule_frame)
@@ -3592,8 +3582,9 @@ class DoomerGeneratorApp:
             try:
                 date_obj = datetime.datetime.strptime(selected, '%Y-%m-%d').date()
                 self.youtube_selected_date = date_obj
-                self.youtube_schedule_date_var.set(selected)
                 self.youtube_schedule_date_selected = True
+                # Update button text to show selected date
+                self.youtube_date_btn.configure(text=str(date_obj))
                 popup.destroy()
             except ValueError:
                 popup.destroy()
@@ -3623,8 +3614,8 @@ class DoomerGeneratorApp:
         status = self.youtube_privacy_var.get().strip()
         if status == "scheduled":
             # Clear date/time fields - user MUST set them manually
-            self.youtube_schedule_date_var.set("")
             self.youtube_selected_date = None
+            self.youtube_date_btn.configure(text="Seleziona data...")
             self.youtube_schedule_hour_var.set("")
             self.youtube_schedule_minute_var.set("")
             # Reset the "date selected" flag - user must select a date manually
