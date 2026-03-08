@@ -4453,11 +4453,8 @@ class DoomerGeneratorApp:
             # Check if user has manually selected a date (not just using default)
             if not self.youtube_schedule_date_selected:
                 messagebox.showerror(
-                    "Campo obbligatorio mancante",
-                    "Devi selezionare una data di pubblicazione.\n\n"
-                    "Il campo 'Data pubblicazione' è obbligatorio quando\n"
-                    "la privacy è impostata su 'scheduled'.\n\n"
-                    "Clicca sul calendario per selezionare una data."
+                    self._t("dialog_schedule_date_missing_title"),
+                    self._t("dialog_schedule_date_missing_body")
                 )
                 return
 
@@ -4467,11 +4464,8 @@ class DoomerGeneratorApp:
 
             if not hour_str or not minute_str:
                 messagebox.showerror(
-                    "Campo obbligatorio mancante",
-                    "Devi impostare l'orario di pubblicazione.\n\n"
-                    "Il campo 'Data pubblicazione' è obbligatorio quando\n"
-                    "la privacy è impostata su 'scheduled'.\n\n"
-                    "Compila i campi Ora e Minuti (es. 12:00)"
+                    self._t("dialog_schedule_time_missing_title"),
+                    self._t("dialog_schedule_time_missing_body")
                 )
                 return
 
@@ -4482,10 +4476,8 @@ class DoomerGeneratorApp:
                     raise ValueError
             except ValueError:
                 messagebox.showerror(
-                    "Orario non valido",
-                    "L'orario deve essere nel formato HH:MM.\n\n"
-                    "Ore: 0-23, Minuti: 0-59\n"
-                    "Esempio: 12:00"
+                    self._t("dialog_schedule_time_invalid_title"),
+                    self._t("dialog_schedule_time_invalid_body")
                 )
                 return
 
@@ -4495,9 +4487,8 @@ class DoomerGeneratorApp:
 
             if selected_date < today:
                 messagebox.showerror(
-                    "Data non valida",
-                    "La data di pubblicazione non può essere nel passato.\n\n"
-                    "Seleziona una data futura dal calendario."
+                    self._t("dialog_schedule_date_past_title"),
+                    self._t("dialog_schedule_date_past_body")
                 )
                 return
 
