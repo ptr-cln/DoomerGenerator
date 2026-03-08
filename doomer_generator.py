@@ -598,11 +598,12 @@ def _safe_mtime(path: Path) -> float:
 
 
 def _collect_files(base_dir: Path, extensions: set[str]) -> list[Path]:
+    """Collect files with given extensions from base_dir (non-recursive, only direct children)."""
     if not base_dir.is_dir():
         return []
     return sorted(
         file
-        for file in base_dir.rglob("*")
+        for file in base_dir.iterdir()
         if file.is_file() and file.suffix.lower() in extensions
     )
 
