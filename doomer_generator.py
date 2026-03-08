@@ -1397,6 +1397,9 @@ class YouTubeUploader:
                     skipped += 1
                     continue
 
+                # Log confirmation that no duplicate was found
+                self.log(f"  Nessun duplicato trovato sul canale, procedo con l'upload...")
+
                 try:
                     try:
                         description = settings.description_template.format(title=title)
