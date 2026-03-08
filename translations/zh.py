@@ -245,6 +245,8 @@ TRANSLATIONS = {
     # Pause/Resume
     "btn_pause": "暂停",
     "btn_resume": "恢复",
+    "btn_ok": "确定",
+    "btn_cancel": "取消",
     "log_download_paused": "下载已暂停",
     "log_download_resumed": "下载已恢复",
     "log_audio_paused": "音频处理已暂停",

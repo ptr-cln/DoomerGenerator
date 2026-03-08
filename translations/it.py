@@ -245,6 +245,8 @@ TRANSLATIONS = {
     # Pause/Resume
     "btn_pause": "Pausa",
     "btn_resume": "Riprendi",
+    "btn_ok": "OK",
+    "btn_cancel": "Annulla",
     "log_download_paused": "Download in pausa",
     "log_download_resumed": "Download ripreso",
     "log_audio_paused": "Elaborazione audio in pausa",

@@ -245,6 +245,8 @@ TRANSLATIONS = {
     # Pause/Resume
     "btn_pause": "إيقاف مؤقت",
     "btn_resume": "استئناف",
+    "btn_ok": "موافق",
+    "btn_cancel": "إلغاء",
     "log_download_paused": "تم إيقاف التنزيل مؤقتاً",
     "log_download_resumed": "تم استئناف التنزيل",
     "log_audio_paused": "تم إيقاف معالجة الصوت مؤقتاً",

@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from tkcalendar import DateEntry
+from tkcalendar import Calendar
 
 
 AUDIO_EXTENSIONS = {
@@ -3343,27 +3343,27 @@ class DoomerGeneratorApp:
         # Create a frame to hold date and time pickers
         self.youtube_schedule_frame = ttk.Frame(options_box)
 
-        # Date picker (calendar widget)
-        self.youtube_schedule_date = DateEntry(
-            self.youtube_schedule_frame,
-            width=12,
-            background='darkblue',
-            foreground='white',
-            borderwidth=2,
-            date_pattern='yyyy-mm-dd',
-            mindate=datetime.date.today(),  # Can't schedule in the past
-        )
-        self.youtube_schedule_date.pack(side=tk.LEFT, padx=(0, 5))
-
-        # Track if user has manually selected a date (to prevent using default)
+        # Date picker - button that opens calendar popup
+        self.youtube_schedule_date_var = tk.StringVar(value="")
         self.youtube_schedule_date_selected = False
+        self.youtube_selected_date = None  # Store the actual date object
 
-        def _on_date_selected(_event=None):
-            self.youtube_schedule_date_selected = True
+        date_button_frame = ttk.Frame(self.youtube_schedule_frame)
+        date_button_frame.pack(side=tk.LEFT, padx=(0, 5))
 
-        # Bind to date selection events
-        self.youtube_schedule_date.bind("<<DateEntrySelected>>", _on_date_selected)
-        self.youtube_schedule_date.bind("<Return>", _on_date_selected)
+        ttk.Button(
+            date_button_frame,
+            text="📅",
+            width=3,
+            command=self._open_calendar_popup
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            date_button_frame,
+            textvariable=self.youtube_schedule_date_var,
+            width=12,
+            relief="sunken"
+        ).pack(side=tk.LEFT, padx=(2, 0))
 
         # Time picker (hour and minute) - NO DEFAULT VALUES
         time_frame = ttk.Frame(self.youtube_schedule_frame)
@@ -3567,6 +3567,47 @@ class DoomerGeneratorApp:
             target_utc = target
         return target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    def _open_calendar_popup(self) -> None:
+        """Open a calendar popup for date selection."""
+        popup = tk.Toplevel(self.root)
+        popup.title(self._t("upload_label_publish_at"))
+        popup.transient(self.root)
+        popup.grab_set()
+
+        # Center the popup
+        popup.geometry("300x280")
+
+        # Create calendar widget
+        cal = Calendar(
+            popup,
+            selectmode='day',
+            mindate=datetime.date.today(),
+            date_pattern='yyyy-mm-dd'
+        )
+        cal.pack(padx=10, pady=10)
+
+        def _select_date():
+            selected = cal.get_date()
+            # Parse the date string (format: yyyy-mm-dd)
+            try:
+                date_obj = datetime.datetime.strptime(selected, '%Y-%m-%d').date()
+                self.youtube_selected_date = date_obj
+                self.youtube_schedule_date_var.set(selected)
+                self.youtube_schedule_date_selected = True
+                popup.destroy()
+            except ValueError:
+                popup.destroy()
+
+        def _cancel():
+            popup.destroy()
+
+        # Buttons
+        button_frame = ttk.Frame(popup)
+        button_frame.pack(pady=10)
+
+        ttk.Button(button_frame, text=self._t("btn_ok"), command=_select_date).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self._t("btn_cancel"), command=_cancel).pack(side=tk.LEFT, padx=5)
+
     def _update_schedule_visibility(self) -> None:
         """Show or hide schedule widgets depending on privacy status."""
         # if controls are not created yet just bail out; some callers
@@ -3582,8 +3623,8 @@ class DoomerGeneratorApp:
         status = self.youtube_privacy_var.get().strip()
         if status == "scheduled":
             # Clear date/time fields - user MUST set them manually
-            # Date picker defaults to today, but time fields are empty
-            self.youtube_schedule_date.set_date(datetime.date.today())
+            self.youtube_schedule_date_var.set("")
+            self.youtube_selected_date = None
             self.youtube_schedule_hour_var.set("")
             self.youtube_schedule_minute_var.set("")
             # Reset the "date selected" flag - user must select a date manually
@@ -4482,10 +4523,10 @@ class DoomerGeneratorApp:
                 return
 
             # Check if date is in the past
-            selected_date = self.youtube_schedule_date.get_date()
+            selected_date = self.youtube_selected_date
             today = datetime.date.today()
 
-            if selected_date < today:
+            if selected_date and selected_date < today:
                 messagebox.showerror(
                     self._t("dialog_schedule_date_past_title"),
                     self._t("dialog_schedule_date_past_body")
@@ -4529,34 +4570,35 @@ class DoomerGeneratorApp:
         publish_at: str | None = None
         if self.youtube_privacy_var.get().strip() == "scheduled":
             # Build ISO timestamp from date and time pickers
-            selected_date = self.youtube_schedule_date.get_date()
+            selected_date = self.youtube_selected_date
             hour_str = self.youtube_schedule_hour_var.get().strip()
             minute_str = self.youtube_schedule_minute_var.get().strip()
 
-            try:
-                hour = int(hour_str) if hour_str else 12
-                minute = int(minute_str) if minute_str else 0
-                # Clamp values to valid ranges
-                hour = max(0, min(23, hour))
-                minute = max(0, min(59, minute))
-            except ValueError:
-                hour = 12
-                minute = 0
+            if selected_date:
+                try:
+                    hour = int(hour_str) if hour_str else 12
+                    minute = int(minute_str) if minute_str else 0
+                    # Clamp values to valid ranges
+                    hour = max(0, min(23, hour))
+                    minute = max(0, min(59, minute))
+                except ValueError:
+                    hour = 12
+                    minute = 0
 
-            # Combine date and time
-            target = datetime.datetime.combine(
-                selected_date,
-                datetime.time(hour=hour, minute=minute)
-            )
+                # Combine date and time
+                target = datetime.datetime.combine(
+                    selected_date,
+                    datetime.time(hour=hour, minute=minute)
+                )
 
-            # Convert to UTC
-            try:
-                target_utc = target.astimezone(datetime.timezone.utc)
-            except Exception:
-                # if naive datetime cannot be converted, assume it already is UTC
-                target_utc = target
+                # Convert to UTC
+                try:
+                    target_utc = target.astimezone(datetime.timezone.utc)
+                except Exception:
+                    # if naive datetime cannot be converted, assume it already is UTC
+                    target_utc = target
 
-            publish_at = target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+                publish_at = target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         return UploadSettings(
             privacy_status=self.youtube_privacy_var.get().strip(),

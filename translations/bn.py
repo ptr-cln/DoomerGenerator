@@ -245,6 +245,8 @@ TRANSLATIONS = {
     # Pause/Resume
     "btn_pause": "বিরতি",
     "btn_resume": "পুনরায় শুরু করুন",
+    "btn_ok": "ঠিক আছে",
+    "btn_cancel": "বাতিল করুন",
     "log_download_paused": "ডাউনলোড বিরতি দেওয়া হয়েছে",
     "log_download_resumed": "ডাউনলোড পুনরায় শুরু হয়েছে",
     "log_audio_paused": "অডিও প্রসেসিং বিরতি দেওয়া হয়েছে",
