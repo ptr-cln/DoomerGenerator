@@ -5050,7 +5050,9 @@ class DoomerGeneratorApp:
                         self.events.put(("log", f"  yt-dlp: {last_detail}"))
                     self.events.put(("log", "  ERRORE"))
 
-                self.events.put(("progress", (index, total)))
+                # Update progress to show this file is complete (100% for this file)
+                overall = index / total * 100.0
+                self.events.put(("download_progress", (overall, index, total, 100.0)))
 
             self.events.put(
                 (
