@@ -28,24 +28,61 @@ Required assets:
 - Clear video output
 - Clear YouTube links
 - Clear all
-- Language selector (Italian / English)
+- Language selector (10 languages: English, Italiano, Español, Français, 中文, हिन्दी, العربية, বাংলা, Русский, Português)
+- Theme selector (Light / Dark)
+- Backup & Recovery system
+  - Manual backup creation
+  - Restore from backup
+  - Auto-save every 5 minutes
 
 ### 2) Download
 - Reads links from `youtube_links.txt`
 - `Download MP3` button
 - Output to `audio/in`
+- Pause/Resume support
+- Real-time progress tracking
 
 ### 3) Audio
 - Batch conversion from `audio/in` to `audio/out`
-- Doomer effects + audio fade in/out
+- Doomer-style effects:
+  - slowdown (default 20%)
+  - 7-band EQ (default: bass boost, treble cut)
+  - vinyl crackle overlay (default 10%)
+  - reverb (default 15%)
+  - fade in/out (default 1s each)
+- Advanced audio effects:
+  - stereo width (0-100%)
+  - chorus intensity (0-100%)
+  - bitcrush amount (0-100%)
+  - distortion amount (0-100%)
+  - compressor intensity (0-100%)
+- Output format: MP3 (default) or WAV
 - Output name suffix: ` (Doomer Wave)`
+- Preset system:
+  - Save custom presets
+  - Load presets
+  - Import/Export presets (JSON)
+- Pause/Resume support
 - Save/restore settings via `app_settings.json`
 
 ### 4) Video
 - Generates Full HD MP4 from audio files
 - Output to `video/out`
 - Keeps the same base filename as source audio
+- Visual effects:
+  - noise overlay (0-100%)
+  - distortion (0-100%)
+  - VHS effect (0-100%)
+  - chromatic aberration (0-100%)
+  - film burn (0-100%)
+  - glitch effect (0-100%)
+  - fade in/out (default 1s each)
 - Supports CPU/GPU video encoding modes (`auto`, `cpu`, `nvidia`, `intel`, `amd`)
+- Preset system:
+  - Save custom presets
+  - Load presets
+  - Import/Export presets (JSON)
+- Pause/Resume support
 - Save/restore settings via `app_settings.json`
 
 ### 5) Upload
@@ -54,11 +91,24 @@ Required assets:
 - Metadata:
   - title = filename
   - privacy (`private/unlisted/public/scheduled`, default `public`)
-- schedule publishing time (ISO‑8601 UTC, default tomorrow 12:00)
+  - scheduled publishing with calendar picker and time selection
   - YouTube category
   - description template (`{title}` placeholder)
   - automatic tags (AI + smart fallback) + optional CSV tags
+- Smart upload loop:
+  - Automatically detects new videos during upload
+  - Continues until `video/out` is empty
+  - Prevents premature shutdown
+- Optional shutdown after upload (5 minutes delay)
+- Pause/Resume support
 - Save/restore settings via `app_settings.json`
+
+### 6) Queue Management
+- Real-time queue display with status tracking
+- Filter by status (all/pending/processing/complete/error)
+- Progress tracking for each file
+- Clear completed items
+- Statistics display (total, pending, processing, complete, error)
 
 ## YouTube Upload Setup (Official API)
 

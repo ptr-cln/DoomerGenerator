@@ -18,8 +18,13 @@ Main entry point:
 ### 2.1 UI Layer
 - Framework: Tkinter + ttk
 - Main controller: `DoomerGeneratorApp`
-- Tabs: General, Download, Audio, Video, Upload
-- i18n: `UI_TEXTS` dictionary (`it`, `en`) + runtime language switch
+- Tabs: General, Download, Audio, Video, Upload, Queue
+- i18n: Dynamic translation system supporting 10 languages (en, it, es, fr, de, ru, pt, ar, zh, hi, bn)
+  - Translation files in `translations/` directory
+  - Runtime language switch with UI rebuild
+  - Fallback to English for missing keys
+- Theme system: Light/Dark mode with full widget styling
+- Queue management: Real-time status tracking with Treeview display
 
 ### 2.2 Worker Model
 Long tasks run in background threads to keep UI responsive:
@@ -33,6 +38,17 @@ Inter-thread communication uses a queue:
 - Producer: worker threads (`self.events.put(...)`)
 - Consumer: UI loop (`_poll_events`) scheduled with `root.after(...)`
 
+Pause/Resume support:
+- Each worker thread checks a pause flag (`check_pause()` callback)
+- UI provides pause/resume buttons for each operation
+- Thread-safe state management
+
+Queue system:
+- `QueueItem` dataclass tracks file processing state
+- Thread-safe updates via `queue_lock`
+- Real-time UI refresh via event queue
+- Status tracking: pending → processing → complete/error
+
 ## 3. Filesystem Layout
 
 Expected structure:
@@ -42,9 +58,13 @@ Expected structure:
 - `resources/vinyls`      : vinyl/noise overlays for audio
 - `resources/backgrounds` : random backgrounds for video
 - `resources/Doomer_Guy.*`: overlay character image
+- `translations/`         : language translation files (10 languages)
+- `presets/`              : audio/video preset storage
+- `backups/`              : automatic settings backups
 
-Persistence file:
+Persistence files:
 - `app_settings.json` (local GUI settings, gitignored)
+- `presets/presets.json` (saved audio/video presets)
 
 OAuth files:
 - `youtube_client_secret.json`
@@ -77,26 +97,42 @@ Output naming template:
 Main classes:
 - `AudioSettings`
 - `DoomerBatchConverter`
+- `AudioPreset` (for saving/loading presets)
 
 Core behavior:
 - Collect supported audio extensions recursively from input folder.
 - For each file, build output filename with suffix ` (Doomer Wave)`.
 - Apply ffmpeg `filter_complex` built by `AudioSettings.build_filter_complex(...)`.
+- Support for pause/resume during batch processing
+- Queue integration for real-time progress tracking
 
 Audio effects chain includes:
 - slowdown with pitch lowering (`asetrate + aresample`)
-- low-pass
+- 7-band parametric EQ (90Hz, 250Hz, 500Hz, 1.5kHz, 3kHz, 5kHz, 8kHz)
 - bass boost
 - echo/reverb shaping
 - compression + limiter
 - optional vinyl overlay mix from random file in `resources/vinyls`
 - fade in/out
 
+Advanced effects (optional):
+- stereo width adjustment (0-100%)
+- chorus effect (0-100%)
+- bitcrusher (0-100%)
+- distortion (0-100%)
+- dynamic compressor (0-100%)
+
+Preset system:
+- Save/load custom effect combinations
+- Import/export presets as JSON
+- Stored in `presets/presets.json`
+
 ## 6. Video Generation Pipeline
 
 Main classes:
 - `VideoSettings`
 - `DoomerVideoGenerator`
+- `VideoPreset` (for saving/loading presets)
 
 ### 6.1 Composition
 Inputs:
@@ -108,8 +144,23 @@ Video graph (high level):
 - scale+crop background to 1920x1080
 - scale/pad Doomer overlay to fixed box size
 - bottom-left overlay positioning for visual consistency
-- VHS-like global post effects (noise, blur, grid scanlines, vignette, etc.)
 - configurable fade in/out
+- Support for pause/resume during batch processing
+- Queue integration for real-time progress tracking
+- Callback system for detecting new files during generation
+
+Visual effects (all configurable 0-100%):
+- noise overlay
+- distortion
+- VHS effect (scanlines, tracking errors)
+- chromatic aberration (RGB channel separation)
+- film burn (light leaks, scratches)
+- glitch effect (digital artifacts)
+
+Preset system:
+- Save/load custom effect combinations
+- Import/export presets as JSON
+- Stored in `presets/presets.json`
 
 ### 6.2 Encoder Selection
 `VideoSettings.video_encoder` supports:
@@ -134,16 +185,52 @@ Behavior:
 2. Build metadata:
    - title from filename
    - description template
-   - category + privacy
+   - category + privacy (public/private/unlisted/scheduled)
    - tags
-3. Upload via resumable chunks (`MediaFileUpload`, `videos.insert`).
+3. Upload via resumable chunks (`MediaFileUpload`, `videos.insert`, 4MB chunks).
+4. Support for pause/resume during batch processing
+5. Queue integration for real-time progress tracking
 
-### 7.1 Tag Generation
+### 7.1 Scheduled Publishing
+When privacy is set to "scheduled":
+- UI provides calendar picker (using `tkcalendar.Calendar`)
+- User selects date and time (hour:minute)
+- Validation ensures:
+  - Date is not in the past
+  - Time fields are valid (0-23 hours, 0-59 minutes)
+- Converts local time to UTC (RFC3339 format)
+- YouTube API requires `privacyStatus: "private"` + `publishAt` timestamp
+- Button shows selected date after selection (e.g., "2026-03-09")
+
+### 7.2 Smart Upload Loop
+The upload process uses a `while True` loop that:
+1. Scans `video/out` for new files
+2. Uploads all found files
+3. Marks files as processed
+4. Re-scans directory
+5. If new files detected during upload:
+   - Logs detection
+   - Calls `on_new_files` callback to update UI queue
+   - Continues uploading
+6. Only exits when directory is truly empty
+7. Prevents premature shutdown when files are still pending
+
+### 7.3 Tag Generation
 `_compose_youtube_tags(...)` strategy:
 - Primary: AI tag generation (`OpenAI chat/completions`) if enabled and API key available
 - Fallback: local smart tag builder from title tokens
 - Merge with user CSV tags
 - Deduplicate + total-length cap for API safety
+
+### 7.4 Shutdown After Upload
+Optional feature:
+- Checkbox in UI: "Turn off computer when done (5m)"
+- After successful upload batch completion:
+  - Schedules Windows shutdown with 5-minute delay
+  - Command: `shutdown /s /t 300`
+  - User can cancel with: `shutdown /a`
+- Only triggers if checkbox was enabled at upload start
+- Waits for upload loop to confirm directory is empty
 
 ## 8. Post-Upload Cleanup
 
@@ -158,21 +245,199 @@ Matching logic handles names with/without ` (Doomer Wave)` suffix.
 ## 9. Settings Persistence
 
 Local settings are serialized to `app_settings.json`:
-- general: language
-- audio: folders, ffmpeg path, format, effects
-- video: folders, effects, encoder
+- general: language (10 languages), theme (light/dark)
+- audio: folders, ffmpeg path, format, effects (basic + advanced)
+- video: folders, effects (6 visual effects), encoder
 - upload: auth paths, privacy/category (including scheduled), publishAt, tags, OpenAI config, description template
 
 Load occurs during app startup before UI build.
-Save is explicit through `Save settings` buttons (Audio/Video/Upload) and language auto-persist on change.
+Save is explicit through `Save settings` buttons (Audio/Video/Upload) and language/theme auto-persist on change.
 
-## 10. Error Handling and Fallbacks
+### 9.1 Backup & Recovery System
+Automatic backup creation:
+- Auto-save every 5 minutes (configurable)
+- Manual backup via UI button
+- Pre-clear backup before destructive operations
+- Backups stored in `backups/` directory
+
+Backup contents:
+- `app_settings.json` (all user settings)
+- `presets.json` (audio/video presets)
+- `backup_metadata.json` (timestamp, type, file list)
+
+Restore functionality:
+- UI dialog to select backup
+- Restores settings and presets
+- Reloads UI with restored settings
+- Keeps last 10 backups (configurable)
+
+## 10. Queue Management System
+
+### 10.1 Architecture
+The queue system provides real-time tracking of all file processing operations.
+
+Core components:
+- `QueueItem` dataclass: Represents a file in the processing pipeline
+  - `file_path`: Full path to the file
+  - `operation`: Type of operation (download/audio/video/upload)
+  - `status`: Current state (pending/processing/complete/error)
+  - `progress`: Percentage complete (0-100)
+  - `message`: Status message or error details
+  - `start_time`/`end_time`: Timing information
+
+Thread-safe management:
+- `queue_items`: List of all queue items
+- `queue_lock`: Threading lock for safe concurrent access
+- `current_queue_items`: Dict mapping file paths to active items
+- `last_processed_file`: Tracks current file being processed
+
+### 10.2 UI Integration
+Queue tab features:
+- Treeview display with columns: File, Operation, Status, Progress, Message
+- Filter dropdown: all/pending/processing/complete/error
+- Action buttons: Clear Complete, Clear All
+- Statistics display: Total, Pending, Processing, Complete, Error
+- Real-time updates via event queue
+
+Status indicators:
+- ⏳ Pending
+- ⚙️ Processing
+- ✅ Complete
+- ❌ Error
+
+### 10.3 Workflow Integration
+Each operation (download/audio/video/upload) integrates with the queue:
+1. Before starting batch: Add all files to queue as "pending"
+2. During processing: Update item to "processing" with progress %
+3. On completion: Mark as "complete" or "error"
+4. Progress callbacks: Update UI in real-time via event queue
+
+Callback system:
+- `on_new_files`: Notifies main app when new files detected during processing
+- Prevents crashes when files appear during active batch
+- Ensures all files are tracked in queue
+
+## 11. Internationalization (i18n)
+
+### 11.1 Translation System
+Dynamic translation loading:
+- Translation files in `translations/` directory
+- Each language has a `.py` file with `TRANSLATIONS` dict
+- Runtime loading with caching (`_TRANSLATIONS_CACHE`)
+- Fallback chain: selected language → English → key itself
+
+Supported languages (10):
+1. English (`en.py`)
+2. Italiano (`it.py`)
+3. Español (`es.py`)
+4. Français (`fr.py`)
+5. Deutsch (`de.py`)
+6. Русский (`ru.py`)
+7. Português (`pt.py`)
+8. العربية (`ar.py`)
+9. 中文 (`zh.py`)
+10. हिन्दी (`hi.py`)
+11. বাংলা (`bn.py`)
+
+### 11.2 Translation Keys
+All UI elements use translation keys:
+- `_t(key, **kwargs)`: Main translation method
+- Supports placeholders: `{path}`, `{time}`, `{count}`, etc.
+- Example: `self._t("log_upload_start", path=video_dir)`
+
+Language switching:
+- Dropdown in General tab
+- Triggers full UI rebuild (`_rebuild_ui()`)
+- Preserves log content and current state
+- Auto-saves language preference
+
+## 12. Theme System
+
+### 12.1 Theme Architecture
+Two built-in themes: Light and Dark
+
+Theme definitions in `THEMES` dict:
+- `bg`: Background color
+- `fg`: Foreground (text) color
+- `select_bg`/`select_fg`: Selection colors
+- `button_bg`: Button background
+- `entry_bg`/`entry_fg`: Entry widget colors
+- `text_bg`/`text_fg`: Text widget colors
+- `disabled_fg`: Disabled widget text color
+
+### 12.2 Theme Application
+`_apply_theme()` method:
+- Configures ttk styles (TFrame, TLabel, TButton, etc.)
+- Updates all Text widgets (log, description)
+- Applies to root window and all children
+- Uses "clam" ttk theme as base for customization
+
+Theme switching:
+- Dropdown in General tab
+- Applies immediately without UI rebuild
+- Auto-saves theme preference
+- Persists across app restarts
+
+## 13. Preset System
+
+### 13.1 Audio Presets
+`AudioPreset` dataclass stores:
+- All audio effect parameters
+- EQ band gains (7 bands)
+- Advanced effects (stereo width, chorus, bitcrush, distortion, compressor)
+- Fade in/out settings
+- Output format
+
+Operations:
+- Save current settings as preset
+- Load preset to apply settings
+- Delete preset
+- Import/Export presets as JSON
+
+### 13.2 Video Presets
+`VideoPreset` dataclass stores:
+- All video effect parameters
+- Visual effects (noise, distortion, VHS, chromatic, burn, glitch)
+- Fade in/out settings
+- Video encoder preference
+
+Operations:
+- Save current settings as preset
+- Load preset to apply settings
+- Delete preset
+- Import/Export presets as JSON
+
+### 13.3 Preset Storage
+File: `presets/presets.json`
+
+Structure:
+```json
+{
+  "audio_presets": {
+    "preset_name": { ...settings... }
+  },
+  "video_presets": {
+    "preset_name": { ...settings... }
+  }
+}
+```
+
+UI Integration:
+- Dropdown to select preset
+- Load button to apply
+- Save button to create new
+- Delete button to remove
+- Import/Export buttons for sharing
+
+## 14. Error Handling and Fallbacks
 
 - Missing dependencies -> explicit UI error prompts
 - FFmpeg/yt-dlp command failures -> summarized log output
 - YouTube login/upload failures -> surfaced in log and status area
 - AI tag failures -> automatic fallback to local smart tags
 - GPU encoder failures -> automatic CPU fallback
+- Translation key missing -> fallback to English, then key itself
+- Preset loading errors -> logged as warnings, continue with defaults
 
 ## 11. Extension Points
 
