@@ -3355,12 +3355,12 @@ class DoomerGeneratorApp:
         )
         self.youtube_schedule_date.pack(side=tk.LEFT, padx=(0, 5))
 
-        # Time picker (hour and minute)
+        # Time picker (hour and minute) - NO DEFAULT VALUES
         time_frame = ttk.Frame(self.youtube_schedule_frame)
         time_frame.pack(side=tk.LEFT)
 
-        self.youtube_schedule_hour_var = tk.StringVar(value="12")
-        self.youtube_schedule_minute_var = tk.StringVar(value="00")
+        self.youtube_schedule_hour_var = tk.StringVar(value="")
+        self.youtube_schedule_minute_var = tk.StringVar(value="")
 
         ttk.Entry(time_frame, textvariable=self.youtube_schedule_hour_var, width=3).pack(side=tk.LEFT)
         ttk.Label(time_frame, text=":").pack(side=tk.LEFT)
@@ -3571,12 +3571,11 @@ class DoomerGeneratorApp:
 
         status = self.youtube_privacy_var.get().strip()
         if status == "scheduled":
-            # Reset date/time to tomorrow 12:00 when switching to scheduled
-            # (field must always be empty/default on mode change)
-            tomorrow = datetime.date.today() + datetime.timedelta(days=1)
-            self.youtube_schedule_date.set_date(tomorrow)
-            self.youtube_schedule_hour_var.set("12")
-            self.youtube_schedule_minute_var.set("00")
+            # Clear date/time fields - user MUST set them manually
+            # Date picker defaults to today, but time fields are empty
+            self.youtube_schedule_date.set_date(datetime.date.today())
+            self.youtube_schedule_hour_var.set("")
+            self.youtube_schedule_minute_var.set("")
             self.youtube_schedule_label.grid()
             self.youtube_schedule_frame.grid()
         else:
@@ -4439,27 +4438,17 @@ class DoomerGeneratorApp:
 
         # Validate scheduled date if privacy is "scheduled"
         if self.youtube_privacy_var.get().strip() == "scheduled":
-            selected_date = self.youtube_schedule_date.get_date()
-            today = datetime.date.today()
-
-            # Check if date is in the past
-            if selected_date < today:
-                messagebox.showerror(
-                    "Data non valida",
-                    "La data di pubblicazione non può essere nel passato.\n\n"
-                    "Seleziona una data futura dal calendario."
-                )
-                return
-
-            # Validate time fields
+            # Validate time fields FIRST (most common error - user forgets to set time)
             hour_str = self.youtube_schedule_hour_var.get().strip()
             minute_str = self.youtube_schedule_minute_var.get().strip()
 
             if not hour_str or not minute_str:
                 messagebox.showerror(
-                    "Orario non valido",
-                    "Devi specificare l'orario di pubblicazione (ore e minuti).\n\n"
-                    "Formato: HH:MM (es. 12:00)"
+                    "Campo obbligatorio mancante",
+                    "Devi impostare la data e l'orario di pubblicazione.\n\n"
+                    "Il campo 'Data pubblicazione' è obbligatorio quando\n"
+                    "la privacy è impostata su 'scheduled'.\n\n"
+                    "Compila i campi Ora e Minuti (es. 12:00)"
                 )
                 return
 
@@ -4474,6 +4463,18 @@ class DoomerGeneratorApp:
                     "L'orario deve essere nel formato HH:MM.\n\n"
                     "Ore: 0-23, Minuti: 0-59\n"
                     "Esempio: 12:00"
+                )
+                return
+
+            # Check if date is in the past
+            selected_date = self.youtube_schedule_date.get_date()
+            today = datetime.date.today()
+
+            if selected_date < today:
+                messagebox.showerror(
+                    "Data non valida",
+                    "La data di pubblicazione non può essere nel passato.\n\n"
+                    "Seleziona una data futura dal calendario."
                 )
                 return
 
