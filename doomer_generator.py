@@ -1632,6 +1632,9 @@ class YouTubeUploader:
                     title = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
                     self.log(f"  Mood non disponibile, uso titolo standard")
 
+                # Replace hyphen with en dash for better typography
+                title = title.replace(" - ", " – ")
+
                 cleanup_target: Path | None = None
                 media = None
                 insert_request = None
