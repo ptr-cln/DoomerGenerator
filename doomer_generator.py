@@ -1617,12 +1617,13 @@ class YouTubeUploader:
                 mood = _generate_mood_with_ai(base_filename, settings, log=self.log)
 
                 if mood:
-                    # Alternate between two title formats
-                    if self._title_format_counter % 2 == 0:
-                        # Format 1: {fileName} (Doomer Wave / Slowed + Reverb) | {mood}
+                    # Use Format 1 75% of the time, Format 2 25% of the time
+                    # Counter % 4: 0,1,2 → Format 1 (75%), 3 → Format 2 (25%)
+                    if self._title_format_counter % 4 != 3:
+                        # Format 1 (75%): {fileName} (Doomer Wave / Slowed + Reverb) | {mood}
                         title = f"{base_filename} (Doomer Wave / Slowed + Reverb) | {mood}"
                     else:
-                        # Format 2: {mood} | {fileName} (Doomer Wave / Slowed + Reverb)
+                        # Format 2 (25%): {mood} | {fileName} (Doomer Wave / Slowed + Reverb)
                         title = f"{mood} | {base_filename} (Doomer Wave / Slowed + Reverb)"
                     self._title_format_counter += 1
                     self.log(f"  Mood generato: {mood}")
