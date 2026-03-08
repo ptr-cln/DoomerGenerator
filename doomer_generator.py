@@ -614,8 +614,8 @@ def _load_usage_memory(memory_file: Path) -> dict[str, dict[str, int]]:
             with open(memory_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
-            return {"backgrounds": {}, "vinyls": {}}
-    return {"backgrounds": {}, "vinyls": {}}
+            return {"backgrounds": {}, "vinyls": {}, "doomer_guys": {}}
+    return {"backgrounds": {}, "vinyls": {}, "doomer_guys": {}}
 
 
 def _save_usage_memory(memory_file: Path, memory: dict[str, dict[str, int]]) -> None:
@@ -1794,14 +1794,14 @@ class DoomerVideoGenerator:
         self,
         ffmpeg_bin: str,
         backgrounds_dir: Path,
-        doomer_image: Path,
+        doomer_guys_dir: Path,
         usage_memory_path: Path,
         log: Callable[[str], None],
     ):
         self.ffmpeg_bin = ffmpeg_bin
         self.ffprobe_bin = self._resolve_ffprobe(ffmpeg_bin)
         self.backgrounds_dir = backgrounds_dir
-        self.doomer_image = doomer_image
+        self.doomer_guys_dir = doomer_guys_dir
         self.usage_memory_path = usage_memory_path
         self.log = log
         self.available_video_encoders = self._detect_available_video_encoders()
@@ -1818,8 +1818,9 @@ class DoomerVideoGenerator:
         check_pause: Callable[[], bool] | None = None,
         on_new_files: Callable[[list[Path]], None] | None = None,
     ) -> VideoSummary:
-        if not self.doomer_image.is_file():
-            self.log(f"Doomer image mancante: {self.doomer_image}")
+        doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+        if not doomer_guys:
+            self.log(f"Nessuna immagine Doomer Guy trovata in: {self.doomer_guys_dir}")
             return VideoSummary(total=0, generated=0, failed=0)
 
         backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
@@ -1868,20 +1869,32 @@ class DoomerVideoGenerator:
                 relative = audio_file.relative_to(audio_input_dir)
                 destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
                 destination.parent.mkdir(parents=True, exist_ok=True)
+
+                # Select least used background
                 memory = _check_and_reset_memory(self.usage_memory_path, backgrounds, "backgrounds")
                 background = _get_least_used_file(backgrounds, memory, "backgrounds")
                 if background:
                     _increment_usage(self.usage_memory_path, background, "backgrounds")
+
+                # Select least used doomer guy image
+                memory = _check_and_reset_memory(self.usage_memory_path, doomer_guys, "doomer_guys")
+                doomer_guy = _get_least_used_file(doomer_guys, memory, "doomer_guys")
+                if doomer_guy:
+                    _increment_usage(self.usage_memory_path, doomer_guy, "doomer_guys")
 
                 self.log(f"[{index}/{total}] Video: {audio_file.name}")
                 if background:
                     self.log(f"  Background: {background.name}")
                 else:
                     self.log("  Background: Nessuno selezionato")
+                if doomer_guy:
+                    self.log(f"  Doomer Guy: {doomer_guy.name}")
+                else:
+                    self.log("  Doomer Guy: Nessuno selezionato")
 
                 # Track generation time
                 start_time = time.time()
-                success = self._generate_single_video(audio_file, background, destination, settings, resolved_encoder)
+                success = self._generate_single_video(audio_file, background, doomer_guy, destination, settings, resolved_encoder)
                 elapsed = time.time() - start_time
 
                 if success:
@@ -1913,6 +1926,7 @@ class DoomerVideoGenerator:
         self,
         audio_file: Path,
         background: Path,
+        doomer_guy: Path,
         destination: Path,
         settings: VideoSettings,
         resolved_encoder: str,
@@ -1925,6 +1939,7 @@ class DoomerVideoGenerator:
         command = self._build_video_render_command(
             audio_file=audio_file,
             background=background,
+            doomer_guy=doomer_guy,
             destination=destination,
             settings=settings,
             duration=duration,
@@ -1966,6 +1981,7 @@ class DoomerVideoGenerator:
         self,
         audio_file: Path,
         background: Path,
+        doomer_guy: Path,
         destination: Path,
         settings: VideoSettings,
         duration: float | None,
@@ -1984,7 +2000,7 @@ class DoomerVideoGenerator:
             "-loop",
             "1",
             "-i",
-            str(self.doomer_image),
+            str(doomer_guy),
             "-i",
             str(audio_file),
             "-filter_complex",
@@ -2163,6 +2179,7 @@ class DoomerGeneratorApp:
         self.resources_dir = self.project_dir / "resources"
         self.vinyls_dir = self.resources_dir / "vinyls"
         self.backgrounds_dir = self.resources_dir / "backgrounds"
+        self.doomer_guys_dir = self.resources_dir / "doomer_guys"
         self.doomer_image_path = _resolve_doomer_image(self.resources_dir)
         self.links_file = self.project_dir / "youtube_links.txt"
 
@@ -4362,10 +4379,11 @@ class DoomerGeneratorApp:
             )
             return
 
-        if not self.doomer_image_path.is_file():
+        doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+        if not doomer_guys:
             messagebox.showerror(
                 self._t("dialog_invalid_input_title"),
-                f"Doomer image not found: {self.doomer_image_path}",
+                f"No Doomer Guy images found in: {self.doomer_guys_dir}",
             )
             return
 
@@ -4397,7 +4415,7 @@ class DoomerGeneratorApp:
         # Run generation in background thread
         thread = threading.Thread(
             target=self._generate_and_show_preview,
-            args=(ffmpeg_bin, backgrounds, settings),
+            args=(ffmpeg_bin, doomer_guys, backgrounds, settings),
             daemon=True,
         )
         thread.start()
@@ -4405,6 +4423,7 @@ class DoomerGeneratorApp:
     def _generate_and_show_preview(
         self,
         ffmpeg_bin: str,
+        doomer_guys: list[Path],
         backgrounds: list[Path],
         settings: VideoSettings,
     ) -> None:
@@ -4416,7 +4435,8 @@ class DoomerGeneratorApp:
             os.close(temp_fd)
             temp_video = Path(temp_path)
 
-            # Pick a random background (don't update usage memory)
+            # Pick random images (don't update usage memory for preview)
+            doomer_guy = random.choice(doomer_guys)
             background = random.choice(backgrounds)
 
             # Generate silent 20-second video
@@ -4424,6 +4444,7 @@ class DoomerGeneratorApp:
             success = self._generate_preview_video(
                 ffmpeg_bin=ffmpeg_bin,
                 background=background,
+                doomer_guy=doomer_guy,
                 output_path=temp_video,
                 settings=settings,
                 duration=20.0,
@@ -4459,6 +4480,7 @@ class DoomerGeneratorApp:
         self,
         ffmpeg_bin: str,
         background: Path,
+        doomer_guy: Path,
         output_path: Path,
         settings: VideoSettings,
         duration: float,
@@ -4485,7 +4507,7 @@ class DoomerGeneratorApp:
             "-loop",
             "1",
             "-i",
-            str(self.doomer_image_path),
+            str(doomer_guy),
             "-f",
             "lavfi",
             "-i",
@@ -4911,7 +4933,7 @@ class DoomerGeneratorApp:
             generator = DoomerVideoGenerator(
                 ffmpeg_bin=ffmpeg_bin,
                 backgrounds_dir=self.backgrounds_dir,
-                doomer_image=self.doomer_image_path,
+                doomer_guys_dir=self.doomer_guys_dir,
                 usage_memory_path=self.usage_memory_path,
                 log=self._queue_log,
             )
