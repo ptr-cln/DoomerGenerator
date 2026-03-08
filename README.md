@@ -103,6 +103,20 @@ Required assets:
 - Pause/Resume support
 - Save/restore settings via `app_settings.json`
 
+#### **AI Tag Generation (Optional)**
+The app can use OpenAI's API to generate creative tags for your videos:
+
+- **Cost**: OpenAI API is **paid** (requires API key and credit on your account)
+  - Default model: `gpt-4o-mini` (~$0.0001-$0.0003 per video)
+  - Very affordable: ~$0.01-$0.03 for 100 videos
+- **Setup**:
+  1. Create account at [platform.openai.com](https://platform.openai.com)
+  2. Add payment method and credit
+  3. Generate API key
+  4. Paste key in Upload tab
+- **Fallback**: If no API key is provided, the app uses **free local smart tags** based on the video title
+- **Recommendation**: Start without API key (free fallback works well), add later if you want more creative tags
+
 ### 6) Queue Management
 - Real-time queue display with status tracking
 - Filter by status (all/pending/processing/complete/error)

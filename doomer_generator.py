@@ -1195,12 +1195,14 @@ def _compose_youtube_tags(
         if ai_tags:
             tags.extend(ai_tags)
             if log:
-                log(f"  Tag AI generati: {len(ai_tags)}")
+                tags_preview = ", ".join(ai_tags)
+                log(f"  Tag AI generati ({len(ai_tags)}): {tags_preview}")
         else:
             fallback_tags = _build_smart_tags(title)
             tags.extend(fallback_tags)
             if log:
-                log("  Tag fallback smart locali attivati.")
+                tags_preview = ", ".join(fallback_tags)
+                log(f"  Tag fallback smart locali ({len(fallback_tags)}): {tags_preview}")
 
     unique: list[str] = []
     seen: set[str] = set()
