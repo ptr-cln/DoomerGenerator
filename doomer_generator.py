@@ -6662,6 +6662,10 @@ class DoomerGeneratorApp:
                 seconds = eta_seconds % 60
                 eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
+                # Add "(In pausa)" if upload is paused
+                if self.upload_paused:
+                    eta_formatted += " (In pausa)"
+
                 progress_msg = self._t(
                     "progress_upload_file",
                     index=index,
@@ -6692,6 +6696,10 @@ class DoomerGeneratorApp:
                 minutes = (eta_seconds % 3600) // 60
                 seconds = eta_seconds % 60
                 eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                # Add "(In pausa)" if video processing is paused
+                if self.video_paused:
+                    eta_formatted += " (In pausa)"
 
                 progress_msg = self._t("progress_video_detailed", done=done, total=total, eta=eta_formatted, audio=audio_name, bg=background_name)
                 self.progress_text.set(progress_msg)
