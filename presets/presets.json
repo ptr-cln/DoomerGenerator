@@ -6,8 +6,8 @@
       "compressor_intensity": 25.0,
       "distortion_amount": 20.0,
       "eq_band_gains": [
-        8.0,
-        6.0,
+        6.5,
+        5.0,
         3.0,
         -1.0,
         -7.5,
@@ -17,11 +17,11 @@
       "fade_in_seconds": 1.5,
       "fade_out_seconds": 1.5,
       "name": "Doomer Standard",
-      "output_format": "mp3",
+      "output_format": "wav",
       "reverb_percent": 25.0,
       "slowdown_percent": 20.0,
       "stereo_width": 75.0,
-      "vinyl_volume_percent": 12.0
+      "vinyl_volume_percent": 11.0
     }
   },
   "video_presets": {
