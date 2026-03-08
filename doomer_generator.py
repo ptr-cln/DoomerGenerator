@@ -1184,6 +1184,11 @@ def _compose_youtube_tags(
     log: Callable[[str], None] | None = None,
 ) -> list[str]:
     tags: list[str] = []
+
+    # Extra tags have priority - add them first
+    tags.extend(_parse_csv_tags(settings.extra_tags_csv))
+
+    # Then add AI or smart fallback tags
     if settings.smart_tags_enabled:
         ai_tags = _build_ai_tags(title, settings, log=log)
         if ai_tags:
@@ -1195,7 +1200,6 @@ def _compose_youtube_tags(
             tags.extend(fallback_tags)
             if log:
                 log("  Tag fallback smart locali attivati.")
-    tags.extend(_parse_csv_tags(settings.extra_tags_csv))
 
     unique: list[str] = []
     seen: set[str] = set()
