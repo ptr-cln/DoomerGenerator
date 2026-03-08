@@ -1328,6 +1328,7 @@ class YouTubeUploader:
         progress: Callable[[float, int, int, float, str, float, int], None],
         on_uploaded: Callable[[Path], None] | None = None,
         check_pause: Callable[[], bool] | None = None,
+        on_new_files: Callable[[list[Path]], None] | None = None,
     ) -> UploadSummary:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         total = len(files)
@@ -1365,13 +1366,9 @@ class YouTubeUploader:
             # Log when new videos are detected (after first batch)
             if not first_batch:
                 self.log(f"Rilevati {len(current_files)} nuovi video pronti per l'upload...")
-                # Add new files to queue
-                for video_file in current_files:
-                    if video_file.name not in self.current_queue_items:
-                        item = self._add_queue_item(str(video_file), "Upload", refresh=False)
-                        self.current_queue_items[video_file.name] = item
-                # Refresh queue display once after adding all new items
-                self._refresh_queue_display()
+                # Notify caller about new files
+                if on_new_files:
+                    on_new_files(current_files)
             first_batch = False
 
             for video_file in current_files:
@@ -4612,6 +4609,15 @@ class DoomerGeneratorApp:
             self.events.put(("youtube_login_error", str(error)))
 
     def _run_youtube_upload_batch(self, video_dir: Path, settings: UploadSettings) -> None:
+        def on_new_upload_files(new_files: list[Path]) -> None:
+            """Callback when new video files are detected during upload."""
+            for video_file in new_files:
+                if video_file.name not in self.current_queue_items:
+                    item = self._add_queue_item(str(video_file), "Upload", refresh=False)
+                    self.current_queue_items[video_file.name] = item
+            # Refresh queue display once after adding all new items
+            self._refresh_queue_display()
+
         try:
             uploader = self._build_youtube_uploader()
             summary = uploader.upload_folder(
@@ -4620,6 +4626,7 @@ class DoomerGeneratorApp:
                 progress=self._queue_upload_progress,
                 on_uploaded=self._cleanup_after_successful_upload,
                 check_pause=lambda: self.upload_paused,
+                on_new_files=on_new_upload_files,
             )
             self.events.put(("upload_finished", summary))
         except Exception as error:  # noqa: BLE001
