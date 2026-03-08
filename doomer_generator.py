@@ -3355,6 +3355,16 @@ class DoomerGeneratorApp:
         )
         self.youtube_schedule_date.pack(side=tk.LEFT, padx=(0, 5))
 
+        # Track if user has manually selected a date (to prevent using default)
+        self.youtube_schedule_date_selected = False
+
+        def _on_date_selected(_event=None):
+            self.youtube_schedule_date_selected = True
+
+        # Bind to date selection events
+        self.youtube_schedule_date.bind("<<DateEntrySelected>>", _on_date_selected)
+        self.youtube_schedule_date.bind("<Return>", _on_date_selected)
+
         # Time picker (hour and minute) - NO DEFAULT VALUES
         time_frame = ttk.Frame(self.youtube_schedule_frame)
         time_frame.pack(side=tk.LEFT)
@@ -3576,6 +3586,8 @@ class DoomerGeneratorApp:
             self.youtube_schedule_date.set_date(datetime.date.today())
             self.youtube_schedule_hour_var.set("")
             self.youtube_schedule_minute_var.set("")
+            # Reset the "date selected" flag - user must select a date manually
+            self.youtube_schedule_date_selected = False
             self.youtube_schedule_label.grid()
             self.youtube_schedule_frame.grid()
         else:
@@ -4438,14 +4450,25 @@ class DoomerGeneratorApp:
 
         # Validate scheduled date if privacy is "scheduled"
         if self.youtube_privacy_var.get().strip() == "scheduled":
-            # Validate time fields FIRST (most common error - user forgets to set time)
+            # Check if user has manually selected a date (not just using default)
+            if not self.youtube_schedule_date_selected:
+                messagebox.showerror(
+                    "Campo obbligatorio mancante",
+                    "Devi selezionare una data di pubblicazione.\n\n"
+                    "Il campo 'Data pubblicazione' è obbligatorio quando\n"
+                    "la privacy è impostata su 'scheduled'.\n\n"
+                    "Clicca sul calendario per selezionare una data."
+                )
+                return
+
+            # Validate time fields
             hour_str = self.youtube_schedule_hour_var.get().strip()
             minute_str = self.youtube_schedule_minute_var.get().strip()
 
             if not hour_str or not minute_str:
                 messagebox.showerror(
                     "Campo obbligatorio mancante",
-                    "Devi impostare la data e l'orario di pubblicazione.\n\n"
+                    "Devi impostare l'orario di pubblicazione.\n\n"
                     "Il campo 'Data pubblicazione' è obbligatorio quando\n"
                     "la privacy è impostata su 'scheduled'.\n\n"
                     "Compila i campi Ora e Minuti (es. 12:00)"
