@@ -1142,12 +1142,35 @@ def _generate_mood_with_ai(
     if not api_key or not model:
         return None
 
+    # Try to extract artist and song title from filename
+    # Common formats: "Artist - Song", "Artist-Song", "Song"
+    artist = ""
+    song_title = filename
+    if " - " in filename:
+        parts = filename.split(" - ", 1)
+        artist = parts[0].strip()
+        song_title = parts[1].strip()
+    elif "-" in filename and not filename.startswith("-"):
+        parts = filename.split("-", 1)
+        artist = parts[0].strip()
+        song_title = parts[1].strip()
+
+    # Build context for AI
+    context_parts = []
+    if artist:
+        context_parts.append(f"Artist: {artist}")
+    if song_title:
+        context_parts.append(f"Song: {song_title}")
+    context = "\n".join(context_parts) if context_parts else f"Song: {filename}"
+
     prompt = (
-        "Generate a short melancholic mood phrase for a doomer music video.\n"
+        "Generate a short melancholic mood phrase for a doomer wave music video.\n"
         "Maximum 4 words. Use lowercase.\n"
-        "Examples: empty city night, late night drive, rainy neon streets, lonely midnight walk.\n"
-        f"Song: {filename}\n\n"
-        "Respond with ONLY the mood phrase, nothing else."
+        "Examples: empty city night, late night drive, rainy neon streets, lonely midnight walk, "
+        "fading memories linger, cold winter solitude, distant city lights.\n\n"
+        f"{context}\n\n"
+        "Create an atmospheric mood phrase that captures the melancholic essence of this song.\n"
+        "Respond with ONLY the mood phrase (max 4 words), nothing else."
     )
 
     payload = {
