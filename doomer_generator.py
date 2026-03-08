@@ -1361,6 +1361,7 @@ class YouTubeUploader:
 
             if not current_files:
                 # No new videos to upload
+                self.log(f"Nessun nuovo video rilevato in {video_dir}. Upload completato.")
                 break
 
             # Log when new videos are detected (after first batch)
