@@ -1155,6 +1155,10 @@ def _generate_mood_with_ai(
         artist = parts[0].strip()
         song_title = parts[1].strip()
 
+    # Remove " (Doomer Wave)" suffix from song title if present
+    if song_title.endswith(" (Doomer Wave)"):
+        song_title = song_title[:-len(" (Doomer Wave)")].strip()
+
     # Build context for AI
     context_parts = []
     if artist:
@@ -1169,7 +1173,8 @@ def _generate_mood_with_ai(
         "- 2 to 4 words\n"
         "- simple and visual\n"
         "- evoke night, loneliness, city, rain, or silence\n"
-        "- avoid poetic or complex sentences\n\n"
+        "- avoid poetic or complex sentences\n"
+        "- avoid punctuation\n\n"
         "Examples:\n"
         "empty city night\n"
         "late night drive\n"
@@ -1192,8 +1197,8 @@ def _generate_mood_with_ai(
                 "content": prompt,
             },
         ],
-        "temperature": 0.8,  # Higher temperature for more creative/varied responses
-        "max_tokens": 20,
+        "temperature": 0.9,  # Higher temperature for more creative/varied responses
+        "max_tokens": 6,  # Limit to ~4 words max
     }
 
     request = urllib.request.Request(
