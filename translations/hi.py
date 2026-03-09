@@ -152,7 +152,7 @@ TRANSLATIONS = {
     "dialog_test_no_files": "परीक्षण प्लेबैक के लिए कोई इनपुट ऑडियो फ़ाइल उपलब्ध नहीं है।",
     "dialog_test_ffplay_missing": "ffplay नहीं मिला। कृपया ffplay के साथ पूर्ण ffmpeg बिल्ड स्थापित करें।",
     "dialog_test_error": "ऑडियो परीक्षण त्रुटि।\n{error}",
-    "progress_download_running": "MP3 डाउनलोड हो रहा है...",
+    "progress_download_running": "ऑडियो डाउनलोड हो रहा है...",
     "progress_audio_running": "ऑडियो रूपांतरण प्रगति पर है...",
     "progress_video_running": "वीडियो निर्माण प्रगति पर है...",
     "progress_login_running": "YouTube लॉगिन प्रगति पर है...",

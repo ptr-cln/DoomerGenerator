@@ -152,7 +152,7 @@ TRANSLATIONS = {
     "dialog_test_no_files": "لا توجد ملفات صوت إدخال متاحة لتشغيل الاختبار.",
     "dialog_test_ffplay_missing": "لم يتم العثور على ffplay. يرجى تثبيت إصدار ffmpeg كامل (مع ffplay).",
     "dialog_test_error": "خطأ في اختبار الصوت.\n{error}",
-    "progress_download_running": "جارٍ تنزيل MP3...",
+    "progress_download_running": "جارٍ تنزيل الصوت...",
     "progress_audio_running": "تحويل الصوت قيد التقدم...",
     "progress_video_running": "إنشاء الفيديو قيد التقدم...",
     "progress_login_running": "تسجيل دخول YouTube قيد التقدم...",

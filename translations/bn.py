@@ -152,7 +152,7 @@ TRANSLATIONS = {
     "dialog_test_no_files": "পরীক্ষা প্লেব্যাকের জন্য কোনো ইনপুট অডিও ফাইল উপলব্ধ নেই।",
     "dialog_test_ffplay_missing": "ffplay পাওয়া যায়নি। অনুগ্রহ করে ffplay সহ সম্পূর্ণ ffmpeg বিল্ড ইনস্টল করুন।",
     "dialog_test_error": "অডিও পরীক্ষা ত্রুটি।\n{error}",
-    "progress_download_running": "MP3 ডাউনলোড হচ্ছে...",
+    "progress_download_running": "অডিও ডাউনলোড হচ্ছে...",
     "progress_audio_running": "অডিও রূপান্তর চলছে...",
     "progress_video_running": "ভিডিও তৈরি চলছে...",
     "progress_login_running": "YouTube লগইন চলছে...",

@@ -152,7 +152,7 @@ TRANSLATIONS = {
     "dialog_test_no_files": "Нет доступных входных аудиофайлов для тестового воспроизведения.",
     "dialog_test_ffplay_missing": "ffplay не найден. Установите полную сборку ffmpeg (с ffplay).",
     "dialog_test_error": "Ошибка теста аудио.\n{error}",
-    "progress_download_running": "Загрузка MP3...",
+    "progress_download_running": "Загрузка аудио...",
     "progress_audio_running": "Преобразование аудио в процессе...",
     "progress_video_running": "Создание видео в процессе...",
     "progress_login_running": "Вход в YouTube в процессе...",

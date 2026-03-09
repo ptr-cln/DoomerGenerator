@@ -153,7 +153,7 @@ TRANSLATIONS = {
     "dialog_test_no_files": "No input audio files available for test playback.",
     "dialog_test_ffplay_missing": "ffplay not found. Install a full ffmpeg build (with ffplay).",
     "dialog_test_error": "Audio test error.\n{error}",
-    "progress_download_running": "Downloading MP3...",
+    "progress_download_running": "Downloading Audio...",
     "progress_audio_running": "Audio conversion in progress...",
     "progress_video_running": "Video generation in progress...",
     "progress_login_running": "YouTube login in progress...",

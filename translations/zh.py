@@ -152,7 +152,7 @@ TRANSLATIONS = {
     "dialog_test_no_files": "没有可用于测试播放的输入音频文件。",
     "dialog_test_ffplay_missing": "未找到ffplay。请安装完整的ffmpeg构建 (包含ffplay)。",
     "dialog_test_error": "音频测试错误。\n{error}",
-    "progress_download_running": "正在下载MP3...",
+    "progress_download_running": "正在下载音频...",
     "progress_audio_running": "音频转换进行中...",
     "progress_video_running": "视频生成进行中...",
     "progress_login_running": "YouTube登录进行中...",
