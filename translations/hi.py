@@ -15,6 +15,7 @@ TRANSLATIONS = {
     "status_group_upload": "अपलोड स्थिति",
     "status_timer": "समय: {time}",
     "log_group": "लॉग",
+    "log_btn_clear": "🗑️",  # Trash icon to clear logs
     "general_group_language": "भाषा",
     "general_label_language": "इंटरफ़ेस भाषा",
     "general_label_theme": "थीम",

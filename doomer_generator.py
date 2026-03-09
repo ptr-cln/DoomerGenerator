@@ -2882,11 +2882,23 @@ class DoomerGeneratorApp:
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(0, weight=1)
 
+        # Log text widget
         self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
         self.log_widget.grid(row=0, column=0, sticky="nsew")
+
+        # Scrollbar for logs
         scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_widget.configure(yscrollcommand=scrollbar.set)
+
+        # Clear logs button (trash icon)
+        clear_logs_btn = ttk.Button(
+            logs_frame,
+            text=self._t("log_btn_clear"),
+            width=3,
+            command=self._clear_log_display
+        )
+        clear_logs_btn.grid(row=0, column=2, sticky="n", padx=(4, 0))
 
     def _create_scrollable_tab(self, notebook: ttk.Notebook) -> tuple[ttk.Frame, ttk.Frame]:
         container = ttk.Frame(notebook)
@@ -7611,6 +7623,13 @@ class DoomerGeneratorApp:
     def _log_error(self, message: str) -> None:
         """Log error message to both UI and file."""
         self._log(f"❌ {message}", "ERROR")
+
+    def _clear_log_display(self) -> None:
+        """Clear the log display widget (UI only, does not affect log file)."""
+        self.log_widget.configure(state=tk.NORMAL)
+        self.log_widget.delete("1.0", tk.END)
+        self.log_widget.configure(state=tk.DISABLED)
+        self._log_debug("Log display cleared by user")
 
 
 def main() -> None:

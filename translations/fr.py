@@ -15,6 +15,7 @@ TRANSLATIONS = {
     "status_group_upload": "Statut du Téléversement",
     "status_timer": "Temps: {time}",
     "log_group": "Journal",
+    "log_btn_clear": "🗑️",  # Trash icon to clear logs
     "general_group_language": "Langue",
     "general_label_language": "Langue de l'interface",
     "general_label_theme": "Thème",
