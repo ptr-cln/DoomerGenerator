@@ -2396,22 +2396,22 @@ class DoomerVideoGenerator:
                 "-c:v",
                 "h264_nvenc",
                 "-preset",
-                "p4",  # p4 = medium quality/speed balance
+                "p6",  # p6 = slower preset, high quality (sweet spot)
                 "-rc",
                 "vbr",  # Variable bitrate
                 "-cq",
-                "19",  # Lower = better quality (18-23 is high quality range)
+                "18",  # Very high quality (lower = better, 18 is excellent)
                 "-b:v",
-                "8M",  # Target bitrate (higher = better quality)
+                "10M",  # Target bitrate for 1080p high quality
                 "-maxrate",
-                "12M",  # Maximum bitrate peaks
+                "15M",  # Maximum bitrate peaks
                 "-bufsize",
-                "16M",  # Buffer size for rate control
+                "20M",  # Buffer size for rate control
             ]
         if encoder == "intel":
-            return ["-c:v", "h264_qsv", "-global_quality", "20"]  # Lower = better quality
+            return ["-c:v", "h264_qsv", "-global_quality", "18"]  # Very high quality
         if encoder == "amd":
-            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "20", "-qp_p", "22"]  # Lower = better quality
+            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "18", "-qp_p", "20"]  # Very high quality
         return ["-c:v", "libx264", "-preset", "medium", "-crf", "23"]  # CPU baseline
 
     def _probe_duration_seconds(self, audio_file: Path) -> float | None:
