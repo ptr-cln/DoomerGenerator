@@ -2365,9 +2365,20 @@ class DoomerVideoGenerator:
         ]
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=20)
-        except (OSError, subprocess.TimeoutExpired):
+        except (OSError, subprocess.TimeoutExpired) as e:
+            self.log(f"  Test encoder {encoder} fallito: {type(e).__name__}")
             return False
-        return result.returncode == 0
+
+        if result.returncode != 0:
+            # Log the error to help diagnose why the encoder failed
+            error_detail = _summarize_process_output(result.stdout, result.stderr)
+            if error_detail:
+                self.log(f"  Test encoder {encoder} fallito: {error_detail}")
+            else:
+                self.log(f"  Test encoder {encoder} fallito: return code {result.returncode}")
+            return False
+
+        return True
 
     def _resolve_video_encoder(self, requested: str) -> str:
         normalized = requested.strip().lower()
