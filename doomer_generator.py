@@ -2516,6 +2516,8 @@ class DoomerGeneratorApp:
         self._load_default_presets_on_startup()
         # ensure UI reflects any scheduled value right away
         self._update_schedule_visibility()
+        # Check for git updates after UI is ready
+        self.root.after(500, self._check_git_updates)
         self.progress_text.set(self._t("status_ready"))
         self.root.after(100, self._poll_events)
         self.root.after(1000, self._update_timers)
@@ -7340,6 +7342,87 @@ class DoomerGeneratorApp:
         if self.links_file.is_file():
             return
         self._write_links_template()
+
+    def _check_git_updates(self) -> None:
+        """Check if there are updates available from the remote repository."""
+        try:
+            # Run git fetch to update remote refs (non-blocking)
+            fetch_result = subprocess.run(
+                ["git", "fetch"],
+                cwd=str(self.project_dir),
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if fetch_result.returncode != 0:
+                # Not a git repo or git not available - silently ignore
+                return
+
+            # Check if local branch is behind remote
+            status_result = subprocess.run(
+                ["git", "status", "-uno"],
+                cwd=str(self.project_dir),
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if status_result.returncode != 0:
+                return
+
+            output = status_result.stdout.lower()
+
+            # Check for "your branch is behind" or similar messages
+            if "behind" in output or "can be fast-forwarded" in output:
+                # Get number of commits behind
+                commits_behind = 0
+                try:
+                    rev_result = subprocess.run(
+                        ["git", "rev-list", "--count", "HEAD..@{u}"],
+                        cwd=str(self.project_dir),
+                        capture_output=True,
+                        text=True,
+                        timeout=2
+                    )
+                    if rev_result.returncode == 0:
+                        commits_behind = int(rev_result.stdout.strip())
+                except Exception:
+                    pass
+
+                # Show warning popup
+                commit_text = f"{commits_behind} commit" if commits_behind == 1 else f"{commits_behind} commits"
+                message = (
+                    f"⚠️ Aggiornamento Disponibile\n\n"
+                    f"Ci sono {commit_text} nuovi da scaricare.\n\n"
+                    f"Esegui 'git pull' per aggiornare l'applicazione.\n\n"
+                    f"Vuoi aprire il terminale nella cartella del progetto?"
+                )
+
+                response = messagebox.askyesno(
+                    "Aggiornamento Disponibile",
+                    message,
+                    icon="warning"
+                )
+
+                if response:
+                    # Open terminal in project directory
+                    try:
+                        if sys.platform == "darwin":  # macOS
+                            subprocess.Popen(["open", "-a", "Terminal", str(self.project_dir)])
+                        elif sys.platform.startswith("linux"):
+                            subprocess.Popen(["x-terminal-emulator"], cwd=str(self.project_dir))
+                        elif os.name == "nt":  # Windows
+                            subprocess.Popen(["cmd", "/K", "cd", "/D", str(self.project_dir)])
+                    except Exception as e:
+                        self._log_debug(f"Failed to open terminal: {e}")
+
+        except subprocess.TimeoutExpired:
+            # Git command took too long - silently ignore
+            pass
+        except Exception as e:
+            # Any other error - silently ignore (don't interrupt app startup)
+            self._log_debug(f"Git update check failed: {e}")
 
     def _write_links_template(self) -> None:
         self.links_file.write_text(
