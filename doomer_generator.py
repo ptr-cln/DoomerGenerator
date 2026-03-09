@@ -5091,6 +5091,8 @@ class DoomerGeneratorApp:
             ffmpeg_location = str(Path(ffmpeg_bin).resolve().parent)
             # Pattern to match download progress (e.g., "[download]  45.2% of 10.5MiB")
             percent_pattern = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
+            # Pattern to match playlist item progress (e.g., "[download] Downloading item 3 of 12")
+            playlist_item_pattern = re.compile(r"\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)")
 
             # Debug: log that we're starting download batch
             self.events.put(("log", f"Starting download batch with {total} targets"))
@@ -5165,6 +5167,10 @@ class DoomerGeneratorApp:
                 output_file: str | None = None
                 already_downloaded = False
 
+                # Track playlist progress
+                playlist_current_item = 0
+                playlist_total_items = 0
+
                 if process.stdout:
                     for raw_line in process.stdout:
                         line = raw_line.strip()
@@ -5175,12 +5181,29 @@ class DoomerGeneratorApp:
                         if "[download]" in line:
                             self.events.put(("log", f"  DEBUG: {line}"))
 
+                        # Check for playlist item progress (e.g., "Downloading item 3 of 12")
+                        playlist_match = playlist_item_pattern.search(line)
+                        if playlist_match:
+                            playlist_current_item = int(playlist_match.group(1))
+                            playlist_total_items = int(playlist_match.group(2))
+                            self.events.put(("log", f"  Downloading item {playlist_current_item}/{playlist_total_items}"))
+                            continue
+
                         # Check for progress percentage
                         match = percent_pattern.search(line)
                         if match:
                             link_percent = float(match.group(1))
                             link_percent = max(0.0, min(100.0, link_percent))
-                            overall = ((index - 1) + (link_percent / 100.0)) / total * 100.0
+
+                            # Calculate overall progress considering playlist items
+                            if playlist_total_items > 0:
+                                # For playlists: factor in which item we're on
+                                item_progress = (playlist_current_item - 1 + link_percent / 100.0) / playlist_total_items
+                                overall = ((index - 1) + item_progress) / total * 100.0
+                            else:
+                                # For single videos: use simple calculation
+                                overall = ((index - 1) + (link_percent / 100.0)) / total * 100.0
+
                             self.events.put(
                                 (
                                     "download_progress",
