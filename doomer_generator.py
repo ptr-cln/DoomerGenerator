@@ -1164,13 +1164,20 @@ def _generate_mood_with_ai(
     context = "\n".join(context_parts) if context_parts else f"Song: {filename}"
 
     prompt = (
-        "Generate a short melancholic mood phrase for a doomer wave music video.\n"
-        "Maximum 4 words. Use lowercase.\n"
-        "Examples: empty city night, late night drive, rainy neon streets, lonely midnight walk, "
-        "fading memories linger, cold winter solitude, distant city lights.\n\n"
+        "Generate a short melancholic mood phrase for a doomer music video.\n\n"
+        "Rules:\n"
+        "- 2 to 4 words\n"
+        "- simple and visual\n"
+        "- evoke night, loneliness, city, rain, or silence\n"
+        "- avoid poetic or complex sentences\n\n"
+        "Examples:\n"
+        "empty city night\n"
+        "late night drive\n"
+        "rainy neon streets\n"
+        "3am loneliness\n"
+        "silent winter streets\n\n"
         f"{context}\n\n"
-        "Create an atmospheric mood phrase that captures the melancholic essence of this song.\n"
-        "Respond with ONLY the mood phrase (max 4 words), nothing else."
+        "Respond with ONLY the mood phrase, nothing else."
     )
 
     payload = {
