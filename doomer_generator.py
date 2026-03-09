@@ -5127,7 +5127,7 @@ class DoomerGeneratorApp:
                     "3",
                     "--extract-audio",
                     "--audio-format",
-                    "mp3",
+                    "wav",
                     "--audio-quality",
                     "0",
                     "--print",
