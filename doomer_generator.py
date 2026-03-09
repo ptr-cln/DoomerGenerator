@@ -726,6 +726,7 @@ def _build_download_target(link: str, artist: str | None = None) -> DownloadTarg
     playlist_index_raw = (query.get("index") or [None])[0]
     video_id = _extract_youtube_video_id(parsed)
 
+    # Handle playlist with specific index
     if playlist_id and playlist_index_raw:
         match = re.search(r"\d+", playlist_index_raw)
         if match:
@@ -739,6 +740,29 @@ def _build_download_target(link: str, artist: str | None = None) -> DownloadTarg
                 playlist_index=playlist_index,
                 artist=artist,
             )
+
+    # Handle full playlist (YouTube Music albums, regular playlists)
+    if playlist_id and not video_id:
+        # This is a playlist URL without a specific video
+        # Examples:
+        # - https://music.youtube.com/playlist?list=OLAK5uy_n...
+        # - https://www.youtube.com/playlist?list=PLxxx...
+        host = parsed.netloc.lower()
+        if "music.youtube.com" in host:
+            # Keep YouTube Music playlist URL as-is for better metadata extraction
+            request_url = source_url
+        else:
+            # Normalize regular YouTube playlist URL
+            request_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+        return DownloadTarget(
+            source_url=source_url,
+            request_url=request_url,
+            dedupe_key=f"playlist:{playlist_id}",
+            playlist_id=playlist_id,
+            playlist_index=None,  # Download entire playlist
+            artist=artist,
+        )
 
     if video_id:
         # Preserve YouTube Music URLs for better yt-dlp extraction
@@ -5106,9 +5130,15 @@ class DoomerGeneratorApp:
                     "--output",
                     output_template,
                 ]
-                if target.playlist_id and target.playlist_index:
-                    command.extend(["--yes-playlist", "--playlist-items", target.playlist_index])
+                if target.playlist_id:
+                    if target.playlist_index:
+                        # Download specific item from playlist
+                        command.extend(["--yes-playlist", "--playlist-items", target.playlist_index])
+                    else:
+                        # Download entire playlist
+                        command.append("--yes-playlist")
                 else:
+                    # Single video, not part of a playlist
                     command.append("--no-playlist")
                 command.append(target.request_url)
 
