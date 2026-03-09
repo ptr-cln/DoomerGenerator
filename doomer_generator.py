@@ -1211,7 +1211,7 @@ def _generate_mood_with_ai(
                 "content": prompt,
             },
         ],
-        "temperature": 1.2,  # Higher creativity for more variety
+        "temperature": 1.0,  # Good balance between variety and reliability
         "top_p": 0.9,  # Nucleus sampling for quality control
         "max_tokens": 6,  # Limit to ~4 words max
     }
