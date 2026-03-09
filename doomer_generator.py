@@ -1539,6 +1539,7 @@ class YouTubeUploader:
         - "mood | Artist - Song (Doomer Wave / Slowed + Reverb)"
         - "Artist - Song (Doomer Wave / Slowed + Reverb)"
         - "Artist - Song (Doomer Wave)"
+        - "Artist – Song" (with en dash)
         """
         import re
 
@@ -1554,11 +1555,15 @@ class YouTubeUploader:
             t = re.sub(r"\s*\(Doomer Wave\)\s*$", "", t, flags=re.IGNORECASE)
             return t.strip()
 
-        core_title = extract_core(title)
+        def normalize_dashes(t: str) -> str:
+            """Normalize en dashes (–) to hyphens (-) for consistent comparison."""
+            return t.replace("–", "-")
+
+        core_title = normalize_dashes(extract_core(title))
 
         # Check if any existing video has the same core title
         for existing_title in self._channel_videos_cache:
-            existing_core = extract_core(existing_title)
+            existing_core = normalize_dashes(extract_core(existing_title))
             # Case-insensitive comparison
             if core_title.lower() == existing_core.lower():
                 return True
@@ -1628,8 +1633,18 @@ class YouTubeUploader:
                 index = uploaded + failed + skipped + 1
                 processed_files.add(video_file)  # Mark as processed immediately
 
-                # Build title with AI-generated mood
                 base_filename = video_file.stem
+                self.log(f"[{index}/{total}] Upload: {video_file.name}")
+
+                # First, check if the base video (without mood) already exists on channel
+                # This avoids wasting an AI API call if the video is already uploaded
+                base_title_check = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
+                if self._video_exists_on_channel(base_title_check):
+                    self.log(f"  SALTATO: Video già presente sul canale (rilevato prima della generazione mood)")
+                    skipped += 1
+                    continue
+
+                # Video doesn't exist yet - proceed with AI mood generation
                 mood = _generate_mood_with_ai(base_filename, settings, log=self.log)
 
                 if mood:
@@ -1654,11 +1669,10 @@ class YouTubeUploader:
                 cleanup_target: Path | None = None
                 media = None
                 insert_request = None
-                self.log(f"[{index}/{total}] Upload: {video_file.name}")
 
-                # Check if video already exists on channel
+                # Double-check with final title (in case mood creates a duplicate)
                 if self._video_exists_on_channel(title):
-                    self.log(f"  SALTATO: Video già presente sul canale")
+                    self.log(f"  SALTATO: Video già presente sul canale (rilevato dopo generazione mood)")
                     skipped += 1
                     continue
 
