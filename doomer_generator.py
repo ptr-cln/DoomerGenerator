@@ -1184,7 +1184,17 @@ def _generate_mood_with_ai(
         "late night drive\n"
         "rainy neon streets\n"
         "3am loneliness\n"
-        "silent winter streets\n\n"
+        "silent winter streets\n"
+        "foggy morning silence\n"
+        "broken streetlights\n"
+        "cigarette smoke haze\n"
+        "distant train sounds\n"
+        "cold concrete dreams\n"
+        "midnight parking lot\n"
+        "abandoned subway station\n"
+        "flickering neon signs\n"
+        "endless highway night\n"
+        "urban decay whispers\n\n"
         f"{context}\n\n"
         "Respond with ONLY the mood phrase, nothing else."
     )
@@ -1201,7 +1211,7 @@ def _generate_mood_with_ai(
                 "content": prompt,
             },
         ],
-        "temperature": 0.8,  # Balanced creativity
+        "temperature": 1.2,  # Higher creativity for more variety
         "top_p": 0.9,  # Nucleus sampling for quality control
         "max_tokens": 6,  # Limit to ~4 words max
     }
