@@ -2398,13 +2398,11 @@ class DoomerVideoGenerator:
                 "-preset",
                 "p6",  # p6 = slower preset, high quality (sweet spot)
                 "-rc",
-                "vbr",  # Variable bitrate
-                "-cq",
-                "18",  # Very high quality (lower = better, 18 is excellent)
+                "cbr",  # Constant bitrate (guarantees file size)
                 "-b:v",
-                "10M",  # Target bitrate for 1080p high quality
+                "10M",  # Constant bitrate for 1080p high quality
                 "-maxrate",
-                "15M",  # Maximum bitrate peaks
+                "10M",  # Same as bitrate for CBR
                 "-bufsize",
                 "20M",  # Buffer size for rate control
             ]
