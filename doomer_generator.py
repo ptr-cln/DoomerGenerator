@@ -5187,7 +5187,7 @@ class DoomerGeneratorApp:
                             playlist_current_item = int(playlist_match.group(1))
                             playlist_total_items = int(playlist_match.group(2))
                             self.events.put(("log", f"  Downloading item {playlist_current_item}/{playlist_total_items}"))
-                            continue
+                            # Don't continue - let it process percentage on same line if present
 
                         # Check for progress percentage
                         match = percent_pattern.search(line)
@@ -5196,9 +5196,13 @@ class DoomerGeneratorApp:
                             link_percent = max(0.0, min(100.0, link_percent))
 
                             # Calculate overall progress considering playlist items
-                            if playlist_total_items > 0:
+                            if playlist_total_items > 0 and playlist_current_item > 0:
                                 # For playlists: factor in which item we're on
-                                item_progress = (playlist_current_item - 1 + link_percent / 100.0) / playlist_total_items
+                                # Each item represents 1/playlist_total_items of the overall progress
+                                # Current item progress: (current_item - 1) complete + current percentage
+                                item_base_progress = (playlist_current_item - 1) / playlist_total_items
+                                item_current_progress = (link_percent / 100.0) / playlist_total_items
+                                item_progress = item_base_progress + item_current_progress
                                 overall = ((index - 1) + item_progress) / total * 100.0
                             else:
                                 # For single videos: use simple calculation
