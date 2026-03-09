@@ -2370,10 +2370,14 @@ class DoomerVideoGenerator:
             return False
 
         if result.returncode != 0:
-            # Log the error to help diagnose why the encoder failed
-            error_detail = _summarize_process_output(result.stdout, result.stderr)
-            if error_detail:
-                self.log(f"  Test encoder {encoder} fallito: {error_detail}")
+            # Log the full stderr to help diagnose why the encoder failed
+            # This is more useful than the summary for GPU encoder issues
+            if result.stderr:
+                # Log each line of stderr for detailed diagnostics
+                stderr_lines = result.stderr.strip().split('\n')
+                for line in stderr_lines:
+                    if line.strip():
+                        self.log(f"    {line.strip()}")
             else:
                 self.log(f"  Test encoder {encoder} fallito: return code {result.returncode}")
             return False
