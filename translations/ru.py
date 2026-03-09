@@ -33,7 +33,7 @@ TRANSLATIONS = {
     "download_group": "YouTube",
     "download_label_links_file": "Файл ссылок",
     "download_btn_open_file": "Открыть файл",
-    "download_btn_download_mp3": "Загрузить MP3",
+    "download_btn_download_mp3": "Загрузить аудио",
     "download_hint_target": "Загрузки сохраняются в: {path}",
     "audio_group_folders": "Папки аудио",
     "audio_label_input": "Вход",

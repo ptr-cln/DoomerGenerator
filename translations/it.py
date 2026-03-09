@@ -34,7 +34,7 @@ TRANSLATIONS = {
     "download_group": "YouTube",
     "download_label_links_file": "File link",
     "download_btn_open_file": "Apri file",
-    "download_btn_download_mp3": "Scarica Mp3",
+    "download_btn_download_mp3": "Scarica Audio",
     "download_hint_target": "I download vengono salvati in: {path}",
     "audio_group_folders": "Cartelle Audio",
     "audio_label_input": "Input",
