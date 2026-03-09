@@ -355,5 +355,16 @@ TRANSLATIONS = {
     "update_no_releases_message": "尚未发布任何版本。\n您正在使用版本 {version}。",
     "update_check_error": "检查更新失败：\n{error}",
     "log_update_available": "更新可用：版本 {version}",
+    # Git Update Checker
+    "git_update_dialog_title": "更新可用",
+    "git_update_message": "⚠️ 更新可用\n\n有 {commits} 可供下载。\n\n运行 'git pull' 以更新应用程序。\n\n您想在项目文件夹中打开终端吗？",
+    "git_update_commits_singular": "{count} 个新提交",
+    "git_update_commits_plural": "{count} 个新提交",
+    # Upload Duplicate Detection
+    "upload_log_skipped_before_mood": "  已跳过：视频已存在于频道（在生成mood之前检测到）",
+    "upload_log_skipped_after_mood": "  已跳过：视频已存在于频道（在生成mood之后检测到）",
+    "upload_log_no_duplicate": "  频道上未找到重复项，继续上传...",
+    # Tag Generation with Mood
+    "upload_log_tags_with_mood": "  智能本地标签 ({count})（带mood：{mood}）：{tags}",
 }
 

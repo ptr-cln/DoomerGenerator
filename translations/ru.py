@@ -355,5 +355,16 @@ TRANSLATIONS = {
     "update_no_releases_message": "Релизы еще не опубликованы.\nВы используете версию {version}.",
     "update_check_error": "Не удалось проверить обновления:\n{error}",
     "log_update_available": "Доступно обновление: версия {version}",
+    # Git Update Checker
+    "git_update_dialog_title": "Доступно Обновление",
+    "git_update_message": "⚠️ Доступно Обновление\n\nЕсть {commits} для загрузки.\n\nВыполните 'git pull' для обновления приложения.\n\nХотите открыть терминал в папке проекта?",
+    "git_update_commits_singular": "{count} новый коммит",
+    "git_update_commits_plural": "{count} новых коммитов",
+    # Upload Duplicate Detection
+    "upload_log_skipped_before_mood": "  ПРОПУЩЕНО: Видео уже существует на канале (обнаружено до генерации настроения)",
+    "upload_log_skipped_after_mood": "  ПРОПУЩЕНО: Видео уже существует на канале (обнаружено после генерации настроения)",
+    "upload_log_no_duplicate": "  Дубликат на канале не найден, продолжаем загрузку...",
+    # Tag Generation with Mood
+    "upload_log_tags_with_mood": "  Умные локальные теги ({count}) (с настроением: {mood}): {tags}",
 }
 

@@ -355,5 +355,16 @@ TRANSLATIONS = {
     "update_no_releases_message": "لم يتم نشر أي إصدارات بعد.\nأنت تستخدم الإصدار {version}.",
     "update_check_error": "فشل التحقق من التحديثات:\n{error}",
     "log_update_available": "تحديث متاح: الإصدار {version}",
+    # Git Update Checker
+    "git_update_dialog_title": "تحديث متاح",
+    "git_update_message": "⚠️ تحديث متاح\n\nهناك {commits} للتنزيل.\n\nقم بتشغيل 'git pull' لتحديث التطبيق.\n\nهل تريد فتح الطرفية في مجلد المشروع؟",
+    "git_update_commits_singular": "{count} التزام جديد",
+    "git_update_commits_plural": "{count} التزامات جديدة",
+    # Upload Duplicate Detection
+    "upload_log_skipped_before_mood": "  تم التخطي: الفيديو موجود بالفعل على القناة (تم اكتشافه قبل إنشاء المزاج)",
+    "upload_log_skipped_after_mood": "  تم التخطي: الفيديو موجود بالفعل على القناة (تم اكتشافه بعد إنشاء المزاج)",
+    "upload_log_no_duplicate": "  لم يتم العثور على تكرار على القناة، جارٍ الرفع...",
+    # Tag Generation with Mood
+    "upload_log_tags_with_mood": "  علامات ذكية محلية ({count}) (مع المزاج: {mood}): {tags}",
 }
 

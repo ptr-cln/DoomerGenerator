@@ -355,5 +355,16 @@ TRANSLATIONS = {
     "update_no_releases_message": "Nenhuma versão foi publicada ainda.\nVocê está usando a versão {version}.",
     "update_check_error": "Falha ao verificar atualizações:\n{error}",
     "log_update_available": "Atualização disponível: versão {version}",
+    # Git Update Checker
+    "git_update_dialog_title": "Atualização Disponível",
+    "git_update_message": "⚠️ Atualização Disponível\n\nHá {commits} para baixar.\n\nExecute 'git pull' para atualizar o aplicativo.\n\nDeseja abrir o terminal na pasta do projeto?",
+    "git_update_commits_singular": "{count} novo commit",
+    "git_update_commits_plural": "{count} novos commits",
+    # Upload Duplicate Detection
+    "upload_log_skipped_before_mood": "  IGNORADO: Vídeo já existe no canal (detectado antes da geração do mood)",
+    "upload_log_skipped_after_mood": "  IGNORADO: Vídeo já existe no canal (detectado após a geração do mood)",
+    "upload_log_no_duplicate": "  Nenhum duplicado encontrado no canal, prosseguindo com o upload...",
+    # Tag Generation with Mood
+    "upload_log_tags_with_mood": "  Tags inteligentes locais ({count}) (com mood: {mood}): {tags}",
 }
 

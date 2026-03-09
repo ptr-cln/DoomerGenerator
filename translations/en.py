@@ -356,5 +356,16 @@ TRANSLATIONS = {
     "update_no_releases_message": "No releases have been published yet.\nYou are using version {version}.",
     "update_check_error": "Failed to check for updates:\n{error}",
     "log_update_available": "Update available: version {version}",
+    # Git Update Checker
+    "git_update_dialog_title": "Update Available",
+    "git_update_message": "⚠️ Update Available\n\nThere are {commits} to download.\n\nRun 'git pull' to update the application.\n\nDo you want to open the terminal in the project folder?",
+    "git_update_commits_singular": "{count} new commit",
+    "git_update_commits_plural": "{count} new commits",
+    # Upload Duplicate Detection
+    "upload_log_skipped_before_mood": "  SKIPPED: Video already exists on channel (detected before mood generation)",
+    "upload_log_skipped_after_mood": "  SKIPPED: Video already exists on channel (detected after mood generation)",
+    "upload_log_no_duplicate": "  No duplicate found on channel, proceeding with upload...",
+    # Tag Generation with Mood
+    "upload_log_tags_with_mood": "  Smart fallback tags ({count}) (with mood: {mood}): {tags}",
 }
 

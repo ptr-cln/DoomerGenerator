@@ -1497,8 +1497,13 @@ def _compose_youtube_tags(
             tags.extend(fallback_tags)
             if log:
                 tags_preview = ", ".join(fallback_tags)
-                mood_info = f" (con mood: {mood})" if mood else ""
-                log(f"  Tag fallback smart locali ({len(fallback_tags)}){mood_info}: {tags_preview}")
+                # Note: This is called from upload context, so we can't use _t() directly
+                # The log function will be called with the translated string from the upload context
+                if mood:
+                    # This will be translated in the calling context
+                    log(f"  Tag fallback smart locali ({len(fallback_tags)}) (con mood: {mood}): {tags_preview}")
+                else:
+                    log(f"  Tag fallback smart locali ({len(fallback_tags)}): {tags_preview}")
 
     unique: list[str] = []
     seen: set[str] = set()
@@ -1703,7 +1708,7 @@ class YouTubeUploader:
                 # This avoids wasting an AI API call if the video is already uploaded
                 base_title_check = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
                 if self._video_exists_on_channel(base_title_check):
-                    self.log(f"  SALTATO: Video già presente sul canale (rilevato prima della generazione mood)")
+                    self.log(self._t("upload_log_skipped_before_mood"))
                     skipped += 1
                     continue
 
@@ -1735,12 +1740,12 @@ class YouTubeUploader:
 
                 # Double-check with final title (in case mood creates a duplicate)
                 if self._video_exists_on_channel(title):
-                    self.log(f"  SALTATO: Video già presente sul canale (rilevato dopo generazione mood)")
+                    self.log(self._t("upload_log_skipped_after_mood"))
                     skipped += 1
                     continue
 
                 # Log confirmation that no duplicate was found
-                self.log(f"  Nessun duplicato trovato sul canale, procedo con l'upload...")
+                self.log(self._t("upload_log_no_duplicate"))
 
                 try:
                     try:
@@ -7469,16 +7474,15 @@ class DoomerGeneratorApp:
                     pass
 
                 # Show warning popup
-                commit_text = f"{commits_behind} commit" if commits_behind == 1 else f"{commits_behind} commits"
-                message = (
-                    f"⚠️ Aggiornamento Disponibile\n\n"
-                    f"Ci sono {commit_text} nuovi da scaricare.\n\n"
-                    f"Esegui 'git pull' per aggiornare l'applicazione.\n\n"
-                    f"Vuoi aprire il terminale nella cartella del progetto?"
+                commit_text = (
+                    self._t("git_update_commits_singular", count=commits_behind)
+                    if commits_behind == 1
+                    else self._t("git_update_commits_plural", count=commits_behind)
                 )
+                message = self._t("git_update_message", commits=commit_text)
 
                 response = messagebox.askyesno(
-                    "Aggiornamento Disponibile",
+                    self._t("git_update_dialog_title"),
                     message,
                     icon="warning"
                 )

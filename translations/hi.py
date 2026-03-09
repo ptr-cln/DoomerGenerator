@@ -355,5 +355,16 @@ TRANSLATIONS = {
     "update_no_releases_message": "अभी तक कोई रिलीज़ प्रकाशित नहीं की गई है।\nआप संस्करण {version} का उपयोग कर रहे हैं।",
     "update_check_error": "अपडेट जांचने में विफल:\n{error}",
     "log_update_available": "अपडेट उपलब्ध: संस्करण {version}",
+    # Git Update Checker
+    "git_update_dialog_title": "अपडेट उपलब्ध",
+    "git_update_message": "⚠️ अपडेट उपलब्ध\n\nडाउनलोड करने के लिए {commits} हैं।\n\nएप्लिकेशन को अपडेट करने के लिए 'git pull' चलाएं।\n\nक्या आप प्रोजेक्ट फ़ोल्डर में टर्मिनल खोलना चाहते हैं?",
+    "git_update_commits_singular": "{count} नया कमिट",
+    "git_update_commits_plural": "{count} नए कमिट",
+    # Upload Duplicate Detection
+    "upload_log_skipped_before_mood": "  छोड़ दिया गया: वीडियो पहले से चैनल पर मौजूद है (mood जनरेशन से पहले पता चला)",
+    "upload_log_skipped_after_mood": "  छोड़ दिया गया: वीडियो पहले से चैनल पर मौजूद है (mood जनरेशन के बाद पता चला)",
+    "upload_log_no_duplicate": "  चैनल पर कोई डुप्लिकेट नहीं मिला, अपलोड जारी है...",
+    # Tag Generation with Mood
+    "upload_log_tags_with_mood": "  स्मार्ट स्थानीय टैग ({count}) (mood के साथ: {mood}): {tags}",
 }
 
