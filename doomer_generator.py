@@ -2396,23 +2396,23 @@ class DoomerVideoGenerator:
                 "-c:v",
                 "h264_nvenc",
                 "-preset",
-                "p4",
+                "p4",  # p4 = medium quality/speed balance
                 "-rc",
-                "vbr",
+                "vbr",  # Variable bitrate
                 "-cq",
-                "25",  # Increased from 23 for smaller files (higher = smaller)
+                "19",  # Lower = better quality (18-23 is high quality range)
                 "-b:v",
-                "2.5M",  # Reduced from 4M for smaller files
+                "8M",  # Target bitrate (higher = better quality)
                 "-maxrate",
-                "5M",  # Reduced from 8M for smaller files
+                "12M",  # Maximum bitrate peaks
                 "-bufsize",
-                "10M",  # Reduced from 16M for smaller files
+                "16M",  # Buffer size for rate control
             ]
         if encoder == "intel":
-            return ["-c:v", "h264_qsv", "-global_quality", "25"]  # Increased from 23 for smaller files
+            return ["-c:v", "h264_qsv", "-global_quality", "20"]  # Lower = better quality
         if encoder == "amd":
-            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "24", "-qp_p", "26"]  # Increased from 22/24 for smaller files
-        return ["-c:v", "libx264", "-preset", "medium", "-crf", "23"]  # Increased from 18 for smaller files (23 is FFmpeg default)
+            return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "20", "-qp_p", "22"]  # Lower = better quality
+        return ["-c:v", "libx264", "-preset", "medium", "-crf", "23"]  # CPU baseline
 
     def _probe_duration_seconds(self, audio_file: Path) -> float | None:
         if not self.ffprobe_bin:
