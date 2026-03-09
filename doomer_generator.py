@@ -69,6 +69,7 @@ LANGUAGE_LABEL_TO_CODE = {
     "Italiano": "it",
     "Español": "es",
     "Français": "fr",
+    "Deutsch": "de",
     "中文": "zh",
     "हिन्दी": "hi",
     "العربية": "ar",
