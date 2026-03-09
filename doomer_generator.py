@@ -1193,7 +1193,7 @@ def _generate_mood_with_ai(
         "messages": [
             {
                 "role": "system",
-                "content": "You are a creative writer specializing in melancholic, atmospheric mood descriptions for doomer wave music.",
+                "content": "You generate short atmospheric mood phrases for doomer wave music videos.",
             },
             {
                 "role": "user",
