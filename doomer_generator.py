@@ -2880,25 +2880,25 @@ class DoomerGeneratorApp:
         logs_frame = ttk.LabelFrame(main, text=self._t("log_group"), padding=8)
         logs_frame.grid(row=1, column=0, sticky="nsew")
         logs_frame.columnconfigure(0, weight=1)
-        logs_frame.rowconfigure(0, weight=1)
+        logs_frame.rowconfigure(1, weight=1)
 
-        # Log text widget
-        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
-        self.log_widget.grid(row=0, column=0, sticky="nsew")
-
-        # Scrollbar for logs
-        scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.log_widget.configure(yscrollcommand=scrollbar.set)
-
-        # Clear logs button (trash icon)
+        # Clear logs button (trash icon) - small button at the top
         clear_logs_btn = ttk.Button(
             logs_frame,
             text=self._t("log_btn_clear"),
-            width=3,
+            width=2,
             command=self._clear_log_display
         )
-        clear_logs_btn.grid(row=0, column=2, sticky="n", padx=(4, 0))
+        clear_logs_btn.grid(row=0, column=0, sticky="e", pady=(0, 4))
+
+        # Log text widget
+        self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
+        self.log_widget.grid(row=1, column=0, sticky="nsew")
+
+        # Scrollbar for logs
+        scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
+        scrollbar.grid(row=1, column=1, sticky="ns")
+        self.log_widget.configure(yscrollcommand=scrollbar.set)
 
     def _create_scrollable_tab(self, notebook: ttk.Notebook) -> tuple[ttk.Frame, ttk.Frame]:
         container = ttk.Frame(notebook)
