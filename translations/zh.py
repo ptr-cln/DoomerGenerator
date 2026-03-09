@@ -15,7 +15,7 @@ TRANSLATIONS = {
     "status_group_upload": "上传状态",
     "status_timer": "时间: {time}",
     "log_group": "日志",
-    "log_btn_clear": "🗑️",  # Trash icon to clear logs
+    "log_btn_clear": "清除日志",
     "general_group_language": "语言",
     "general_label_language": "界面语言",
     "general_label_theme": "主题",

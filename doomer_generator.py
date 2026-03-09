@@ -2882,14 +2882,13 @@ class DoomerGeneratorApp:
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(1, weight=1)
 
-        # Clear logs button (trash icon) - small button at the top
+        # Clear logs button at the top left
         clear_logs_btn = ttk.Button(
             logs_frame,
             text=self._t("log_btn_clear"),
-            width=2,
             command=self._clear_log_display
         )
-        clear_logs_btn.grid(row=0, column=0, sticky="e", pady=(0, 4))
+        clear_logs_btn.grid(row=0, column=0, sticky="w", pady=(0, 4))
 
         # Log text widget
         self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)

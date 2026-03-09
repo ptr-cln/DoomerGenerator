@@ -15,7 +15,7 @@ TRANSLATIONS = {
     "status_group_upload": "Статус выгрузки",
     "status_timer": "Время: {time}",
     "log_group": "Журнал",
-    "log_btn_clear": "🗑️",  # Trash icon to clear logs
+    "log_btn_clear": "Очистить журнал",
     "general_group_language": "Язык",
     "general_label_language": "Язык интерфейса",
     "general_label_theme": "Тема",
