@@ -3621,12 +3621,17 @@ class DoomerGeneratorApp:
 
         self.backgrounds_listbox = tk.Listbox(
             bg_list_frame,
-            selectmode=tk.MULTIPLE,
+            selectmode=tk.BROWSE,
             height=6,
-            yscrollcommand=bg_scrollbar.set
+            yscrollcommand=bg_scrollbar.set,
+            exportselection=False,
+            takefocus=False
         )
         self.backgrounds_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         bg_scrollbar.config(command=self.backgrounds_listbox.yview)
+
+        # Disable selection highlighting
+        self.backgrounds_listbox.bind('<<ListboxSelect>>', lambda e: self.backgrounds_listbox.selection_clear(0, tk.END))
 
         bg_buttons = ttk.Frame(bg_frame)
         bg_buttons.pack(fill=tk.X, pady=(4, 0))
@@ -3647,12 +3652,17 @@ class DoomerGeneratorApp:
 
         self.doomer_guys_listbox = tk.Listbox(
             dg_list_frame,
-            selectmode=tk.MULTIPLE,
+            selectmode=tk.BROWSE,
             height=6,
-            yscrollcommand=dg_scrollbar.set
+            yscrollcommand=dg_scrollbar.set,
+            exportselection=False,
+            takefocus=False
         )
         self.doomer_guys_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         dg_scrollbar.config(command=self.doomer_guys_listbox.yview)
+
+        # Disable selection highlighting
+        self.doomer_guys_listbox.bind('<<ListboxSelect>>', lambda e: self.doomer_guys_listbox.selection_clear(0, tk.END))
 
         dg_buttons = ttk.Frame(dg_frame)
         dg_buttons.pack(fill=tk.X, pady=(4, 0))
