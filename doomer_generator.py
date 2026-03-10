@@ -5638,17 +5638,14 @@ class DoomerGeneratorApp:
                     downloaded += 1
 
                     # Clean up downloaded files: remove "(Remastered)" from filename (case insensitive)
-                    if output_file:
-                        output_path = Path(output_file)
-                        if output_path.exists():
-                            # Check if filename contains "(Remastered)" (case insensitive)
-                            new_name = re.sub(r'\s*\(Remastered\)', '', output_path.stem, flags=re.IGNORECASE)
-                            if new_name != output_path.stem:
-                                # Rename the file
-                                new_path = output_path.parent / f"{new_name}{output_path.suffix}"
-                                output_path.rename(new_path)
-                                self.events.put(("log", f"  File rinominato: rimosso '(Remastered)'"))
-                                output_file = str(new_path)
+                    # Scan the target directory for files containing "(Remastered)"
+                    for audio_file in target_dir.glob("*"):
+                        if audio_file.is_file() and re.search(r'\(Remastered\)', audio_file.stem, flags=re.IGNORECASE):
+                            # Remove "(Remastered)" from filename
+                            new_name = re.sub(r'\s*\(Remastered\)', '', audio_file.stem, flags=re.IGNORECASE)
+                            new_path = audio_file.parent / f"{new_name}{audio_file.suffix}"
+                            audio_file.rename(new_path)
+                            self.events.put(("log", f"  File rinominato: '{audio_file.name}' → '{new_path.name}'"))
 
                     if output_file:
                         self.events.put(("log", f"  File: {output_file}"))
