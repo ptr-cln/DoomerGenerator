@@ -1657,16 +1657,16 @@ class YouTubeUploader:
                     # Use Format 1 75% of the time, Format 2 25% of the time
                     # Counter % 4: 0,1,2 → Format 1 (75%), 3 → Format 2 (25%)
                     if self._title_format_counter % 4 != 3:
-                        # Format 1 (75%): {fileName} (Doomer Wave / Slowed + Reverb) | {mood}
-                        title = f"{base_filename} (Doomer Wave / Slowed + Reverb) | {mood}"
+                        # Format 1 (75%): {fileName} (Doomer Wave / slowed + reverb) | {mood}
+                        title = f"{base_filename} (Doomer Wave / slowed + reverb) | {mood}"
                     else:
-                        # Format 2 (25%): {mood} | {fileName} (Doomer Wave / Slowed + Reverb)
-                        title = f"{mood} | {base_filename} (Doomer Wave / Slowed + Reverb)"
+                        # Format 2 (25%): {mood} | {fileName} (Doomer Wave / slowed + reverb)
+                        title = f"{mood} | {base_filename} (Doomer Wave / slowed + reverb)"
                     self._title_format_counter += 1
                     self.log(f"  Mood generato: {mood}")
                 else:
                     # Fallback if AI mood generation fails
-                    title = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
+                    title = f"{base_filename} (Doomer Wave / slowed + reverb)"
                     self.log(f"  Mood non disponibile, uso titolo standard")
 
                 # Replace hyphen with en dash for better typography
@@ -1674,9 +1674,9 @@ class YouTubeUploader:
 
                 # YouTube title limit is 100 characters - apply progressive shortening
                 if len(title) > 100:
-                    # Step 1: Replace "(Doomer Wave / Slowed + Reverb)" with "(Doomer Wave)"
-                    title = title.replace("(Doomer Wave / Slowed + Reverb)", "(Doomer Wave)")
-                    self.log(f"  Titolo accorciato: (Doomer Wave / Slowed + Reverb) → (Doomer Wave)")
+                    # Step 1: Replace "(Doomer Wave / slowed + reverb)" with "(Doomer Wave)"
+                    title = title.replace("(Doomer Wave / slowed + reverb)", "(Doomer Wave)")
+                    self.log(f"  Titolo accorciato: (Doomer Wave / slowed + reverb) → (Doomer Wave)")
 
                 if len(title) > 100:
                     # Step 2: Replace "(Doomer Wave)" with "(Doomer)"
@@ -1699,8 +1699,8 @@ class YouTubeUploader:
                     self.log(f"  Titolo troncato a 100 caratteri (limite YouTube)")
 
                 # Create base title without mood for description
-                # Format: "Artist – Song (Doomer Wave / Slowed + Reverb)"
-                base_title_for_description = f"{base_filename} (Doomer Wave / Slowed + Reverb)".replace(" - ", " – ")
+                # Format: "Artist – Song (Doomer Wave / slowed + reverb)"
+                base_title_for_description = f"{base_filename} (Doomer Wave / slowed + reverb)".replace(" - ", " – ")
 
                 cleanup_target: Path | None = None
                 media = None
