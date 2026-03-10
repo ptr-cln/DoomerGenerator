@@ -5498,6 +5498,7 @@ class DoomerGeneratorApp:
                 command = [
                     *ytdlp_command,
                     "--newline",
+                    "--progress",  # Force progress output
                     "--retries",
                     "8",
                     "--fragment-retries",
@@ -5509,8 +5510,6 @@ class DoomerGeneratorApp:
                     "wav",
                     "--audio-quality",
                     "0",
-                    "--print",
-                    "after_move:filepath",
                     "-f",
                     "bestaudio/best",
                     "--ffmpeg-location",
