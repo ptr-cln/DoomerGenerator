@@ -384,7 +384,7 @@ TRANSLATIONS = {
     "upload_multiday_error_no_time": "Video {number}: Inserisci ora e minuti",
     "upload_multiday_error_invalid_time": "Video {number}: Ora non valida (HH: 0-23, MM: 0-59)",
     "upload_multiday_error_past_date": "Video {number}: Data/ora deve essere futura",
-    "upload_multiday_error_not_ascending": "Video {number}: Data/ora deve essere successiva al video precedente",
+    "upload_multiday_error_not_ascending": "Video {number}: Data/ora non può essere precedente al video precedente",
     "upload_multiday_error_no_configs": "Nessuna configurazione multi-day impostata.\n\nClicca su 'Configura schedulazione multi giorni' e aggiungi almeno una configurazione.",
     "upload_multiday_error_no_configs_title": "Errore Configurazione",
     "upload_multiday_log_saved": "Configurazione multi-day salvata: {count} video configurati",

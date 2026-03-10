@@ -384,7 +384,7 @@ TRANSLATIONS = {
     "upload_multiday_error_no_time": "Video {number}: Enter hour and minutes",
     "upload_multiday_error_invalid_time": "Video {number}: Invalid time (HH: 0-23, MM: 0-59)",
     "upload_multiday_error_past_date": "Video {number}: Date/time must be in the future",
-    "upload_multiday_error_not_ascending": "Video {number}: Date/time must be after the previous video",
+    "upload_multiday_error_not_ascending": "Video {number}: Date/time cannot be earlier than the previous video",
     "upload_multiday_error_no_configs": "No multi-day configuration set.\n\nClick 'Configure multi-day scheduling' and add at least one configuration.",
     "upload_multiday_error_no_configs_title": "Configuration Error",
     "upload_multiday_log_saved": "Multi-day configuration saved: {count} videos configured",

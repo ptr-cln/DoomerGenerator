@@ -4436,11 +4436,11 @@ class DoomerGeneratorApp:
                     )
                     return
 
-                # Check ascending order
+                # Check ascending order (allow same time, just not earlier)
                 if i > 0:
                     prev_date, prev_hour, prev_minute = configs[i - 1]
                     prev_dt = datetime.datetime.combine(prev_date, datetime.time(prev_hour, prev_minute))
-                    if dt <= prev_dt:
+                    if dt < prev_dt:
                         messagebox.showerror(
                             self._t("upload_multiday_error_title"),
                             self._t("upload_multiday_error_not_ascending").format(number=i + 1)
