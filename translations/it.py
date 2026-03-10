@@ -391,5 +391,12 @@ TRANSLATIONS = {
     "upload_multiday_log_prepopulate": "Pre-popolamento popup con {count} configurazioni",
     "upload_multiday_log_no_previous": "Popup multi-day: nessuna configurazione precedente",
     "upload_multiday_log_scheduled_for": "  Schedulato per: {timestamp}",
+    "upload_multiday_btn_duplicate_last_day": "Duplica ultimo giorno",
+    "upload_multiday_duplicate_title": "Duplica Ultimo Giorno",
+    "upload_multiday_duplicate_no_rows": "Nessuna configurazione presente.\n\nAggiungi almeno una configurazione prima di duplicare.",
+    "upload_multiday_duplicate_no_dates": "Nessuna data valida trovata.\n\nSeleziona almeno una data prima di duplicare.",
+    "upload_multiday_duplicate_invalid_date": "Data non valida nell'ultima configurazione.",
+    "upload_multiday_duplicate_no_times": "Nessun orario valido trovato nell'ultimo giorno.\n\nImposta almeno un orario prima di duplicare.",
+    "upload_multiday_duplicate_success": "Duplicati {count} video da {from_date} a {to_date}",
 }
 

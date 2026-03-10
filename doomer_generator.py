@@ -4559,12 +4559,89 @@ class DoomerGeneratorApp:
             self._log(self._t("upload_multiday_log_saved").format(count=len(configs)))
             popup.destroy()
 
+        def _duplicate_last_day():
+            """Duplicate all schedules from the last day to the next day."""
+            if not row_widgets:
+                messagebox.showinfo(
+                    self._t("upload_multiday_duplicate_title"),
+                    self._t("upload_multiday_duplicate_no_rows")
+                )
+                return
+
+            # Group rows by date
+            date_groups: dict[str, list[dict]] = {}
+            select_date_text = self._t("upload_multiday_select_date")
+
+            for row in row_widgets:
+                date_str = row["date_var"].get().strip()
+                if date_str and date_str != select_date_text:
+                    if date_str not in date_groups:
+                        date_groups[date_str] = []
+                    date_groups[date_str].append(row)
+
+            if not date_groups:
+                messagebox.showinfo(
+                    self._t("upload_multiday_duplicate_title"),
+                    self._t("upload_multiday_duplicate_no_dates")
+                )
+                return
+
+            # Find the last date (max date string in YYYY-MM-DD format sorts correctly)
+            last_date_str = max(date_groups.keys())
+            last_date_rows = date_groups[last_date_str]
+
+            # Parse last date and calculate next day
+            try:
+                last_date = datetime.datetime.strptime(last_date_str, '%Y-%m-%d').date()
+                next_date = last_date + datetime.timedelta(days=1)
+                next_date_str = str(next_date)
+            except ValueError:
+                messagebox.showerror(
+                    self._t("upload_multiday_duplicate_title"),
+                    self._t("upload_multiday_duplicate_invalid_date")
+                )
+                return
+
+            # Duplicate each row from last day to next day
+            duplicated_count = 0
+            for source_row in last_date_rows:
+                hour_str = source_row["hour_var"].get().strip()
+                minute_str = source_row["minute_var"].get().strip()
+
+                # Only duplicate if time is set
+                if hour_str and minute_str:
+                    _add_row()
+                    new_row = row_widgets[-1]
+                    new_row["date_var"].set(next_date_str)
+                    new_row["hour_var"].set(hour_str)
+                    new_row["minute_var"].set(minute_str)
+                    duplicated_count += 1
+
+            if duplicated_count > 0:
+                self._log(self._t("upload_multiday_duplicate_success").format(
+                    count=duplicated_count,
+                    from_date=last_date_str,
+                    to_date=next_date_str
+                ))
+            else:
+                messagebox.showinfo(
+                    self._t("upload_multiday_duplicate_title"),
+                    self._t("upload_multiday_duplicate_no_times")
+                )
+
         # Top buttons frame
         top_buttons = ttk.Frame(scrollable_frame)
         top_buttons.pack(fill=tk.X, pady=10)
 
         ttk.Button(top_buttons, text="+", width=5, command=_add_row).pack(side=tk.LEFT, padx=5)
         ttk.Label(top_buttons, text=self._t("upload_multiday_btn_add_row")).pack(side=tk.LEFT, padx=5)
+
+        # Duplicate last day button
+        ttk.Button(
+            top_buttons,
+            text=self._t("upload_multiday_btn_duplicate_last_day"),
+            command=_duplicate_last_day
+        ).pack(side=tk.LEFT, padx=15)
 
         # Pre-populate with existing configurations
         if self.multiday_schedule_configs:
