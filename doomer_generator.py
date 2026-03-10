@@ -6773,13 +6773,15 @@ class DoomerGeneratorApp:
                 status_counts = {}
                 for item in self.queue_items:
                     status_counts[item.status] = status_counts.get(item.status, 0) + 1
-                self._log_debug(f"Queue items status breakdown: {status_counts}")
+                # Debug log removed to avoid spam
+                # self._log_debug(f"Queue items status breakdown: {status_counts}")
 
             filtered_items = [
                 item for item in self.queue_items
                 if filter_status == "all" or item.status == filter_status
             ]
-            self._log_debug(f"Refreshing queue display: {len(self.queue_items)} total, {len(filtered_items)} filtered (filter={filter_status})")
+            # Debug log removed to avoid spam
+            # self._log_debug(f"Refreshing queue display: {len(self.queue_items)} total, {len(filtered_items)} filtered (filter={filter_status})")
 
             for item in filtered_items:
                 # Format progress
