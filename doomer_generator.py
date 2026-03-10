@@ -601,15 +601,40 @@ def _safe_mtime(path: Path) -> float:
         return 0.0
 
 
-def _collect_files(base_dir: Path, extensions: set[str]) -> list[Path]:
-    """Collect files with given extensions from base_dir (non-recursive, only direct children)."""
+def _collect_files(base_dir: Path, extensions: set[str], exclude_recently_modified: float = 0.0) -> list[Path]:
+    """Collect files with given extensions from base_dir (non-recursive, only direct children).
+
+    Args:
+        base_dir: Directory to scan
+        extensions: Set of file extensions to include (e.g., {'.mp4', '.mp3'})
+        exclude_recently_modified: If > 0, exclude files modified within this many seconds ago.
+                                   Useful to avoid picking up files still being written.
+    """
     if not base_dir.is_dir():
         return []
-    return sorted(
-        file
-        for file in base_dir.iterdir()
-        if file.is_file() and file.suffix.lower() in extensions
-    )
+
+    files = []
+    current_time = time.time()
+
+    for file in base_dir.iterdir():
+        if not file.is_file() or file.suffix.lower() not in extensions:
+            continue
+
+        # If exclude_recently_modified is set, check file modification time
+        if exclude_recently_modified > 0:
+            try:
+                mtime = file.stat().st_mtime
+                age_seconds = current_time - mtime
+                if age_seconds < exclude_recently_modified:
+                    # File was modified too recently, skip it
+                    continue
+            except OSError:
+                # If we can't stat the file, skip it to be safe
+                continue
+
+        files.append(file)
+
+    return sorted(files)
 
 
 def _load_usage_memory(memory_file: Path) -> dict[str, dict[str, int]]:
@@ -1808,7 +1833,8 @@ class YouTubeUploader:
         on_new_files: Callable[[list[Path]], None] | None = None,
         ffmpeg_bin: str | None = None,
     ) -> UploadSummary:
-        files = _collect_files(video_dir, VIDEO_EXTENSIONS)
+        # Exclude videos modified in the last 10 seconds to avoid uploading files still being generated
+        files = _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0)
         total = len(files)
         if total == 0:
             self.log("Nessun video trovato in video/out.")
@@ -1830,8 +1856,9 @@ class YouTubeUploader:
         first_batch = True
 
         while True:
-            # Get current list of videos, excluding already processed ones
-            current_files = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
+            # Get current list of videos, excluding already processed ones and recently modified files
+            # (exclude_recently_modified=10.0 prevents uploading videos still being generated)
+            current_files = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0) if f not in processed_files]
 
             # Randomize upload order to avoid uploading similar videos consecutively
             random.shuffle(current_files)
@@ -1989,7 +2016,8 @@ class YouTubeUploader:
 
                     # Pre-calculate pending files size ONCE (not in the loop!)
                     # This was causing upload stalling by scanning directory every chunk
-                    all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files and f != video_file]
+                    # Exclude recently modified files to avoid counting videos still being generated
+                    all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0) if f not in processed_files and f != video_file]
                     pending_size = sum(f.stat().st_size for f in all_pending)
 
                     response = None
@@ -5887,7 +5915,8 @@ class DoomerGeneratorApp:
         settings = self._collect_upload_settings()
 
         # Add files to queue (batch mode - refresh only once at the end)
-        video_files = _collect_files(video_dir, VIDEO_EXTENSIONS)
+        # Exclude recently modified files to avoid queueing videos still being generated
+        video_files = _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0)
         self._log_debug(f"Upload starting: clearing current_queue_items (had {len(self.current_queue_items)} items), queue_items has {len(self.queue_items)} items")
         self.current_queue_items.clear()
         for video_file in video_files:
