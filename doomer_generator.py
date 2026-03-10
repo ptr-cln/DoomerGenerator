@@ -5110,7 +5110,13 @@ class DoomerGeneratorApp:
             )
             return
 
-        doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+        # Use selected resources if available, otherwise use all from directories
+        if self.selected_doomer_guys:
+            doomer_guys = self.selected_doomer_guys
+            self._log(f"Preview: usando {len(doomer_guys)} Doomer Guys selezionati")
+        else:
+            doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+
         if not doomer_guys:
             messagebox.showerror(
                 self._t("dialog_invalid_input_title"),
@@ -5118,7 +5124,12 @@ class DoomerGeneratorApp:
             )
             return
 
-        backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+        if self.selected_backgrounds:
+            backgrounds = self.selected_backgrounds
+            self._log(f"Preview: usando {len(backgrounds)} backgrounds selezionati")
+        else:
+            backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+
         if not backgrounds:
             messagebox.showerror(
                 self._t("dialog_invalid_input_title"),
