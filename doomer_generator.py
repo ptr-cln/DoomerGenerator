@@ -4283,59 +4283,58 @@ class DoomerGeneratorApp:
             row_frame.pack(fill=tk.X, pady=5)
 
             # Video label
-            ttk.Label(row_frame, text=f"Video {row_index + 1}:", width=10).pack(side=tk.LEFT, padx=5)
+            label = ttk.Label(row_frame, text=f"Video {row_index + 1}:", width=10)
+            label.pack(side=tk.LEFT, padx=5)
 
             # Date button
             date_var = tk.StringVar(value="Seleziona data...")
             date_obj_var = tk.Variable(value=None)
+
+            # Create row dict first so we can reference it in lambdas
+            row_dict = {
+                "frame": row_frame,
+                "label": label,
+                "date_var": date_var,
+                "date_obj_var": date_obj_var,
+                "hour_var": tk.StringVar(value=""),
+                "minute_var": tk.StringVar(value=""),
+            }
+
             date_btn = ttk.Button(
                 row_frame,
                 textvariable=date_var,
-                command=lambda idx=row_index: _select_date_for_row(idx)
+                command=lambda r=row_dict: _select_date_for_row(r)
             )
             date_btn.pack(side=tk.LEFT, padx=5)
 
             # Time inputs
-            hour_var = tk.StringVar(value="")
-            minute_var = tk.StringVar(value="")
-
-            ttk.Entry(row_frame, textvariable=hour_var, width=3).pack(side=tk.LEFT, padx=2)
+            ttk.Entry(row_frame, textvariable=row_dict["hour_var"], width=3).pack(side=tk.LEFT, padx=2)
             ttk.Label(row_frame, text=":").pack(side=tk.LEFT)
-            ttk.Entry(row_frame, textvariable=minute_var, width=3).pack(side=tk.LEFT, padx=2)
+            ttk.Entry(row_frame, textvariable=row_dict["minute_var"], width=3).pack(side=tk.LEFT, padx=2)
 
             # Remove button
             remove_btn = ttk.Button(
                 row_frame,
                 text="-",
                 width=3,
-                command=lambda idx=row_index: _remove_row(idx)
+                command=lambda r=row_dict: _remove_row(r)
             )
             remove_btn.pack(side=tk.LEFT, padx=5)
 
-            row_widgets.append({
-                "frame": row_frame,
-                "date_var": date_var,
-                "date_obj_var": date_obj_var,
-                "hour_var": hour_var,
-                "minute_var": minute_var,
-            })
+            row_widgets.append(row_dict)
 
-        def _remove_row(index: int):
+        def _remove_row(row_dict: dict):
             """Remove a configuration row."""
-            if 0 <= index < len(row_widgets):
-                row_widgets[index]["frame"].destroy()
-                row_widgets.pop(index)
+            if row_dict in row_widgets:
+                row_dict["frame"].destroy()
+                row_widgets.remove(row_dict)
                 # Renumber remaining rows
                 for i, row in enumerate(row_widgets):
-                    # Update label text
-                    for widget in row["frame"].winfo_children():
-                        if isinstance(widget, ttk.Label) and widget.cget("text").startswith("Video"):
-                            widget.configure(text=f"Video {i + 1}:")
-                            break
+                    row["label"].configure(text=f"Video {i + 1}:")
 
-        def _select_date_for_row(index: int):
+        def _select_date_for_row(row_dict: dict):
             """Open calendar popup for specific row."""
-            if index >= len(row_widgets):
+            if row_dict not in row_widgets:
                 return
 
             cal_popup = tk.Toplevel(popup)
@@ -4356,8 +4355,8 @@ class DoomerGeneratorApp:
                 selected = cal.get_date()
                 try:
                     date_obj = datetime.datetime.strptime(selected, '%Y-%m-%d').date()
-                    row_widgets[index]["date_obj_var"].set(date_obj)
-                    row_widgets[index]["date_var"].set(str(date_obj))
+                    row_dict["date_obj_var"].set(date_obj)
+                    row_dict["date_var"].set(str(date_obj))
                     cal_popup.destroy()
                 except ValueError:
                     cal_popup.destroy()
