@@ -1965,7 +1965,19 @@ class YouTubeUploader:
                         # publishAt; we also add the timestamp if provided.
                         status_dict["privacyStatus"] = "private"
                         if settings.publish_at:
-                            status_dict["publishAt"] = settings.publish_at
+                            utc_timestamp = settings.publish_at
+                            status_dict["publishAt"] = utc_timestamp
+
+                            # Convert UTC timestamp to local time for display in log
+                            try:
+                                utc_dt = datetime.datetime.strptime(utc_timestamp, "%Y-%m-%dT%H:%M:%SZ")
+                                utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
+                                local_dt = utc_dt.astimezone()
+                                local_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                                self.log(f"  Scheduled for: {local_str}")
+                            except Exception:
+                                # Fallback to UTC if conversion fails
+                                self.log(f"  Scheduled for: {utc_timestamp}")
                     elif settings.privacy_status.startswith("Multi-day"):
                         # Multi-day scheduling: use sequential timestamps
                         status_dict["privacyStatus"] = "private"
@@ -1973,8 +1985,19 @@ class YouTubeUploader:
                             # Use index-1 because index starts at 1 (for display)
                             # If we have more videos than timestamps, use the last timestamp
                             timestamp_index = min(index - 1, len(settings.multiday_publish_at) - 1)
-                            status_dict["publishAt"] = settings.multiday_publish_at[timestamp_index]
-                            self.log(f"  Scheduled for: {settings.multiday_publish_at[timestamp_index]}")
+                            utc_timestamp = settings.multiday_publish_at[timestamp_index]
+                            status_dict["publishAt"] = utc_timestamp
+
+                            # Convert UTC timestamp to local time for display in log
+                            try:
+                                utc_dt = datetime.datetime.strptime(utc_timestamp, "%Y-%m-%dT%H:%M:%SZ")
+                                utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
+                                local_dt = utc_dt.astimezone()
+                                local_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                                self.log(f"  Scheduled for: {local_str}")
+                            except Exception:
+                                # Fallback to UTC if conversion fails
+                                self.log(f"  Scheduled for: {utc_timestamp}")
 
                     request_body = {
                         "snippet": {
