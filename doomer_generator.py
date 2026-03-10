@@ -4593,7 +4593,7 @@ class DoomerGeneratorApp:
             parent.columnconfigure(col, weight=1)
 
             # Load and resize image
-            img = Image.open(image_path)
+            img = Image.open(str(image_path))  # Convert Path to string
 
             # Calculate thumbnail size maintaining aspect ratio
             max_size = (200, 150)
@@ -4616,8 +4616,8 @@ class DoomerGeneratorApp:
             )
             name_label.pack(padx=5, pady=(0, 5))
 
-        except Exception as error:
-            # Fallback to text if image loading fails
+        except ImportError as error:
+            # PIL not installed
             error_frame = ttk.Frame(parent)
             row = index // 3
             col = index % 3
@@ -4625,12 +4625,30 @@ class DoomerGeneratorApp:
 
             ttk.Label(
                 error_frame,
-                text=f"❌ {image_path.name}\n(Errore caricamento)",
+                text=f"📦 {image_path.name}\n(Pillow non installato)\npip install Pillow",
                 wraplength=200,
-                justify=tk.CENTER
+                justify=tk.CENTER,
+                foreground="orange"
             ).pack(padx=5, pady=5)
 
-            self._log_debug(f"Errore caricamento thumbnail {image_path.name}: {error}")
+            self._log(f"⚠️ Pillow non installato. Installa con: pip install Pillow")
+
+        except Exception as error:
+            # Other errors (file not found, corrupt image, etc.)
+            error_frame = ttk.Frame(parent)
+            row = index // 3
+            col = index % 3
+            error_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+
+            ttk.Label(
+                error_frame,
+                text=f"❌ {image_path.name}\n(Errore caricamento)\n{type(error).__name__}",
+                wraplength=200,
+                justify=tk.CENTER,
+                foreground="red"
+            ).pack(padx=5, pady=5)
+
+            self._log(f"Errore caricamento thumbnail {image_path.name}: {type(error).__name__}: {error}")
 
     def _clear_selected_resources_memory(self) -> None:
         """Clear memory file for selected resources."""
