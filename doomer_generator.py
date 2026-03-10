@@ -7905,23 +7905,11 @@ class DoomerGeneratorApp:
                 )
                 message = self._t("git_update_message", commits=commit_text)
 
-                response = messagebox.askyesno(
+                messagebox.showinfo(
                     self._t("git_update_dialog_title"),
                     message,
                     icon="warning"
                 )
-
-                if response:
-                    # Open terminal in project directory
-                    try:
-                        if sys.platform == "darwin":  # macOS
-                            subprocess.Popen(["open", "-a", "Terminal", str(self.project_dir)])
-                        elif sys.platform.startswith("linux"):
-                            subprocess.Popen(["x-terminal-emulator"], cwd=str(self.project_dir))
-                        elif os.name == "nt":  # Windows
-                            subprocess.Popen(["cmd", "/K", "cd", "/D", str(self.project_dir)])
-                    except Exception as e:
-                        self._log_debug(f"Failed to open terminal: {e}")
 
         except subprocess.TimeoutExpired:
             # Git command took too long - silently ignore
