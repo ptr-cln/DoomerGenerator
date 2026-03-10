@@ -166,7 +166,7 @@ TRANSLATIONS = {
     "progress_download_file": "Download em andamento: {index}/{total} - {percent:.1f}% do link",
     "progress_upload_file": "Upload {index}/{total} - {percent:.1f}% ({name}) - {speed:.2f} MB/s - Total restante: {eta}",
     "progress_video_file": "Vídeo {done}/{total} - Total restante: {eta}",
-    "progress_video_detailed": "Vídeo {done}/{total} - Áudio: {audio} - BG: {bg} - Restante: {eta}",
+    "progress_video_detailed": "Vídeo {done}/{total} - Áudio: {audio} - Restante: {eta}",
     "progress_audio_file": "Áudio {done}/{total} - Arquivo: {name}",
     "progress_generic": "Progresso: {done}/{total}",
     "progress_download_done": "Download concluído - OK: {ok}, Erros: {err}",
