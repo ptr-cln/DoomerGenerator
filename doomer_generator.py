@@ -2103,16 +2103,33 @@ class DoomerVideoGenerator:
         progress: Callable[[int, int, int, str, str], None],
         check_pause: Callable[[], bool] | None = None,
         on_new_files: Callable[[list[Path]], None] | None = None,
+        selected_backgrounds: list[Path] | None = None,
+        selected_doomer_guys: list[Path] | None = None,
+        selected_resources_memory_path: Path | None = None,
     ) -> VideoSummary:
-        doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+        # Use selected resources if provided, otherwise use all from directories
+        if selected_doomer_guys:
+            doomer_guys = selected_doomer_guys
+            self.log(f"Usando {len(doomer_guys)} Doomer Guys selezionati")
+        else:
+            doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+
         if not doomer_guys:
-            self.log(f"Nessuna immagine Doomer Guy trovata in: {self.doomer_guys_dir}")
+            self.log(f"Nessuna immagine Doomer Guy trovata")
             return VideoSummary(total=0, generated=0, failed=0)
 
-        backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+        if selected_backgrounds:
+            backgrounds = selected_backgrounds
+            self.log(f"Usando {len(backgrounds)} backgrounds selezionati")
+        else:
+            backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+
         if not backgrounds:
-            self.log(f"Nessun background trovato in: {self.backgrounds_dir}")
+            self.log(f"Nessun background trovato")
             return VideoSummary(total=0, generated=0, failed=0)
+
+        # Use selected resources memory if provided, otherwise use default
+        memory_path = selected_resources_memory_path if selected_resources_memory_path else self.usage_memory_path
 
         resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
         self.log(
@@ -2157,16 +2174,16 @@ class DoomerVideoGenerator:
                 destination.parent.mkdir(parents=True, exist_ok=True)
 
                 # Select least used background
-                memory = _check_and_reset_memory(self.usage_memory_path, backgrounds, "backgrounds")
+                memory = _check_and_reset_memory(memory_path, backgrounds, "backgrounds")
                 background = _get_least_used_file(backgrounds, memory, "backgrounds")
                 if background:
-                    _increment_usage(self.usage_memory_path, background, "backgrounds")
+                    _increment_usage(memory_path, background, "backgrounds")
 
                 # Select least used doomer guy image
-                memory = _check_and_reset_memory(self.usage_memory_path, doomer_guys, "doomer_guys")
+                memory = _check_and_reset_memory(memory_path, doomer_guys, "doomer_guys")
                 doomer_guy = _get_least_used_file(doomer_guys, memory, "doomer_guys")
                 if doomer_guy:
-                    _increment_usage(self.usage_memory_path, doomer_guy, "doomer_guys")
+                    _increment_usage(memory_path, doomer_guy, "doomer_guys")
 
                 self.log(f"[{index}/{total}] Video: {audio_file.name}")
                 if background:
@@ -2484,6 +2501,7 @@ class DoomerGeneratorApp:
         self.youtube_token_path = self.project_dir / "youtube_token.json"
         self.app_settings_path = self.project_dir / APP_SETTINGS_FILE
         self.usage_memory_path = self.project_dir / ".usage_memory.json"
+        self.selected_resources_memory_path = self.project_dir / ".selected_resources_memory.json"
         self.logs_dir = self.project_dir / "logs"
 
         # Setup logging system
@@ -2538,6 +2556,9 @@ class DoomerGeneratorApp:
         self._ensure_default_filesystem()
         self._ensure_links_file()
 
+        # Clear selected resources memory on app start
+        self._clear_selected_resources_memory()
+
         self.links_file_var = tk.StringVar(value=str(self.links_file))
         self.ffmpeg_var = tk.StringVar(value=self._default_ffmpeg_path())
 
@@ -2578,6 +2599,10 @@ class DoomerGeneratorApp:
         self.video_shutdown_after_generation_var = tk.BooleanVar(
             value=self.default_video_settings.shutdown_after_generation
         )
+
+        # Selected resources (not saved in settings, reset on app start and after generation)
+        self.selected_backgrounds: list[Path] = []
+        self.selected_doomer_guys: list[Path] = []
         self.upload_video_input_var = tk.StringVar(value=str(self.video_output_dir))
         self.youtube_client_secret_var = tk.StringVar(value=str(self.youtube_client_secret_path))
         self.youtube_token_var = tk.StringVar(value=str(self.youtube_token_path))
@@ -3576,6 +3601,75 @@ class DoomerGeneratorApp:
             row=1, column=1, padx=6, pady=6, sticky="ew"
         )
 
+        # Resource selection section (optional)
+        selection_box = ttk.LabelFrame(parent, text="Selezione Risorse (Opzionale)", padding=8)
+        selection_box.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        selection_box.columnconfigure(0, weight=1)
+        selection_box.columnconfigure(1, weight=1)
+
+        # Backgrounds selection
+        bg_frame = ttk.Frame(selection_box)
+        bg_frame.grid(row=0, column=0, padx=6, pady=6, sticky="nsew")
+
+        ttk.Label(bg_frame, text="Backgrounds (Opzionale):").pack(anchor="w", pady=(0, 4))
+
+        bg_list_frame = ttk.Frame(bg_frame)
+        bg_list_frame.pack(fill=tk.BOTH, expand=True)
+
+        bg_scrollbar = ttk.Scrollbar(bg_list_frame)
+        bg_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.backgrounds_listbox = tk.Listbox(
+            bg_list_frame,
+            selectmode=tk.MULTIPLE,
+            height=6,
+            yscrollcommand=bg_scrollbar.set
+        )
+        self.backgrounds_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        bg_scrollbar.config(command=self.backgrounds_listbox.yview)
+
+        bg_buttons = ttk.Frame(bg_frame)
+        bg_buttons.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(bg_buttons, text="Sfoglia", command=self._browse_backgrounds).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bg_buttons, text="Cancella", command=self._clear_backgrounds).pack(side=tk.LEFT, padx=2)
+
+        # Doomer Guys selection
+        dg_frame = ttk.Frame(selection_box)
+        dg_frame.grid(row=0, column=1, padx=6, pady=6, sticky="nsew")
+
+        ttk.Label(dg_frame, text="Doomer Guys (Opzionale):").pack(anchor="w", pady=(0, 4))
+
+        dg_list_frame = ttk.Frame(dg_frame)
+        dg_list_frame.pack(fill=tk.BOTH, expand=True)
+
+        dg_scrollbar = ttk.Scrollbar(dg_list_frame)
+        dg_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.doomer_guys_listbox = tk.Listbox(
+            dg_list_frame,
+            selectmode=tk.MULTIPLE,
+            height=6,
+            yscrollcommand=dg_scrollbar.set
+        )
+        self.doomer_guys_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        dg_scrollbar.config(command=self.doomer_guys_listbox.yview)
+
+        dg_buttons = ttk.Frame(dg_frame)
+        dg_buttons.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(dg_buttons, text="Sfoglia", command=self._browse_doomer_guys).pack(side=tk.LEFT, padx=2)
+        ttk.Button(dg_buttons, text="Cancella", command=self._clear_doomer_guys).pack(side=tk.LEFT, padx=2)
+
+        # Preview button
+        preview_frame = ttk.Frame(selection_box)
+        preview_frame.grid(row=1, column=0, columnspan=2, padx=6, pady=(4, 0))
+        ttk.Button(
+            preview_frame,
+            text="🔍 Anteprima Selezione",
+            command=self._preview_selected_resources
+        ).pack()
+
+        selection_box.rowconfigure(0, weight=1)
+
         paths = ttk.LabelFrame(parent, text=self._t("video_group_folders"), padding=8)
         paths.pack(fill=tk.X, pady=(0, 8))
         paths.columnconfigure(1, weight=1)
@@ -4343,6 +4437,140 @@ class DoomerGeneratorApp:
         )
         if selected:
             self.youtube_client_secret_var.set(selected)
+
+    def _browse_backgrounds(self) -> None:
+        """Browse and select multiple background images."""
+        selected = filedialog.askopenfilenames(
+            title="Seleziona Backgrounds (multipli)",
+            initialdir=str(self.backgrounds_dir),
+            filetypes=[
+                ("Immagini", "*.jpg *.jpeg *.png *.webp *.bmp"),
+                ("Tutti i file", "*.*"),
+            ],
+        )
+        if selected:
+            self.selected_backgrounds = [Path(f) for f in selected]
+            self._update_backgrounds_listbox()
+            self._log(f"Selezionati {len(self.selected_backgrounds)} backgrounds")
+
+    def _clear_backgrounds(self) -> None:
+        """Clear selected backgrounds."""
+        self.selected_backgrounds.clear()
+        self._update_backgrounds_listbox()
+        self._log("Selezione backgrounds cancellata")
+
+    def _browse_doomer_guys(self) -> None:
+        """Browse and select multiple doomer guy images."""
+        selected = filedialog.askopenfilenames(
+            title="Seleziona Doomer Guys (multipli)",
+            initialdir=str(self.doomer_guys_dir),
+            filetypes=[
+                ("Immagini", "*.jpg *.jpeg *.png *.webp *.bmp"),
+                ("Tutti i file", "*.*"),
+            ],
+        )
+        if selected:
+            self.selected_doomer_guys = [Path(f) for f in selected]
+            self._update_doomer_guys_listbox()
+            self._log(f"Selezionati {len(self.selected_doomer_guys)} doomer guys")
+
+    def _clear_doomer_guys(self) -> None:
+        """Clear selected doomer guys."""
+        self.selected_doomer_guys.clear()
+        self._update_doomer_guys_listbox()
+        self._log("Selezione doomer guys cancellata")
+
+    def _update_backgrounds_listbox(self) -> None:
+        """Update backgrounds listbox with selected files."""
+        self.backgrounds_listbox.delete(0, tk.END)
+        for bg in self.selected_backgrounds:
+            self.backgrounds_listbox.insert(tk.END, bg.name)
+
+    def _update_doomer_guys_listbox(self) -> None:
+        """Update doomer guys listbox with selected files."""
+        self.doomer_guys_listbox.delete(0, tk.END)
+        for dg in self.selected_doomer_guys:
+            self.doomer_guys_listbox.insert(tk.END, dg.name)
+
+    def _preview_selected_resources(self) -> None:
+        """Show preview window with selected resources."""
+        if not self.selected_backgrounds and not self.selected_doomer_guys:
+            messagebox.showinfo(
+                "Anteprima Selezione",
+                "Nessuna risorsa selezionata.\n\nSeleziona backgrounds o doomer guys per vedere l'anteprima."
+            )
+            return
+
+        # Create preview window
+        preview_window = tk.Toplevel(self.root)
+        preview_window.title("Anteprima Risorse Selezionate")
+        preview_window.geometry("800x600")
+
+        # Main frame with scrollbar
+        main_frame = ttk.Frame(preview_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Backgrounds section
+        if self.selected_backgrounds:
+            ttk.Label(
+                scrollable_frame,
+                text=f"Backgrounds Selezionati ({len(self.selected_backgrounds)}):",
+                font=("TkDefaultFont", 10, "bold")
+            ).pack(anchor="w", pady=(0, 5))
+
+            for bg in self.selected_backgrounds:
+                ttk.Label(scrollable_frame, text=f"  • {bg.name}").pack(anchor="w", padx=10)
+
+        # Doomer Guys section
+        if self.selected_doomer_guys:
+            ttk.Label(
+                scrollable_frame,
+                text=f"\nDoomer Guys Selezionati ({len(self.selected_doomer_guys)}):",
+                font=("TkDefaultFont", 10, "bold")
+            ).pack(anchor="w", pady=(10, 5))
+
+            for dg in self.selected_doomer_guys:
+                ttk.Label(scrollable_frame, text=f"  • {dg.name}").pack(anchor="w", padx=10)
+
+        # Info message
+        ttk.Separator(scrollable_frame, orient="horizontal").pack(fill=tk.X, pady=10)
+        info_text = (
+            "ℹ️ Queste risorse verranno usate per la generazione video.\n"
+            "Il sistema di memoria garantirà una distribuzione equa.\n"
+            "La memoria verrà resettata all'avvio dell'app e alla fine di ogni elaborazione."
+        )
+        ttk.Label(scrollable_frame, text=info_text, wraplength=750).pack(anchor="w", pady=5)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Close button
+        ttk.Button(
+            preview_window,
+            text="Chiudi",
+            command=preview_window.destroy
+        ).pack(pady=10)
+
+    def _clear_selected_resources_memory(self) -> None:
+        """Clear memory file for selected resources."""
+        if self.selected_resources_memory_path.exists():
+            try:
+                self.selected_resources_memory_path.unlink()
+                self._log_debug("Memoria risorse selezionate resettata")
+            except OSError:
+                pass
 
     def _open_links_file(self) -> None:
         self._ensure_links_file()
@@ -5311,7 +5539,15 @@ class DoomerGeneratorApp:
                 progress=self._queue_video_progress,
                 check_pause=lambda: self.video_paused,
                 on_new_files=on_new_video_files,
+                selected_backgrounds=self.selected_backgrounds if self.selected_backgrounds else None,
+                selected_doomer_guys=self.selected_doomer_guys if self.selected_doomer_guys else None,
+                selected_resources_memory_path=self.selected_resources_memory_path if (self.selected_backgrounds or self.selected_doomer_guys) else None,
             )
+
+            # Clear selected resources memory after generation completes
+            if self.selected_backgrounds or self.selected_doomer_guys:
+                self._clear_selected_resources_memory()
+
             self.events.put(("video_finished", summary))
         except Exception as error:  # noqa: BLE001
             self.events.put(("video_runtime_error", str(error)))
