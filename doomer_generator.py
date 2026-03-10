@@ -5733,10 +5733,14 @@ class DoomerGeneratorApp:
 
                 # Determine output template based on whether artist is specified
                 if target.artist:
+                    # Manual artist override (from custom input)
                     output_template = f"{target.artist} - %(title)s.%(ext)s"
                     self.events.put(("log", f"  Artist: {target.artist}"))
                 else:
-                    output_template = "%(title)s.%(ext)s"
+                    # Auto-detect artist from metadata (YouTube Music, etc.)
+                    # Format: "Artist - Title" if artist metadata exists, otherwise just "Title"
+                    # %(artist)s is populated by yt-dlp from YouTube Music metadata
+                    output_template = "%(artist|)s%(artist& - |)s%(title)s.%(ext)s"
 
                 command = [
                     *ytdlp_command,
