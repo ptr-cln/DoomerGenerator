@@ -2948,13 +2948,47 @@ class DoomerGeneratorApp:
         logs_frame.columnconfigure(0, weight=1)
         logs_frame.rowconfigure(1, weight=1)
 
+        # Top controls frame (clear button + search bar)
+        top_controls_frame = ttk.Frame(logs_frame)
+        top_controls_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        top_controls_frame.columnconfigure(1, weight=1)  # Search bar expands
+
         # Clear logs button at the top left
         clear_logs_btn = ttk.Button(
-            logs_frame,
+            top_controls_frame,
             text=self._t("log_btn_clear"),
             command=self._clear_log_display
         )
-        clear_logs_btn.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        clear_logs_btn.grid(row=0, column=0, sticky="w", padx=(0, 10))
+
+        # Search frame
+        search_frame = ttk.Frame(top_controls_frame)
+        search_frame.grid(row=0, column=1, sticky="ew")
+
+        ttk.Label(search_frame, text="🔍").grid(row=0, column=0, padx=(0, 5))
+
+        self.log_search_var = tk.StringVar()
+        self.log_search_var.trace_add("write", lambda *args: self._search_log())
+        search_entry = ttk.Entry(search_frame, textvariable=self.log_search_var, width=30)
+        search_entry.grid(row=0, column=1, sticky="ew", padx=(0, 5))
+        search_frame.columnconfigure(1, weight=1)
+
+        # Search result counter
+        self.log_search_counter_var = tk.StringVar(value="")
+        counter_label = ttk.Label(search_frame, textvariable=self.log_search_counter_var, width=8)
+        counter_label.grid(row=0, column=2, padx=(0, 5))
+
+        # Previous match button (up arrow)
+        prev_btn = ttk.Button(search_frame, text="▲", width=3, command=self._search_log_prev)
+        prev_btn.grid(row=0, column=3, padx=(0, 2))
+
+        # Next match button (down arrow)
+        next_btn = ttk.Button(search_frame, text="▼", width=3, command=self._search_log_next)
+        next_btn.grid(row=0, column=4)
+
+        # Search state
+        self.log_search_matches: list[str] = []  # List of match indices like "1.0", "3.5", etc.
+        self.log_search_current_index: int = -1  # Current match index in the list
 
         # Log text widget
         self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
@@ -8054,6 +8088,104 @@ class DoomerGeneratorApp:
         self.log_widget.delete("1.0", tk.END)
         self.log_widget.configure(state=tk.DISABLED)
         self._log_debug("Log display cleared by user")
+        # Clear search results
+        self.log_search_matches = []
+        self.log_search_current_index = -1
+        self.log_search_counter_var.set("")
+
+    def _search_log(self) -> None:
+        """Search for text in log widget and highlight all matches."""
+        search_text = self.log_search_var.get()
+
+        # Remove previous search highlights
+        self.log_widget.tag_remove("search_highlight", "1.0", tk.END)
+        self.log_widget.tag_remove("search_current", "1.0", tk.END)
+
+        # Clear previous matches
+        self.log_search_matches = []
+        self.log_search_current_index = -1
+
+        if not search_text:
+            self.log_search_counter_var.set("")
+            return
+
+        # Configure search highlight tags
+        self.log_widget.tag_configure("search_highlight", background="yellow")
+        self.log_widget.tag_configure("search_current", background="orange", foreground="black")
+
+        # Search for all matches (case-insensitive)
+        start_pos = "1.0"
+        search_text_lower = search_text.lower()
+
+        while True:
+            # Get all text from start_pos to end
+            remaining_text = self.log_widget.get(start_pos, tk.END)
+            remaining_text_lower = remaining_text.lower()
+
+            # Find next occurrence
+            index = remaining_text_lower.find(search_text_lower)
+            if index == -1:
+                break
+
+            # Calculate actual position in text widget
+            match_start = self.log_widget.index(f"{start_pos}+{index}c")
+            match_end = self.log_widget.index(f"{match_start}+{len(search_text)}c")
+
+            # Add highlight tag
+            self.log_widget.tag_add("search_highlight", match_start, match_end)
+
+            # Store match position
+            self.log_search_matches.append(match_start)
+
+            # Move start position past this match
+            start_pos = match_end
+
+        # Update counter
+        if self.log_search_matches:
+            self.log_search_current_index = 0
+            self._highlight_current_match()
+            self.log_search_counter_var.set(f"1/{len(self.log_search_matches)}")
+        else:
+            self.log_search_counter_var.set("0/0")
+
+    def _search_log_next(self) -> None:
+        """Jump to next search match."""
+        if not self.log_search_matches:
+            return
+
+        # Move to next match (wrap around)
+        self.log_search_current_index = (self.log_search_current_index + 1) % len(self.log_search_matches)
+        self._highlight_current_match()
+        self.log_search_counter_var.set(f"{self.log_search_current_index + 1}/{len(self.log_search_matches)}")
+
+    def _search_log_prev(self) -> None:
+        """Jump to previous search match."""
+        if not self.log_search_matches:
+            return
+
+        # Move to previous match (wrap around)
+        self.log_search_current_index = (self.log_search_current_index - 1) % len(self.log_search_matches)
+        self._highlight_current_match()
+        self.log_search_counter_var.set(f"{self.log_search_current_index + 1}/{len(self.log_search_matches)}")
+
+    def _highlight_current_match(self) -> None:
+        """Highlight the current search match and scroll to it."""
+        if not self.log_search_matches or self.log_search_current_index < 0:
+            return
+
+        # Remove previous current highlight
+        self.log_widget.tag_remove("search_current", "1.0", tk.END)
+
+        # Get current match position
+        match_start = self.log_search_matches[self.log_search_current_index]
+        search_text = self.log_search_var.get()
+        match_end = self.log_widget.index(f"{match_start}+{len(search_text)}c")
+
+        # Add current highlight (orange background)
+        self.log_widget.tag_add("search_current", match_start, match_end)
+
+        # Scroll to make the match visible
+        self.log_widget.see(match_start)
 
 
 def main() -> None:
