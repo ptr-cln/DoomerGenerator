@@ -2178,6 +2178,17 @@ class DoomerVideoGenerator:
                 else:
                     self.log("  Doomer Guy: Nessuno selezionato")
 
+                # Calculate ETA based on average generation time (before processing)
+                eta_seconds = 0
+                if generation_times:
+                    avg_time = sum(generation_times) / len(generation_times)
+                    remaining_videos = total - index
+                    eta_seconds = int(avg_time * remaining_videos)
+
+                # Update progress BEFORE processing to show current file being worked on
+                background_name = background.name if background else "N/A"
+                progress(index, total, eta_seconds, audio_file.name, background_name)
+
                 # Track generation time
                 start_time = time.time()
                 success = self._generate_single_video(audio_file, background, doomer_guy, destination, settings, resolved_encoder)
@@ -2190,16 +2201,6 @@ class DoomerVideoGenerator:
                 else:
                     failed += 1
                     self.log(f"  ERRORE -> {audio_file.name}")
-
-                # Calculate ETA based on average generation time
-                eta_seconds = 0
-                if generation_times:
-                    avg_time = sum(generation_times) / len(generation_times)
-                    remaining_videos = total - index
-                    eta_seconds = int(avg_time * remaining_videos)
-
-                background_name = background.name if background else "N/A"
-                progress(index, total, eta_seconds, audio_file.name, background_name)
 
                 # Check for pause AFTER processing the file to avoid re-processing
                 if check_pause:
