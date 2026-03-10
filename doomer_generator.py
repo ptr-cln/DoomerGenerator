@@ -4426,6 +4426,19 @@ class DoomerGeneratorApp:
         ttk.Button(top_buttons, text="+", width=5, command=_add_row).pack(side=tk.LEFT, padx=5)
         ttk.Label(top_buttons, text="Aggiungi configurazione video").pack(side=tk.LEFT, padx=5)
 
+        # Pre-populate with existing configurations
+        if self.multiday_schedule_configs:
+            for date_obj, hour, minute in self.multiday_schedule_configs:
+                _add_row()
+                # Get the last added row
+                last_row = row_widgets[-1]
+                # Set the date
+                last_row["date_obj_var"].set(date_obj)
+                last_row["date_var"].set(str(date_obj))
+                # Set the time
+                last_row["hour_var"].set(f"{hour:02d}")
+                last_row["minute_var"].set(f"{minute:02d}")
+
         # Bottom buttons
         bottom_buttons = ttk.Frame(popup)
         bottom_buttons.pack(side=tk.BOTTOM, pady=10)
