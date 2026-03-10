@@ -1580,108 +1580,10 @@ class YouTubeUploader:
         self.client_secret_path = client_secret_path
         self.token_path = token_path
         self.log = log
-        self._channel_videos_cache: list[str] = []  # Cache of existing video titles
-        self._cache_loaded = False
         self._title_format_counter = 0  # Counter to alternate title formats
 
     def login(self) -> None:
         self._authenticate(interactive=True)
-
-    def _load_channel_videos(self, service) -> None:
-        """Load all video titles from the authenticated user's channel."""
-        if self._cache_loaded:
-            return
-
-        try:
-            self.log("Caricamento video esistenti dal canale...")
-
-            # Get the authenticated user's channel
-            channels_response = service.channels().list(
-                part="contentDetails",
-                mine=True
-            ).execute()
-
-            if not channels_response.get("items"):
-                self.log("  Nessun canale trovato per l'utente autenticato.")
-                self._cache_loaded = True
-                return
-
-            # Get the uploads playlist ID
-            uploads_playlist_id = channels_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-
-            # Fetch all videos from the uploads playlist
-            next_page_token = None
-            video_count = 0
-
-            while True:
-                playlist_response = service.playlistItems().list(
-                    part="snippet",
-                    playlistId=uploads_playlist_id,
-                    maxResults=50,
-                    pageToken=next_page_token
-                ).execute()
-
-                for item in playlist_response.get("items", []):
-                    title = item["snippet"]["title"]
-                    self._channel_videos_cache.append(title)
-                    video_count += 1
-
-                next_page_token = playlist_response.get("nextPageToken")
-                if not next_page_token:
-                    break
-
-            self.log(f"  Caricati {video_count} video dal canale.")
-            self._cache_loaded = True
-
-        except Exception as error:  # noqa: BLE001
-            self.log(f"  Errore durante il caricamento dei video: {error}")
-            self._cache_loaded = True  # Mark as loaded even on error to avoid retrying
-
-    def _video_exists_on_channel(self, title: str) -> bool:
-        """Check if a video with similar title already exists on the channel.
-
-        Extracts the core part (artist - song) from titles with various formats:
-        - "Artist - Song (Doomer Wave / Slowed + Reverb) | mood"
-        - "mood | Artist - Song (Doomer Wave / Slowed + Reverb)"
-        - "Artist - Song (Doomer Wave / Slowed + Reverb)"
-        - "Artist - Song (Doomer Wave)"
-        - "Artist – Song" (with en dash)
-        """
-        import re
-
-        def extract_core(t: str) -> str:
-            """Extract core filename from various title formats."""
-            # Remove mood prefix: "mood | filename (...)"
-            t = re.sub(r"^[^|]+\|\s*", "", t)
-            # Remove mood suffix: "filename (...) | mood"
-            t = re.sub(r"\s*\|[^|]+$", "", t)
-            # Remove "(Doomer Wave / Slowed + Reverb)"
-            t = re.sub(r"\s*\(Doomer Wave\s*/\s*Slowed\s*\+\s*Reverb\)\s*$", "", t, flags=re.IGNORECASE)
-            # Remove old "(Doomer Wave)" format
-            t = re.sub(r"\s*\(Doomer Wave\)\s*$", "", t, flags=re.IGNORECASE)
-            return t.strip()
-
-        def normalize_dashes(t: str) -> str:
-            """Normalize en dashes (–) to hyphens (-) for consistent comparison."""
-            return t.replace("–", "-")
-
-        core_title = normalize_dashes(extract_core(title))
-
-        # Debug logging
-        self.log(f"  DEBUG: Controllo duplicati per: '{title}'")
-        self.log(f"  DEBUG: Core estratto: '{core_title}'")
-
-        # Check if any existing video has the same core title
-        for existing_title in self._channel_videos_cache:
-            existing_core = normalize_dashes(extract_core(existing_title))
-            # Case-insensitive comparison
-            if core_title.lower() == existing_core.lower():
-                self.log(f"  DEBUG: DUPLICATO TROVATO!")
-                self.log(f"  DEBUG: Titolo esistente: '{existing_title}'")
-                self.log(f"  DEBUG: Core esistente: '{existing_core}'")
-                return True
-
-        return False
 
     def upload_folder(
         self,
@@ -1708,12 +1610,8 @@ class YouTubeUploader:
 
         service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
-        # Load existing videos from channel to check for duplicates
-        self._load_channel_videos(service)
-
         uploaded = 0
         failed = 0
-        skipped = 0
         processed_files: set[Path] = set()  # Track files we've already processed
         first_batch = True
 
@@ -1745,22 +1643,14 @@ class YouTubeUploader:
 
                 # Recalculate total on each iteration to account for new videos detected during upload
                 all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
-                total = uploaded + failed + skipped + len(all_pending)
-                index = uploaded + failed + skipped + 1
+                total = uploaded + failed + len(all_pending)
+                index = uploaded + failed + 1
                 processed_files.add(video_file)  # Mark as processed immediately
 
                 base_filename = video_file.stem
                 self.log(f"[{index}/{total}] Upload: {video_file.name}")
 
-                # First, check if the base video (without mood) already exists on channel
-                # This avoids wasting an AI API call if the video is already uploaded
-                base_title_check = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
-                if self._video_exists_on_channel(base_title_check):
-                    self.log("  Video già presente sul canale (controllo pre-mood), saltato.")
-                    skipped += 1
-                    continue
-
-                # Video doesn't exist yet - proceed with AI mood generation
+                # Generate AI mood for the video
                 mood = _generate_mood_with_ai(base_filename, settings, log=self.log)
 
                 if mood:
@@ -1815,15 +1705,6 @@ class YouTubeUploader:
                 cleanup_target: Path | None = None
                 media = None
                 insert_request = None
-
-                # Double-check with final title (in case mood creates a duplicate)
-                if self._video_exists_on_channel(title):
-                    self.log("  Video già presente sul canale (controllo post-mood), saltato.")
-                    skipped += 1
-                    continue
-
-                # Log confirmation that no duplicate was found
-                self.log("  Nessun duplicato trovato, procedo con upload.")
 
                 try:
                     try:
@@ -1976,9 +1857,6 @@ class YouTubeUploader:
                             on_uploaded(cleanup_target)
                         except Exception as callback_error:  # noqa: BLE001
                             self.log(f"  Cleanup warning: {callback_error}")
-
-        if skipped > 0:
-            self.log(f"\nRiepilogo: {uploaded} caricati, {failed} falliti, {skipped} saltati (già presenti)")
 
         return UploadSummary(total=total, uploaded=uploaded, failed=failed)
 
