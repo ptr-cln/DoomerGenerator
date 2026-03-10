@@ -1769,10 +1769,30 @@ class YouTubeUploader:
                 # Replace hyphen with en dash for better typography
                 title = title.replace(" - ", " – ")
 
-                # YouTube title limit is 100 characters - truncate if needed
+                # YouTube title limit is 100 characters - apply progressive shortening
                 if len(title) > 100:
-                    # Truncate to 97 chars and add "..." to indicate truncation
-                    title = title[:97] + "..."
+                    # Step 1: Replace "(Doomer Wave / Slowed + Reverb)" with "(Doomer Wave)"
+                    title = title.replace("(Doomer Wave / Slowed + Reverb)", "(Doomer Wave)")
+                    self.log(f"  Titolo accorciato: (Doomer Wave / Slowed + Reverb) → (Doomer Wave)")
+
+                if len(title) > 100:
+                    # Step 2: Replace "(Doomer Wave)" with "(Doomer)"
+                    title = title.replace("(Doomer Wave)", "(Doomer)")
+                    self.log(f"  Titolo accorciato: (Doomer Wave) → (Doomer)")
+
+                if len(title) > 100 and mood:
+                    # Step 3: Remove mood and separator " | {mood}"
+                    # Handle both formats: "... | {mood}" and "{mood} | ..."
+                    if f" | {mood}" in title:
+                        title = title.replace(f" | {mood}", "")
+                        self.log(f"  Titolo accorciato: rimosso mood '| {mood}'")
+                    elif f"{mood} | " in title:
+                        title = title.replace(f"{mood} | ", "")
+                        self.log(f"  Titolo accorciato: rimosso mood '{mood} |'")
+
+                if len(title) > 100:
+                    # Step 4: Last resort - truncate to 100 characters
+                    title = title[:100]
                     self.log(f"  Titolo troncato a 100 caratteri (limite YouTube)")
 
                 # Create base title without mood for description
