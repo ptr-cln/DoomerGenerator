@@ -1361,7 +1361,7 @@ def _generate_mood_with_ai(
             f"Video title: {filename}\n\n"
             "Based on the visual atmosphere in this frame (colors, lighting, mood, setting) and the song title, "
             "generate a short melancholic mood phrase.\n\n"
-            "Focus on background colors and lighting, not the character.\n\n"
+            "IMPORTANT: Ignore the character/person in the foreground. Focus ONLY on the background scene (colors, lighting, atmosphere, setting).\n\n"
             "Rules:\n"
             "- 2 to 4 words\n"
             "- simple and visual\n"
