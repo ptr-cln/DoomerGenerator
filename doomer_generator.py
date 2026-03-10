@@ -1156,12 +1156,153 @@ def _build_ai_tags(
     return tags[:20]
 
 
+def _extract_video_frame(
+    video_path: Path,
+    ffmpeg_bin: str,
+    timestamp_percent: float,
+    output_path: Path,
+) -> bool:
+    """Extract a single frame from video at given timestamp percentage.
+
+    Args:
+        video_path: Path to video file
+        ffmpeg_bin: Path to ffmpeg executable
+        timestamp_percent: Percentage of video duration (0.0-1.0)
+        output_path: Where to save the extracted frame
+
+    Returns:
+        True if extraction succeeded, False otherwise
+    """
+    try:
+        # Get video duration first
+        probe_cmd = [
+            ffmpeg_bin.replace("ffmpeg", "ffprobe"),
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(video_path),
+        ]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return False
+
+        duration = float(result.stdout.strip())
+        timestamp = duration * timestamp_percent
+
+        # Extract frame at timestamp, resize to 512x288 (16:9, saves tokens)
+        extract_cmd = [
+            ffmpeg_bin,
+            "-ss", str(timestamp),
+            "-i", str(video_path),
+            "-vframes", "1",
+            "-vf", "scale=512:288",
+            "-q:v", "5",  # JPEG quality (2-31, lower is better)
+            "-y",
+            str(output_path),
+        ]
+        result = subprocess.run(extract_cmd, capture_output=True, text=True, timeout=15)
+        return result.returncode == 0 and output_path.exists()
+
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _calculate_frame_variance(image_path: Path) -> float:
+    """Calculate color variance of an image to detect blank/black frames.
+
+    Higher variance = more visual information (better frame)
+    Lower variance = likely blank/black frame
+
+    Returns:
+        Variance score (0.0 = completely uniform, higher = more varied)
+    """
+    try:
+        import base64
+        from io import BytesIO
+
+        # Read image as base64, decode to get pixel data
+        with open(image_path, "rb") as f:
+            img_data = f.read()
+
+        # Simple heuristic: file size correlates with visual complexity
+        # Blank frames compress to very small JPEG files
+        # This avoids needing PIL/Pillow dependency
+        return float(len(img_data))
+
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _extract_best_video_frame(
+    video_path: Path,
+    ffmpeg_bin: str,
+    cache_dir: Path,
+) -> Path | None:
+    """Extract the best representative frame from a video.
+
+    Tries 3 positions (25%, 50%, 75%) and picks the one with most visual variance.
+    Uses caching to avoid re-extracting frames for the same video.
+
+    Args:
+        video_path: Path to video file
+        ffmpeg_bin: Path to ffmpeg executable
+        cache_dir: Directory to cache extracted frames
+
+    Returns:
+        Path to best frame image, or None if extraction failed
+    """
+    # Create cache directory
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate cache key based on video file hash (name + size + mtime)
+    try:
+        stat = video_path.stat()
+        cache_key = f"{video_path.stem}_{stat.st_size}_{int(stat.st_mtime)}"
+    except OSError:
+        cache_key = video_path.stem
+
+    # Check if cached frame exists
+    cached_frame = cache_dir / f"{cache_key}.jpg"
+    if cached_frame.exists():
+        return cached_frame
+
+    # Extract 3 candidate frames at different positions
+    candidates = []
+    for i, percent in enumerate([0.25, 0.50, 0.75]):
+        temp_frame = cache_dir / f"{cache_key}_temp_{i}.jpg"
+        if _extract_video_frame(video_path, ffmpeg_bin, percent, temp_frame):
+            variance = _calculate_frame_variance(temp_frame)
+            candidates.append((variance, temp_frame))
+
+    if not candidates:
+        return None
+
+    # Pick frame with highest variance (most visual information)
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best_frame = candidates[0][1]
+
+    # Move best frame to cache location
+    best_frame.rename(cached_frame)
+
+    # Clean up other temp frames
+    for _, temp_frame in candidates[1:]:
+        temp_frame.unlink(missing_ok=True)
+
+    return cached_frame
+
+
 def _generate_mood_with_ai(
     filename: str,
     settings: UploadSettings,
     log: Callable[[str], None] | None = None,
+    video_path: Path | None = None,
+    ffmpeg_bin: str | None = None,
+    frame_cache_dir: Path | None = None,
 ) -> str | None:
     """Generate a short melancholic mood phrase using OpenAI API.
+
+    If video_path is provided, extracts a frame and uses Vision API for better context.
+    Falls back to text-only generation if frame extraction fails.
 
     Returns the mood phrase (max 4 words) or None if generation fails.
     """
@@ -1195,36 +1336,108 @@ def _generate_mood_with_ai(
         context_parts.append(f"Song: {song_title}")
     context = "\n".join(context_parts) if context_parts else f"Song: {filename}"
 
-    prompt = (
-        "Generate a short melancholic mood phrase for a doomer music video.\n\n"
-        "Rules:\n"
-        "- 2 to 4 words\n"
-        "- simple and visual\n"
-        "- evoke night, loneliness, city, rain, or silence\n"
-        "- avoid poetic or complex sentences\n"
-        "- avoid punctuation\n"
-        "- use lowercase\n"
-        "- do not include the words: doomer, music, vibe\n"
-        "- avoid repeating the song title words\n\n"
-        "Examples:\n"
-        "empty city night\n"
-        "late night drive\n"
-        "rainy neon streets\n"
-        "3am loneliness\n"
-        "silent winter streets\n"
-        "foggy morning silence\n"
-        "broken streetlights\n"
-        "cigarette smoke haze\n"
-        "distant train sounds\n"
-        "cold concrete dreams\n"
-        "midnight parking lot\n"
-        "abandoned subway station\n"
-        "flickering neon signs\n"
-        "endless highway night\n"
-        "urban decay whispers\n\n"
-        f"{context}\n\n"
-        "Respond with ONLY the mood phrase, nothing else."
-    )
+    # Try to extract video frame for Vision API
+    frame_path = None
+    frame_base64 = None
+    if video_path and ffmpeg_bin and frame_cache_dir:
+        try:
+            frame_path = _extract_best_video_frame(video_path, ffmpeg_bin, frame_cache_dir)
+            if frame_path and frame_path.exists():
+                import base64
+                with open(frame_path, "rb") as f:
+                    frame_base64 = base64.b64encode(f.read()).decode("utf-8")
+                if log:
+                    log("  Frame estratto per analisi AI")
+        except Exception as e:  # noqa: BLE001
+            if log:
+                log(f"  Frame extraction fallito: {e}")
+            frame_base64 = None
+
+    # Build prompt based on whether we have a frame
+    if frame_base64:
+        # Vision-enhanced prompt
+        prompt = (
+            "You are analyzing a frame from a doomer wave music video to generate a melancholic mood phrase.\n\n"
+            f"Video title: {filename}\n\n"
+            "Based on the visual atmosphere in this frame (colors, lighting, mood, setting) and the song title, "
+            "generate a short melancholic mood phrase.\n\n"
+            "Focus on background colors and lighting, not the character.\n\n"
+            "Rules:\n"
+            "- 2 to 4 words\n"
+            "- simple and visual\n"
+            "- evoke night, loneliness, city, rain, or silence\n"
+            "- avoid poetic or complex sentences\n"
+            "- avoid punctuation\n"
+            "- use lowercase\n"
+            "- do not include the words: doomer, music, vibe\n"
+            "- avoid repeating the song title words\n"
+            "- focus on the VISUAL MOOD of the image (dark colors, neon lights, empty spaces, etc.)\n\n"
+            "Examples:\n"
+            "empty city night\n"
+            "late night drive\n"
+            "rainy neon streets\n"
+            "3am loneliness\n"
+            "silent winter streets\n"
+            "foggy morning silence\n"
+            "broken streetlights\n"
+            "cigarette smoke haze\n"
+            "distant train sounds\n"
+            "cold concrete dreams\n"
+            "midnight parking lot\n"
+            "abandoned subway station\n"
+            "flickering neon signs\n"
+            "endless highway night\n"
+            "urban decay whispers\n\n"
+            "Generate only the mood phrase, nothing else."
+        )
+
+        # Vision API message format
+        user_content = [
+            {
+                "type": "text",
+                "text": prompt,
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{frame_base64}",
+                    "detail": "low",  # Low detail = fewer tokens, sufficient for mood detection
+                },
+            },
+        ]
+    else:
+        # Text-only prompt (fallback)
+        prompt = (
+            "Generate a short melancholic mood phrase for a doomer music video.\n\n"
+            "Rules:\n"
+            "- 2 to 4 words\n"
+            "- simple and visual\n"
+            "- evoke night, loneliness, city, rain, or silence\n"
+            "- avoid poetic or complex sentences\n"
+            "- avoid punctuation\n"
+            "- use lowercase\n"
+            "- do not include the words: doomer, music, vibe\n"
+            "- avoid repeating the song title words\n\n"
+            "Examples:\n"
+            "empty city night\n"
+            "late night drive\n"
+            "rainy neon streets\n"
+            "3am loneliness\n"
+            "silent winter streets\n"
+            "foggy morning silence\n"
+            "broken streetlights\n"
+            "cigarette smoke haze\n"
+            "distant train sounds\n"
+            "cold concrete dreams\n"
+            "midnight parking lot\n"
+            "abandoned subway station\n"
+            "flickering neon signs\n"
+            "endless highway night\n"
+            "urban decay whispers\n\n"
+            f"{context}\n\n"
+            "Respond with ONLY the mood phrase, nothing else."
+        )
+        user_content = prompt
 
     payload = {
         "model": model,
@@ -1235,7 +1448,7 @@ def _generate_mood_with_ai(
             },
             {
                 "role": "user",
-                "content": prompt,
+                "content": user_content,
             },
         ],
         "temperature": 1.0,  # Good balance between variety and reliability
@@ -1593,6 +1806,7 @@ class YouTubeUploader:
         on_uploaded: Callable[[Path], None] | None = None,
         check_pause: Callable[[], bool] | None = None,
         on_new_files: Callable[[list[Path]], None] | None = None,
+        ffmpeg_bin: str | None = None,
     ) -> UploadSummary:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         total = len(files)
@@ -1650,8 +1864,16 @@ class YouTubeUploader:
                 base_filename = video_file.stem
                 self.log(f"[{index}/{total}] Upload: {video_file.name}")
 
-                # Generate AI mood for the video
-                mood = _generate_mood_with_ai(base_filename, settings, log=self.log)
+                # Generate AI mood for the video (with optional frame analysis)
+                frame_cache_dir = video_dir.parent / "tmp" / "mood_frames"
+                mood = _generate_mood_with_ai(
+                    base_filename,
+                    settings,
+                    log=self.log,
+                    video_path=video_file if ffmpeg_bin else None,
+                    ffmpeg_bin=ffmpeg_bin,
+                    frame_cache_dir=frame_cache_dir if ffmpeg_bin else None,
+                )
 
                 if mood:
                     # Use Format 1 75% of the time, Format 2 25% of the time
@@ -5687,6 +5909,7 @@ class DoomerGeneratorApp:
 
         try:
             uploader = self._build_youtube_uploader()
+            ffmpeg_bin = self._resolve_ffmpeg()  # For frame extraction in mood generation
             summary = uploader.upload_folder(
                 video_dir=video_dir,
                 settings=settings,
@@ -5694,6 +5917,7 @@ class DoomerGeneratorApp:
                 on_uploaded=self._cleanup_after_successful_upload,
                 check_pause=lambda: self.upload_paused,
                 on_new_files=on_new_upload_files,
+                ffmpeg_bin=ffmpeg_bin,
             )
             self.events.put(("upload_finished", summary))
         except Exception as error:  # noqa: BLE001
