@@ -4377,24 +4377,24 @@ class DoomerGeneratorApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Enable mousewheel scrolling when mouse is over the canvas
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        def _bind_mousewheel(event):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-        def _unbind_mousewheel(event):
-            canvas.unbind_all("<MouseWheel>")
-
-        canvas.bind("<Enter>", _bind_mousewheel)
-        canvas.bind("<Leave>", _unbind_mousewheel)
-
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # List to store row widgets
         row_widgets: list[dict] = []
+
+        # Mousewheel handler for dynamic widgets
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _bind_widget_to_mousewheel(widget):
+            """Recursively bind mousewheel to widget and all its children."""
+            widget.bind("<MouseWheel>", _on_mousewheel, add="+")
+            for child in widget.winfo_children():
+                _bind_widget_to_mousewheel(child)
+
+        # Bind to canvas initially
+        canvas.bind("<MouseWheel>", _on_mousewheel, add="+")
 
         def _add_row():
             """Add a new configuration row."""
@@ -4438,6 +4438,9 @@ class DoomerGeneratorApp:
                 command=lambda r=row_dict: _remove_row(r)
             )
             remove_btn.pack(side=tk.LEFT, padx=5)
+
+            # Bind mousewheel to all widgets in this row
+            _bind_widget_to_mousewheel(row_frame)
 
             row_widgets.append(row_dict)
 
@@ -5094,17 +5097,19 @@ class DoomerGeneratorApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Enable mouse wheel scrolling
+        # Enable mouse wheel scrolling when mouse is over the canvas or its children
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        # Close function to cleanup bindings
-        def _close_preview():
-            canvas.unbind_all("<MouseWheel>")
-            preview_window.destroy()
+        def _bind_to_mousewheel(widget):
+            """Recursively bind mousewheel to widget and all its children."""
+            widget.bind("<MouseWheel>", _on_mousewheel, add="+")
+            for child in widget.winfo_children():
+                _bind_to_mousewheel(child)
 
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        preview_window.protocol("WM_DELETE_WINDOW", _close_preview)
+        # Bind to canvas and all widgets inside scrollable_frame
+        canvas.bind("<MouseWheel>", _on_mousewheel, add="+")
+        _bind_to_mousewheel(scrollable_frame)
 
         # Store PhotoImage references to prevent garbage collection
         preview_window.thumbnail_images = []
@@ -5153,7 +5158,7 @@ class DoomerGeneratorApp:
         ttk.Button(
             preview_window,
             text="Chiudi",
-            command=_close_preview
+            command=preview_window.destroy
         ).pack(pady=10)
 
     def _add_thumbnail_to_grid(
