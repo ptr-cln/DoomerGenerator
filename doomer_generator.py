@@ -1667,11 +1667,18 @@ class YouTubeUploader:
 
         core_title = normalize_dashes(extract_core(title))
 
+        # Debug logging
+        self.log(f"  DEBUG: Controllo duplicati per: '{title}'")
+        self.log(f"  DEBUG: Core estratto: '{core_title}'")
+
         # Check if any existing video has the same core title
         for existing_title in self._channel_videos_cache:
             existing_core = normalize_dashes(extract_core(existing_title))
             # Case-insensitive comparison
             if core_title.lower() == existing_core.lower():
+                self.log(f"  DEBUG: DUPLICATO TROVATO!")
+                self.log(f"  DEBUG: Titolo esistente: '{existing_title}'")
+                self.log(f"  DEBUG: Core esistente: '{existing_core}'")
                 return True
 
         return False
