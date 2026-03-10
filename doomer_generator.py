@@ -1769,6 +1769,10 @@ class YouTubeUploader:
                 # Replace hyphen with en dash for better typography
                 title = title.replace(" - ", " – ")
 
+                # Create base title without mood for description
+                # Format: "Artist – Song (Doomer Wave / Slowed + Reverb)"
+                base_title_for_description = f"{base_filename} (Doomer Wave / Slowed + Reverb)".replace(" - ", " – ")
+
                 cleanup_target: Path | None = None
                 media = None
                 insert_request = None
@@ -1784,9 +1788,10 @@ class YouTubeUploader:
 
                 try:
                     try:
-                        description = settings.description_template.format(title=title)
+                        # Use base title (without mood) in description
+                        description = settings.description_template.format(title=base_title_for_description)
                     except Exception:
-                        description = f"{title}\n\n{settings.description_template}"
+                        description = f"{base_title_for_description}\n\n{settings.description_template}"
                     # Pass mood to tag generation for better, context-aware tags
                     tags = _compose_youtube_tags(title, settings, log=self.log, mood=mood)
 
