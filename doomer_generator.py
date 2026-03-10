@@ -4288,14 +4288,12 @@ class DoomerGeneratorApp:
 
             # Date button
             date_var = tk.StringVar(value="Seleziona data...")
-            date_obj_var = tk.Variable(value=None)
 
             # Create row dict first so we can reference it in lambdas
             row_dict = {
                 "frame": row_frame,
                 "label": label,
                 "date_var": date_var,
-                "date_obj_var": date_obj_var,
                 "hour_var": tk.StringVar(value=""),
                 "minute_var": tk.StringVar(value=""),
             }
@@ -4354,9 +4352,10 @@ class DoomerGeneratorApp:
             def _confirm_date():
                 selected = cal.get_date()
                 try:
-                    date_obj = datetime.datetime.strptime(selected, '%Y-%m-%d').date()
-                    row_dict["date_obj_var"].set(date_obj)
-                    row_dict["date_var"].set(str(date_obj))
+                    # Validate it's a valid date
+                    datetime.datetime.strptime(selected, '%Y-%m-%d').date()
+                    # Store as string in YYYY-MM-DD format
+                    row_dict["date_var"].set(selected)
                     cal_popup.destroy()
                 except ValueError:
                     cal_popup.destroy()
@@ -4371,13 +4370,20 @@ class DoomerGeneratorApp:
             configs: list[tuple[datetime.date, int, int]] = []
 
             for i, row in enumerate(row_widgets):
-                date_obj = row["date_obj_var"].get()
+                date_str = row["date_var"].get().strip()
                 hour_str = row["hour_var"].get().strip()
                 minute_str = row["minute_var"].get().strip()
 
                 # Validate date
-                if date_obj is None or date_obj == "":
+                if not date_str or date_str == "Seleziona data...":
                     messagebox.showerror("Errore", f"Video {i + 1}: Seleziona una data")
+                    return
+
+                # Parse date string to date object
+                try:
+                    date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    messagebox.showerror("Errore", f"Video {i + 1}: Data non valida")
                     return
 
                 # Validate time
@@ -4433,8 +4439,7 @@ class DoomerGeneratorApp:
                 _add_row()
                 # Get the last added row
                 last_row = row_widgets[-1]
-                # Set the date
-                last_row["date_obj_var"].set(date_obj)
+                # Set the date (convert date object to string YYYY-MM-DD)
                 last_row["date_var"].set(str(date_obj))
                 # Set the time
                 last_row["hour_var"].set(f"{hour:02d}")
