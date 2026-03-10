@@ -25,3 +25,6 @@ logs/
 # User-generated files
 logs/
 presets/presets.json
+
+# Backups
+backups/
