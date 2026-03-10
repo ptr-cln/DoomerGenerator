@@ -4538,6 +4538,18 @@ class DoomerGeneratorApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
+        # Enable mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        # Close function to cleanup bindings
+        def _close_preview():
+            canvas.unbind_all("<MouseWheel>")
+            preview_window.destroy()
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        preview_window.protocol("WM_DELETE_WINDOW", _close_preview)
+
         # Store PhotoImage references to prevent garbage collection
         preview_window.thumbnail_images = []
 
@@ -4585,7 +4597,7 @@ class DoomerGeneratorApp:
         ttk.Button(
             preview_window,
             text="Chiudi",
-            command=preview_window.destroy
+            command=_close_preview
         ).pack(pady=10)
 
     def _add_thumbnail_to_grid(
