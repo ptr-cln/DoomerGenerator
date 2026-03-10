@@ -2302,7 +2302,7 @@ class DoomerVideoGenerator:
             "-c:a",
             "aac",
             "-b:a",
-            "192k",
+            "256k",  # High quality audio for YouTube (survives recompression better)
             "-shortest",
             str(destination),
         ]
