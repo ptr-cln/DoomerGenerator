@@ -5544,9 +5544,9 @@ class DoomerGeneratorApp:
                 output_file: str | None = None
                 already_downloaded = False
 
-                # Track playlist progress by counting downloaded files
-                playlist_files_downloaded = 0
-                playlist_total_files = 0
+                # Track playlist progress
+                playlist_current_item = 0
+                playlist_total_items = 0
 
                 if process.stdout:
                     for raw_line in process.stdout:
@@ -5554,50 +5554,30 @@ class DoomerGeneratorApp:
                         if not line:
                             continue
 
-                        # Count .wav files as they are downloaded (indicates completion of a file)
-                        if line.endswith(".wav") and ":\\" in line:
-                            playlist_files_downloaded += 1
-                            # Update progress based on files completed
-                            if playlist_total_files > 0:
-                                # We know the total, calculate precise progress
-                                item_progress = playlist_files_downloaded / playlist_total_files
-                                overall = ((index - 1) + item_progress) / total * 100.0
-                                link_percent = (playlist_files_downloaded / playlist_total_files) * 100.0
-                            else:
-                                # We don't know the total yet, just show incremental progress
-                                # Assume at least 10 files to avoid jumping to 100% too early
-                                estimated_total = max(10, playlist_files_downloaded + 5)
-                                item_progress = playlist_files_downloaded / estimated_total
-                                overall = ((index - 1) + item_progress) / total * 100.0
-                                link_percent = (playlist_files_downloaded / estimated_total) * 100.0
+                        # TEMPORARY DEBUG: Log ALL output to see what yt-dlp is emitting
+                        self.events.put(("log", f"  [yt-dlp] {line}"))
 
-                            self.events.put(
-                                (
-                                    "download_progress",
-                                    (overall, index, total, link_percent),
-                                )
-                            )
-                            continue
-
-                        # Check for playlist total count (e.g., "[download] Downloading item 3 of 12")
+                        # Check for playlist item progress (e.g., "Downloading item 3 of 12")
                         playlist_match = playlist_item_pattern.search(line)
                         if playlist_match:
-                            playlist_total_files = int(playlist_match.group(2))
-                            # Don't continue - let it process other patterns
+                            playlist_current_item = int(playlist_match.group(1))
+                            playlist_total_items = int(playlist_match.group(2))
+                            # Don't log every item to avoid spam - just track internally
+                            # Don't continue - let it process percentage on same line if present
 
-                        # Check for progress percentage (for single file download within playlist)
+                        # Check for progress percentage
                         match = percent_pattern.search(line)
                         if match:
                             link_percent = float(match.group(1))
                             link_percent = max(0.0, min(100.0, link_percent))
 
-                            # Calculate overall progress considering playlist files
-                            if playlist_total_files > 0:
-                                # For playlists: factor in which file we're on
-                                # Each file represents 1/playlist_total_files of the overall progress
-                                # Current file progress: files_downloaded complete + current file percentage
-                                item_base_progress = playlist_files_downloaded / playlist_total_files
-                                item_current_progress = (link_percent / 100.0) / playlist_total_files
+                            # Calculate overall progress considering playlist items
+                            if playlist_total_items > 0 and playlist_current_item > 0:
+                                # For playlists: factor in which item we're on
+                                # Each item represents 1/playlist_total_items of the overall progress
+                                # Current item progress: (current_item - 1) complete + current percentage
+                                item_base_progress = (playlist_current_item - 1) / playlist_total_items
+                                item_current_progress = (link_percent / 100.0) / playlist_total_items
                                 item_progress = item_base_progress + item_current_progress
                                 overall = ((index - 1) + item_progress) / total * 100.0
                             else:
