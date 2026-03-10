@@ -5636,6 +5636,21 @@ class DoomerGeneratorApp:
                 return_code = process.wait()
                 if return_code == 0:
                     downloaded += 1
+
+                    # Clean up downloaded files: remove "(Remastered)" from filename (case insensitive)
+                    if output_file:
+                        output_path = Path(output_file)
+                        if output_path.exists():
+                            # Check if filename contains "(Remastered)" (case insensitive)
+                            import re
+                            new_name = re.sub(r'\s*\(Remastered\)', '', output_path.stem, flags=re.IGNORECASE)
+                            if new_name != output_path.stem:
+                                # Rename the file
+                                new_path = output_path.parent / f"{new_name}{output_path.suffix}"
+                                output_path.rename(new_path)
+                                self.events.put(("log", f"  File rinominato: rimosso '(Remastered)'"))
+                                output_file = str(new_path)
+
                     if output_file:
                         self.events.put(("log", f"  File: {output_file}"))
                     elif already_downloaded:
