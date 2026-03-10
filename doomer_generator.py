@@ -2176,6 +2176,9 @@ class DoomerBatchConverter:
             self.log("Nessun file audio trovato nella cartella di input.")
             return ConversionSummary(total=0, converted=0, failed=0)
 
+        # Randomize processing order to avoid processing similar files consecutively
+        random.shuffle(files)
+
         vinyl_files = _collect_files(self.vinyls_dir, VINYL_EXTENSIONS)
         if settings.vinyl_volume_percent > 0 and not vinyl_files:
             self.log("Attenzione: nessun file vinile in resources/vinyls. Procedo senza overlay vinile.")
@@ -2348,6 +2351,9 @@ class DoomerVideoGenerator:
             if not current_files:
                 # No new audio files to process
                 break
+
+            # Randomize processing order to avoid processing similar files consecutively
+            random.shuffle(current_files)
 
             # Log when new files are detected (after first batch)
             if not first_batch:
