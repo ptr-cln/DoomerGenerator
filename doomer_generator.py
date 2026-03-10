@@ -553,7 +553,7 @@ class UploadSettings:
     # settings file so it survives restarts.
     publish_at: str | None = None
     # List of ISO timestamps for multi-day scheduling. Only meaningful
-    # when privacy_status is "Multi-day scheduling". Not persisted.
+    # when privacy_status starts with "Multi-day". Not persisted.
     multiday_publish_at: list[str] | None = None
 
 
@@ -1842,7 +1842,7 @@ class YouTubeUploader:
                         status_dict["privacyStatus"] = "private"
                         if settings.publish_at:
                             status_dict["publishAt"] = settings.publish_at
-                    elif settings.privacy_status == "Multi-day scheduling":
+                    elif settings.privacy_status.startswith("Multi-day"):
                         # Multi-day scheduling: use sequential timestamps
                         status_dict["privacyStatus"] = "private"
                         if settings.multiday_publish_at:
@@ -1850,7 +1850,7 @@ class YouTubeUploader:
                             # If we have more videos than timestamps, use the last timestamp
                             timestamp_index = min(index - 1, len(settings.multiday_publish_at) - 1)
                             status_dict["publishAt"] = settings.multiday_publish_at[timestamp_index]
-                            self.log(f"  Schedulato per: {settings.multiday_publish_at[timestamp_index]}")
+                            self.log(f"  Scheduled for: {settings.multiday_publish_at[timestamp_index]}")
 
                     request_body = {
                         "snippet": {
@@ -3983,7 +3983,7 @@ class DoomerGeneratorApp:
         ttk.Combobox(
             options_box,
             textvariable=self.youtube_privacy_var,
-            values=["private", "unlisted", "public", "scheduled", "Multi-day scheduling"],
+            values=["private", "unlisted", "public", "scheduled", self._t("upload_privacy_multiday")],
             state="readonly",
             width=20,
         ).grid(row=0, column=1, padx=6, pady=6, sticky="w")
@@ -4003,10 +4003,10 @@ class DoomerGeneratorApp:
         self.youtube_schedule_date_selected = False
         self.youtube_selected_date = None  # Store the actual date object
 
-        # Button that shows "Seleziona data..." or the selected date
+        # Button that shows "Select date..." or the selected date
         self.youtube_date_btn = ttk.Button(
             self.youtube_schedule_frame,
-            text="Seleziona data...",
+            text=self._t("upload_multiday_select_date"),
             command=self._open_calendar_popup
         )
         self.youtube_date_btn.pack(side=tk.LEFT, padx=(0, 5))
@@ -4031,10 +4031,10 @@ class DoomerGeneratorApp:
         self.youtube_schedule_frame.grid_remove()
 
         # Multi-day scheduling button (shown only when "Multi-day scheduling" is selected)
-        self.youtube_multiday_label = ttk.Label(options_box, text="Schedulazione:")
+        self.youtube_multiday_label = ttk.Label(options_box, text=self._t("upload_multiday_label_scheduling"))
         self.youtube_multiday_btn = ttk.Button(
             options_box,
-            text="Configura schedulazione multi giorni",
+            text=self._t("upload_multiday_btn_configure"),
             command=self._open_multiday_scheduling_popup
         )
         self.youtube_multiday_label.grid(row=1, column=0, padx=6, pady=6, sticky="w")
@@ -4248,7 +4248,7 @@ class DoomerGeneratorApp:
     def _open_multiday_scheduling_popup(self) -> None:
         """Open multi-day scheduling configuration popup."""
         popup = tk.Toplevel(self.root)
-        popup.title("Configurazione Schedulazione Multi Giorni")
+        popup.title(self._t("upload_multiday_popup_title"))
         popup.transient(self.root)
         popup.grab_set()
         popup.geometry("600x500")
@@ -4283,11 +4283,11 @@ class DoomerGeneratorApp:
             row_frame.pack(fill=tk.X, pady=5)
 
             # Video label
-            label = ttk.Label(row_frame, text=f"Video {row_index + 1}:", width=10)
+            label = ttk.Label(row_frame, text=self._t("upload_multiday_video_label").format(number=row_index + 1), width=10)
             label.pack(side=tk.LEFT, padx=5)
 
             # Date button
-            date_var = tk.StringVar(value="Seleziona data...")
+            date_var = tk.StringVar(value=self._t("upload_multiday_select_date"))
 
             # Create row dict first so we can reference it in lambdas
             row_dict = {
@@ -4328,7 +4328,7 @@ class DoomerGeneratorApp:
                 row_widgets.remove(row_dict)
                 # Renumber remaining rows
                 for i, row in enumerate(row_widgets):
-                    row["label"].configure(text=f"Video {i + 1}:")
+                    row["label"].configure(text=self._t("upload_multiday_video_label").format(number=i + 1))
 
         def _select_date_for_row(row_dict: dict):
             """Open calendar popup for specific row."""
@@ -4336,7 +4336,7 @@ class DoomerGeneratorApp:
                 return
 
             cal_popup = tk.Toplevel(popup)
-            cal_popup.title("Seleziona Data")
+            cal_popup.title(self._t("upload_label_publish_at"))
             cal_popup.transient(popup)
             cal_popup.grab_set()
             cal_popup.geometry("300x280")
@@ -4362,12 +4362,21 @@ class DoomerGeneratorApp:
 
             btn_frame = ttk.Frame(cal_popup)
             btn_frame.pack(pady=10)
-            ttk.Button(btn_frame, text="OK", command=_confirm_date).pack(side=tk.LEFT, padx=5)
-            ttk.Button(btn_frame, text="Annulla", command=cal_popup.destroy).pack(side=tk.LEFT, padx=5)
+            ttk.Button(btn_frame, text=self._t("btn_ok"), command=_confirm_date).pack(side=tk.LEFT, padx=5)
+            ttk.Button(btn_frame, text=self._t("upload_multiday_btn_cancel"), command=cal_popup.destroy).pack(side=tk.LEFT, padx=5)
 
         def _save_and_close():
             """Validate and save configurations."""
+            # Check if there are any configurations
+            if not row_widgets:
+                messagebox.showerror(
+                    self._t("upload_multiday_error_no_configs_title"),
+                    self._t("upload_multiday_error_no_configs")
+                )
+                return
+
             configs: list[tuple[datetime.date, int, int]] = []
+            select_date_text = self._t("upload_multiday_select_date")
 
             for i, row in enumerate(row_widgets):
                 date_str = row["date_var"].get().strip()
@@ -4375,20 +4384,29 @@ class DoomerGeneratorApp:
                 minute_str = row["minute_var"].get().strip()
 
                 # Validate date
-                if not date_str or date_str == "Seleziona data...":
-                    messagebox.showerror("Errore", f"Video {i + 1}: Seleziona una data")
+                if not date_str or date_str == select_date_text:
+                    messagebox.showerror(
+                        self._t("upload_multiday_error_title"),
+                        self._t("upload_multiday_error_no_date").format(number=i + 1)
+                    )
                     return
 
                 # Parse date string to date object
                 try:
                     date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
-                    messagebox.showerror("Errore", f"Video {i + 1}: Data non valida")
+                    messagebox.showerror(
+                        self._t("upload_multiday_error_title"),
+                        self._t("upload_multiday_error_invalid_date").format(number=i + 1)
+                    )
                     return
 
                 # Validate time
                 if not hour_str or not minute_str:
-                    messagebox.showerror("Errore", f"Video {i + 1}: Inserisci ora e minuti")
+                    messagebox.showerror(
+                        self._t("upload_multiday_error_title"),
+                        self._t("upload_multiday_error_no_time").format(number=i + 1)
+                    )
                     return
 
                 try:
@@ -4397,7 +4415,10 @@ class DoomerGeneratorApp:
                     if not (0 <= hour <= 23 and 0 <= minute <= 59):
                         raise ValueError
                 except ValueError:
-                    messagebox.showerror("Errore", f"Video {i + 1}: Ora non valida (HH: 0-23, MM: 0-59)")
+                    messagebox.showerror(
+                        self._t("upload_multiday_error_title"),
+                        self._t("upload_multiday_error_invalid_time").format(number=i + 1)
+                    )
                     return
 
                 configs.append((date_obj, hour, minute))
@@ -4409,7 +4430,10 @@ class DoomerGeneratorApp:
 
                 # Check if in the future
                 if dt <= now:
-                    messagebox.showerror("Errore", f"Video {i + 1}: Data/ora deve essere futura")
+                    messagebox.showerror(
+                        self._t("upload_multiday_error_title"),
+                        self._t("upload_multiday_error_past_date").format(number=i + 1)
+                    )
                     return
 
                 # Check ascending order
@@ -4417,12 +4441,15 @@ class DoomerGeneratorApp:
                     prev_date, prev_hour, prev_minute = configs[i - 1]
                     prev_dt = datetime.datetime.combine(prev_date, datetime.time(prev_hour, prev_minute))
                     if dt <= prev_dt:
-                        messagebox.showerror("Errore", f"Video {i + 1}: Data/ora deve essere successiva al video precedente")
+                        messagebox.showerror(
+                            self._t("upload_multiday_error_title"),
+                            self._t("upload_multiday_error_not_ascending").format(number=i + 1)
+                        )
                         return
 
             # Save configurations
             self.multiday_schedule_configs = configs
-            self._log(f"Configurazione multi-day salvata: {len(configs)} video configurati")
+            self._log(self._t("upload_multiday_log_saved").format(count=len(configs)))
             popup.destroy()
 
         # Top buttons frame
@@ -4430,11 +4457,11 @@ class DoomerGeneratorApp:
         top_buttons.pack(fill=tk.X, pady=10)
 
         ttk.Button(top_buttons, text="+", width=5, command=_add_row).pack(side=tk.LEFT, padx=5)
-        ttk.Label(top_buttons, text="Aggiungi configurazione video").pack(side=tk.LEFT, padx=5)
+        ttk.Label(top_buttons, text=self._t("upload_multiday_btn_add_row")).pack(side=tk.LEFT, padx=5)
 
         # Pre-populate with existing configurations
         if self.multiday_schedule_configs:
-            self._log(f"Pre-popolamento popup con {len(self.multiday_schedule_configs)} configurazioni")
+            self._log(self._t("upload_multiday_log_prepopulate").format(count=len(self.multiday_schedule_configs)))
             for date_obj, hour, minute in self.multiday_schedule_configs:
                 _add_row()
                 # Get the last added row
@@ -4446,14 +4473,14 @@ class DoomerGeneratorApp:
                 last_row["minute_var"].set(f"{minute:02d}")
                 self._log(f"  - Video {len(row_widgets)}: {date_obj} {hour:02d}:{minute:02d}")
         else:
-            self._log("Popup multi-day: nessuna configurazione precedente")
+            self._log(self._t("upload_multiday_log_no_previous"))
 
         # Bottom buttons
         bottom_buttons = ttk.Frame(popup)
         bottom_buttons.pack(side=tk.BOTTOM, pady=10)
 
-        ttk.Button(bottom_buttons, text="Salva", command=_save_and_close).pack(side=tk.LEFT, padx=5)
-        ttk.Button(bottom_buttons, text="Annulla", command=popup.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(bottom_buttons, text=self._t("upload_multiday_btn_save"), command=_save_and_close).pack(side=tk.LEFT, padx=5)
+        ttk.Button(bottom_buttons, text=self._t("upload_multiday_btn_cancel"), command=popup.destroy).pack(side=tk.LEFT, padx=5)
 
     def _update_schedule_visibility(self) -> None:
         """Show or hide schedule widgets depending on privacy status."""
@@ -4470,10 +4497,12 @@ class DoomerGeneratorApp:
             return
 
         status = self.youtube_privacy_var.get().strip()
+        multiday_text = self._t("upload_privacy_multiday")
+
         if status == "scheduled":
             # Clear date/time fields - user MUST set them manually
             self.youtube_selected_date = None
-            self.youtube_date_btn.configure(text="Seleziona data...")
+            self.youtube_date_btn.configure(text=self._t("upload_multiday_select_date"))
             self.youtube_schedule_hour_var.set("")
             self.youtube_schedule_minute_var.set("")
             # Reset the "date selected" flag - user must select a date manually
@@ -4483,7 +4512,7 @@ class DoomerGeneratorApp:
             # Hide multi-day scheduling
             self.youtube_multiday_label.grid_remove()
             self.youtube_multiday_btn.grid_remove()
-        elif status == "Multi-day scheduling":
+        elif status == multiday_text:
             # Hide single-day scheduling
             self.youtube_schedule_label.grid_remove()
             self.youtube_schedule_frame.grid_remove()
@@ -5645,12 +5674,11 @@ class DoomerGeneratorApp:
                 return
 
         # Validate multi-day scheduling configurations
-        elif self.youtube_privacy_var.get().strip() == "Multi-day scheduling":
+        elif self.youtube_privacy_var.get().strip() == self._t("upload_privacy_multiday"):
             if not self.multiday_schedule_configs:
                 messagebox.showerror(
-                    "Errore Configurazione",
-                    "Nessuna configurazione multi-day impostata.\n\n"
-                    "Clicca su 'Configura schedulazione multi giorni' e aggiungi almeno una configurazione."
+                    self._t("upload_multiday_error_no_configs_title"),
+                    self._t("upload_multiday_error_no_configs")
                 )
                 return
 
@@ -5723,7 +5751,7 @@ class DoomerGeneratorApp:
 
                 publish_at = target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        elif self.youtube_privacy_var.get().strip() == "Multi-day scheduling":
+        elif self.youtube_privacy_var.get().strip() == self._t("upload_privacy_multiday"):
             # Convert multi-day configurations to ISO timestamps
             multiday_publish_at = []
             for date_obj, hour, minute in self.multiday_schedule_configs:

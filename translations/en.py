@@ -368,5 +368,28 @@ TRANSLATIONS = {
     "upload_log_no_duplicate": "  No duplicate found on channel, proceeding with upload...",
     # Tag Generation with Mood
     "upload_log_tags_with_mood": "  Smart fallback tags ({count}) (with mood: {mood}): {tags}",
+    # Multi-day Scheduling
+    "upload_privacy_multiday": "Multi-day scheduling",
+    "upload_multiday_popup_title": "Multi-day Scheduling Configuration",
+    "upload_multiday_btn_configure": "Configure multi-day scheduling",
+    "upload_multiday_label_scheduling": "Scheduling:",
+    "upload_multiday_btn_add_row": "Add video configuration",
+    "upload_multiday_select_date": "Select date...",
+    "upload_multiday_btn_save": "Save",
+    "upload_multiday_btn_cancel": "Cancel",
+    "upload_multiday_video_label": "Video {number}:",
+    "upload_multiday_error_title": "Error",
+    "upload_multiday_error_no_date": "Video {number}: Select a date",
+    "upload_multiday_error_invalid_date": "Video {number}: Invalid date",
+    "upload_multiday_error_no_time": "Video {number}: Enter hour and minutes",
+    "upload_multiday_error_invalid_time": "Video {number}: Invalid time (HH: 0-23, MM: 0-59)",
+    "upload_multiday_error_past_date": "Video {number}: Date/time must be in the future",
+    "upload_multiday_error_not_ascending": "Video {number}: Date/time must be after the previous video",
+    "upload_multiday_error_no_configs": "No multi-day configuration set.\n\nClick 'Configure multi-day scheduling' and add at least one configuration.",
+    "upload_multiday_error_no_configs_title": "Configuration Error",
+    "upload_multiday_log_saved": "Multi-day configuration saved: {count} videos configured",
+    "upload_multiday_log_prepopulate": "Pre-populating popup with {count} configurations",
+    "upload_multiday_log_no_previous": "Multi-day popup: no previous configuration",
+    "upload_multiday_log_scheduled_for": "  Scheduled for: {timestamp}",
 }
 

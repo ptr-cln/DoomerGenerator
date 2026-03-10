@@ -368,5 +368,28 @@ TRANSLATIONS = {
     "upload_log_no_duplicate": "  Nessun duplicato trovato sul canale, procedo con l'upload...",
     # Tag Generation with Mood
     "upload_log_tags_with_mood": "  Tag fallback smart locali ({count}) (con mood: {mood}): {tags}",
+    # Multi-day Scheduling
+    "upload_privacy_multiday": "Multi-day scheduling",
+    "upload_multiday_popup_title": "Configurazione Schedulazione Multi Giorni",
+    "upload_multiday_btn_configure": "Configura schedulazione multi giorni",
+    "upload_multiday_label_scheduling": "Schedulazione:",
+    "upload_multiday_btn_add_row": "Aggiungi configurazione video",
+    "upload_multiday_select_date": "Seleziona data...",
+    "upload_multiday_btn_save": "Salva",
+    "upload_multiday_btn_cancel": "Annulla",
+    "upload_multiday_video_label": "Video {number}:",
+    "upload_multiday_error_title": "Errore",
+    "upload_multiday_error_no_date": "Video {number}: Seleziona una data",
+    "upload_multiday_error_invalid_date": "Video {number}: Data non valida",
+    "upload_multiday_error_no_time": "Video {number}: Inserisci ora e minuti",
+    "upload_multiday_error_invalid_time": "Video {number}: Ora non valida (HH: 0-23, MM: 0-59)",
+    "upload_multiday_error_past_date": "Video {number}: Data/ora deve essere futura",
+    "upload_multiday_error_not_ascending": "Video {number}: Data/ora deve essere successiva al video precedente",
+    "upload_multiday_error_no_configs": "Nessuna configurazione multi-day impostata.\n\nClicca su 'Configura schedulazione multi giorni' e aggiungi almeno una configurazione.",
+    "upload_multiday_error_no_configs_title": "Errore Configurazione",
+    "upload_multiday_log_saved": "Configurazione multi-day salvata: {count} video configurati",
+    "upload_multiday_log_prepopulate": "Pre-popolamento popup con {count} configurazioni",
+    "upload_multiday_log_no_previous": "Popup multi-day: nessuna configurazione precedente",
+    "upload_multiday_log_scheduled_for": "  Schedulato per: {timestamp}",
 }
 
