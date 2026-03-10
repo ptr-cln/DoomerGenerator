@@ -2396,15 +2396,17 @@ class DoomerVideoGenerator:
                 "-c:v",
                 "h264_nvenc",
                 "-preset",
-                "p6",  # p6 = slower preset, high quality (sweet spot)
+                "p6",  # p6 = slower preset, high quality (requires driver 570.0+)
                 "-rc",
                 "cbr",  # Constant bitrate (guarantees file size)
                 "-b:v",
-                "10M",  # Constant bitrate for 1080p high quality
+                "12M",  # Constant bitrate for 1080p high quality
+                "-minrate",
+                "12M",  # Force minimum bitrate (same as target for CBR)
                 "-maxrate",
-                "10M",  # Same as bitrate for CBR
+                "12M",  # Same as bitrate for CBR
                 "-bufsize",
-                "20M",  # Buffer size for rate control
+                "24M",  # Buffer size (2x bitrate)
             ]
         if encoder == "intel":
             return ["-c:v", "h264_qsv", "-global_quality", "18"]  # Very high quality
