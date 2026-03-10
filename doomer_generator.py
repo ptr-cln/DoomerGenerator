@@ -3625,13 +3625,16 @@ class DoomerGeneratorApp:
             height=6,
             yscrollcommand=bg_scrollbar.set,
             exportselection=False,
-            takefocus=False
+            takefocus=False,
+            highlightthickness=0
         )
         self.backgrounds_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         bg_scrollbar.config(command=self.backgrounds_listbox.yview)
 
-        # Disable selection highlighting
+        # Disable selection and focus completely
         self.backgrounds_listbox.bind('<<ListboxSelect>>', lambda e: self.backgrounds_listbox.selection_clear(0, tk.END))
+        self.backgrounds_listbox.bind('<FocusIn>', lambda e: self.backgrounds_listbox.master.focus_set())
+        self.backgrounds_listbox.bind('<Button-1>', lambda e: self.backgrounds_listbox.master.focus_set())
 
         bg_buttons = ttk.Frame(bg_frame)
         bg_buttons.pack(fill=tk.X, pady=(4, 0))
@@ -3656,13 +3659,16 @@ class DoomerGeneratorApp:
             height=6,
             yscrollcommand=dg_scrollbar.set,
             exportselection=False,
-            takefocus=False
+            takefocus=False,
+            highlightthickness=0
         )
         self.doomer_guys_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         dg_scrollbar.config(command=self.doomer_guys_listbox.yview)
 
-        # Disable selection highlighting
+        # Disable selection and focus completely
         self.doomer_guys_listbox.bind('<<ListboxSelect>>', lambda e: self.doomer_guys_listbox.selection_clear(0, tk.END))
+        self.doomer_guys_listbox.bind('<FocusIn>', lambda e: self.doomer_guys_listbox.master.focus_set())
+        self.doomer_guys_listbox.bind('<Button-1>', lambda e: self.doomer_guys_listbox.master.focus_set())
 
         dg_buttons = ttk.Frame(dg_frame)
         dg_buttons.pack(fill=tk.X, pady=(4, 0))
