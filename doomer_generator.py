@@ -5474,9 +5474,6 @@ class DoomerGeneratorApp:
             # Pattern to match playlist item progress (e.g., "[download] Downloading item 3 of 12")
             playlist_item_pattern = re.compile(r"\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)")
 
-            # Debug: log that we're starting download batch
-            self.events.put(("log", f"Starting download batch with {total} targets"))
-
             for index, target in enumerate(targets, start=1):
                 # Check for pause
                 while self.download_paused:
@@ -5542,6 +5539,7 @@ class DoomerGeneratorApp:
                     text=True,
                     encoding="utf-8",
                     errors="replace",
+                    bufsize=1,  # Line buffered for real-time output
                 )
                 last_detail = ""
                 output_file: str | None = None
@@ -5557,16 +5555,12 @@ class DoomerGeneratorApp:
                         if not line:
                             continue
 
-                        # Debug: log all lines containing [download] to see the format
-                        if "[download]" in line:
-                            self.events.put(("log", f"  DEBUG: {line}"))
-
                         # Check for playlist item progress (e.g., "Downloading item 3 of 12")
                         playlist_match = playlist_item_pattern.search(line)
                         if playlist_match:
                             playlist_current_item = int(playlist_match.group(1))
                             playlist_total_items = int(playlist_match.group(2))
-                            self.events.put(("log", f"  Downloading item {playlist_current_item}/{playlist_total_items}"))
+                            # Don't log every item to avoid spam - just track internally
                             # Don't continue - let it process percentage on same line if present
 
                         # Check for progress percentage
