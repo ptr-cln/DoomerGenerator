@@ -2752,6 +2752,9 @@ class DoomerGeneratorApp:
         self.queue_filter_var: tk.StringVar | None = None
         self.current_queue_items: dict[str, QueueItem] = {}  # Maps file paths to queue items
         self.last_processed_file: str | None = None  # Track last file being processed
+        self.queue_refresh_pending = False  # Flag to indicate refresh is needed
+        self.last_queue_refresh_time = 0.0  # Last time queue was refreshed
+        self.queue_refresh_interval = 0.5  # Minimum seconds between refreshes (throttling)
 
         # Backup & Recovery system
         self.backups_dir = self.project_dir / "backups"
@@ -7364,7 +7367,7 @@ class DoomerGeneratorApp:
         with self.queue_lock:
             if item in self.queue_items:
                 self.queue_items.remove(item)
-                self._refresh_queue_display()
+                self._refresh_queue_display()  # Throttled by default
 
     def _clear_complete_queue_items(self) -> None:
         """Clear all completed items from the queue."""
@@ -7373,7 +7376,7 @@ class DoomerGeneratorApp:
                 item for item in self.queue_items
                 if item.status not in ("complete", "error")
             ]
-            self._refresh_queue_display()
+            self._refresh_queue_display(force=True)  # Force immediate refresh (user action)
 
     def _clear_all_queue_items(self) -> None:
         """Clear all items from the queue."""
@@ -7386,13 +7389,45 @@ class DoomerGeneratorApp:
 
         with self.queue_lock:
             self.queue_items.clear()
-            self._refresh_queue_display()
+            self._refresh_queue_display(force=True)  # Force immediate refresh (user action)
 
-    def _refresh_queue_display(self) -> None:
-        """Refresh the queue display in the UI."""
+    def _refresh_queue_display(self, force: bool = False) -> None:
+        """Refresh the queue display in the UI.
+
+        Args:
+            force: If True, refresh immediately. If False, use throttling to avoid UI freezes.
+        """
         if self.queue_tree is None or self.queue_filter_var is None:
             self._log_debug("Queue display refresh skipped: tree or filter not initialized")
             return
+
+        # Throttling: avoid refreshing too frequently (causes UI freezes with many items)
+        current_time = time.time()
+        time_since_last_refresh = current_time - self.last_queue_refresh_time
+
+        if not force and time_since_last_refresh < self.queue_refresh_interval:
+            # Too soon - mark as pending and schedule a delayed refresh
+            if not self.queue_refresh_pending:
+                self.queue_refresh_pending = True
+                # Schedule refresh after the interval
+                delay_ms = int((self.queue_refresh_interval - time_since_last_refresh) * 1000) + 100
+                self.root.after(delay_ms, self._do_pending_queue_refresh)
+            return
+
+        # Perform the actual refresh
+        self._do_queue_refresh()
+
+    def _do_pending_queue_refresh(self) -> None:
+        """Execute a pending queue refresh (called by after())."""
+        self.queue_refresh_pending = False
+        self._do_queue_refresh()
+
+    def _do_queue_refresh(self) -> None:
+        """Actually refresh the queue display (internal method)."""
+        if self.queue_tree is None or self.queue_filter_var is None:
+            return
+
+        self.last_queue_refresh_time = time.time()
 
         # Clear existing items
         # Use try-except to handle race condition when multiple threads refresh simultaneously
