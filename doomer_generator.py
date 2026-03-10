@@ -1711,6 +1711,9 @@ class YouTubeUploader:
             # Get current list of videos, excluding already processed ones
             current_files = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS) if f not in processed_files]
 
+            # Randomize upload order to avoid uploading similar videos consecutively
+            random.shuffle(current_files)
+
             if not current_files:
                 # No new videos to upload
                 self.log(f"Nessun nuovo video rilevato in {video_dir}. Upload completato.")
