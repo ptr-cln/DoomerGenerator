@@ -601,7 +601,63 @@ def _safe_mtime(path: Path) -> float:
         return 0.0
 
 
-def _collect_files(base_dir: Path, extensions: set[str], exclude_recently_modified: float = 0.0) -> list[Path]:
+def _is_video_complete(video_path: Path, ffprobe_bin: str | None = None) -> bool:
+    """Check if a video file is complete and valid by verifying it has a valid duration.
+
+    Args:
+        video_path: Path to the video file
+        ffprobe_bin: Path to ffprobe binary (if None, uses 'ffprobe')
+
+    Returns:
+        True if video is complete and valid, False otherwise
+    """
+    if not video_path.is_file():
+        return False
+
+    # Check file size - if it's 0 or very small, it's definitely not complete
+    try:
+        size = video_path.stat().st_size
+        if size < 1024:  # Less than 1KB
+            return False
+    except OSError:
+        return False
+
+    # Use ffprobe to check if video has valid duration
+    probe_cmd = ffprobe_bin or "ffprobe"
+    try:
+        result = subprocess.run(
+            [
+                probe_cmd,
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video_path)
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return False
+
+        # Try to parse duration
+        duration_str = result.stdout.strip()
+        if not duration_str:
+            return False
+
+        try:
+            duration = float(duration_str)
+            # Valid videos should have duration > 0
+            return duration > 0
+        except ValueError:
+            return False
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
+def _collect_files(base_dir: Path, extensions: set[str], exclude_recently_modified: float = 0.0, verify_video_complete: bool = False, ffprobe_bin: str | None = None) -> list[Path]:
     """Collect files with given extensions from base_dir (non-recursive, only direct children).
 
     Args:
@@ -609,6 +665,8 @@ def _collect_files(base_dir: Path, extensions: set[str], exclude_recently_modifi
         extensions: Set of file extensions to include (e.g., {'.mp4', '.mp3'})
         exclude_recently_modified: If > 0, exclude files modified within this many seconds ago.
                                    Useful to avoid picking up files still being written.
+        verify_video_complete: If True, verify video files are complete using ffprobe (slower but safer)
+        ffprobe_bin: Path to ffprobe binary (only used if verify_video_complete=True)
     """
     if not base_dir.is_dir():
         return []
@@ -630,6 +688,12 @@ def _collect_files(base_dir: Path, extensions: set[str], exclude_recently_modifi
                     continue
             except OSError:
                 # If we can't stat the file, skip it to be safe
+                continue
+
+        # If verify_video_complete is set, check if video is valid and complete
+        if verify_video_complete and file.suffix.lower() in VIDEO_EXTENSIONS:
+            if not _is_video_complete(file, ffprobe_bin):
+                # Video is not complete or invalid, skip it
                 continue
 
         files.append(file)
@@ -1833,8 +1897,24 @@ class YouTubeUploader:
         on_new_files: Callable[[list[Path]], None] | None = None,
         ffmpeg_bin: str | None = None,
     ) -> UploadSummary:
-        # Exclude videos modified in the last 10 seconds to avoid uploading files still being generated
-        files = _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0)
+        # Derive ffprobe path from ffmpeg
+        ffprobe_bin = None
+        if ffmpeg_bin:
+            from pathlib import Path
+            ffmpeg_path = Path(ffmpeg_bin)
+            sibling = ffmpeg_path.with_name("ffprobe.exe")
+            if sibling.is_file():
+                ffprobe_bin = str(sibling)
+            else:
+                sibling_no_ext = ffmpeg_path.with_name("ffprobe")
+                if sibling_no_ext.is_file():
+                    ffprobe_bin = str(sibling_no_ext)
+        if not ffprobe_bin:
+            ffprobe_bin = shutil.which("ffprobe")
+
+        # Verify videos are complete using ffprobe (checks valid duration)
+        # This prevents uploading videos still being generated (even if file size hasn't changed for minutes)
+        files = _collect_files(video_dir, VIDEO_EXTENSIONS, verify_video_complete=True, ffprobe_bin=ffprobe_bin)
         total = len(files)
         if total == 0:
             self.log("Nessun video trovato in video/out.")
@@ -1856,9 +1936,9 @@ class YouTubeUploader:
         first_batch = True
 
         while True:
-            # Get current list of videos, excluding already processed ones and recently modified files
-            # (exclude_recently_modified=10.0 prevents uploading videos still being generated)
-            current_files = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0) if f not in processed_files]
+            # Get current list of videos, excluding already processed ones
+            # verify_video_complete=True ensures we only upload complete videos (checks valid duration with ffprobe)
+            current_files = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS, verify_video_complete=True, ffprobe_bin=ffprobe_bin) if f not in processed_files]
 
             # Randomize upload order to avoid uploading similar videos consecutively
             random.shuffle(current_files)
@@ -2016,8 +2096,8 @@ class YouTubeUploader:
 
                     # Pre-calculate pending files size ONCE (not in the loop!)
                     # This was causing upload stalling by scanning directory every chunk
-                    # Exclude recently modified files to avoid counting videos still being generated
-                    all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0) if f not in processed_files and f != video_file]
+                    # verify_video_complete=True ensures we only count complete videos
+                    all_pending = [f for f in _collect_files(video_dir, VIDEO_EXTENSIONS, verify_video_complete=True, ffprobe_bin=ffprobe_bin) if f not in processed_files and f != video_file]
                     pending_size = sum(f.stat().st_size for f in all_pending)
 
                     response = None
@@ -5914,9 +5994,24 @@ class DoomerGeneratorApp:
 
         settings = self._collect_upload_settings()
 
+        # Resolve ffprobe for video verification
+        ffmpeg_bin = self._resolve_ffmpeg()
+        ffprobe_bin = None
+        if ffmpeg_bin:
+            ffmpeg_path = Path(ffmpeg_bin)
+            sibling = ffmpeg_path.with_name("ffprobe.exe")
+            if sibling.is_file():
+                ffprobe_bin = str(sibling)
+            else:
+                sibling_no_ext = ffmpeg_path.with_name("ffprobe")
+                if sibling_no_ext.is_file():
+                    ffprobe_bin = str(sibling_no_ext)
+        if not ffprobe_bin:
+            ffprobe_bin = shutil.which("ffprobe")
+
         # Add files to queue (batch mode - refresh only once at the end)
-        # Exclude recently modified files to avoid queueing videos still being generated
-        video_files = _collect_files(video_dir, VIDEO_EXTENSIONS, exclude_recently_modified=10.0)
+        # verify_video_complete=True ensures we only queue complete videos (checks valid duration with ffprobe)
+        video_files = _collect_files(video_dir, VIDEO_EXTENSIONS, verify_video_complete=True, ffprobe_bin=ffprobe_bin)
         self._log_debug(f"Upload starting: clearing current_queue_items (had {len(self.current_queue_items)} items), queue_items has {len(self.queue_items)} items")
         self.current_queue_items.clear()
         for video_file in video_files:
