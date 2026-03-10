@@ -7395,8 +7395,13 @@ class DoomerGeneratorApp:
             return
 
         # Clear existing items
+        # Use try-except to handle race condition when multiple threads refresh simultaneously
         for item_id in self.queue_tree.get_children():
-            self.queue_tree.delete(item_id)
+            try:
+                self.queue_tree.delete(item_id)
+            except tk.TclError:
+                # Item already deleted by another thread - safe to ignore
+                pass
 
         # Get filter
         filter_status = self.queue_filter_var.get()
