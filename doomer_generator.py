@@ -1769,6 +1769,12 @@ class YouTubeUploader:
                 # Replace hyphen with en dash for better typography
                 title = title.replace(" - ", " – ")
 
+                # YouTube title limit is 100 characters - truncate if needed
+                if len(title) > 100:
+                    # Truncate to 97 chars and add "..." to indicate truncation
+                    title = title[:97] + "..."
+                    self.log(f"  Titolo troncato a 100 caratteri (limite YouTube)")
+
                 # Create base title without mood for description
                 # Format: "Artist – Song (Doomer Wave / Slowed + Reverb)"
                 base_title_for_description = f"{base_filename} (Doomer Wave / Slowed + Reverb)".replace(" - ", " – ")
@@ -1794,6 +1800,10 @@ class YouTubeUploader:
                         description = f"{base_title_for_description}\n\n{settings.description_template}"
                     # Pass mood to tag generation for better, context-aware tags
                     tags = _compose_youtube_tags(title, settings, log=self.log, mood=mood)
+
+                    # Debug: log title to verify it's not empty
+                    self.log(f"  DEBUG: Title = '{title}'")
+                    self.log(f"  DEBUG: Description = '{description[:100]}...'")
 
                     # build status dictionary taking care of scheduled uploads
                     status_dict: dict[str, object] = {
