@@ -3611,7 +3611,7 @@ class DoomerGeneratorApp:
         bg_frame = ttk.Frame(selection_box)
         bg_frame.grid(row=0, column=0, padx=6, pady=6, sticky="nsew")
 
-        ttk.Label(bg_frame, text="Backgrounds (Opzionale):").pack(anchor="w", pady=(0, 4))
+        ttk.Label(bg_frame, text="Backgrounds:").pack(anchor="w", pady=(0, 4))
 
         bg_list_frame = ttk.Frame(bg_frame)
         bg_list_frame.pack(fill=tk.BOTH, expand=True)
@@ -3637,7 +3637,7 @@ class DoomerGeneratorApp:
         dg_frame = ttk.Frame(selection_box)
         dg_frame.grid(row=0, column=1, padx=6, pady=6, sticky="nsew")
 
-        ttk.Label(dg_frame, text="Doomer Guys (Opzionale):").pack(anchor="w", pady=(0, 4))
+        ttk.Label(dg_frame, text="Doomer Guys:").pack(anchor="w", pady=(0, 4))
 
         dg_list_frame = ttk.Frame(dg_frame)
         dg_list_frame.pack(fill=tk.BOTH, expand=True)
@@ -4493,7 +4493,7 @@ class DoomerGeneratorApp:
             self.doomer_guys_listbox.insert(tk.END, dg.name)
 
     def _preview_selected_resources(self) -> None:
-        """Show preview window with selected resources."""
+        """Show preview window with selected resources as thumbnails."""
         if not self.selected_backgrounds and not self.selected_doomer_guys:
             messagebox.showinfo(
                 "Anteprima Selezione",
@@ -4504,7 +4504,7 @@ class DoomerGeneratorApp:
         # Create preview window
         preview_window = tk.Toplevel(self.root)
         preview_window.title("Anteprima Risorse Selezionate")
-        preview_window.geometry("800x600")
+        preview_window.geometry("900x700")
 
         # Main frame with scrollbar
         main_frame = ttk.Frame(preview_window)
@@ -4522,27 +4522,36 @@ class DoomerGeneratorApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
+        # Store PhotoImage references to prevent garbage collection
+        preview_window.thumbnail_images = []
+
         # Backgrounds section
         if self.selected_backgrounds:
             ttk.Label(
                 scrollable_frame,
                 text=f"Backgrounds Selezionati ({len(self.selected_backgrounds)}):",
                 font=("TkDefaultFont", 10, "bold")
-            ).pack(anchor="w", pady=(0, 5))
+            ).pack(anchor="w", pady=(0, 10))
 
-            for bg in self.selected_backgrounds:
-                ttk.Label(scrollable_frame, text=f"  • {bg.name}").pack(anchor="w", padx=10)
+            bg_grid = ttk.Frame(scrollable_frame)
+            bg_grid.pack(fill=tk.X, padx=10, pady=(0, 20))
+
+            for idx, bg in enumerate(self.selected_backgrounds):
+                self._add_thumbnail_to_grid(bg_grid, bg, idx, preview_window.thumbnail_images)
 
         # Doomer Guys section
         if self.selected_doomer_guys:
             ttk.Label(
                 scrollable_frame,
-                text=f"\nDoomer Guys Selezionati ({len(self.selected_doomer_guys)}):",
+                text=f"Doomer Guys Selezionati ({len(self.selected_doomer_guys)}):",
                 font=("TkDefaultFont", 10, "bold")
-            ).pack(anchor="w", pady=(10, 5))
+            ).pack(anchor="w", pady=(10, 10))
 
-            for dg in self.selected_doomer_guys:
-                ttk.Label(scrollable_frame, text=f"  • {dg.name}").pack(anchor="w", padx=10)
+            dg_grid = ttk.Frame(scrollable_frame)
+            dg_grid.pack(fill=tk.X, padx=10, pady=(0, 20))
+
+            for idx, dg in enumerate(self.selected_doomer_guys):
+                self._add_thumbnail_to_grid(dg_grid, dg, idx, preview_window.thumbnail_images)
 
         # Info message
         ttk.Separator(scrollable_frame, orient="horizontal").pack(fill=tk.X, pady=10)
@@ -4562,6 +4571,66 @@ class DoomerGeneratorApp:
             text="Chiudi",
             command=preview_window.destroy
         ).pack(pady=10)
+
+    def _add_thumbnail_to_grid(
+        self,
+        parent: ttk.Frame,
+        image_path: Path,
+        index: int,
+        image_refs: list
+    ) -> None:
+        """Add a thumbnail image to the grid with filename label."""
+        try:
+            from PIL import Image, ImageTk
+
+            # Create frame for this thumbnail
+            thumb_frame = ttk.Frame(parent, relief=tk.RIDGE, borderwidth=1)
+            row = index // 3  # 3 columns
+            col = index % 3
+            thumb_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+
+            # Configure grid weights for centering
+            parent.columnconfigure(col, weight=1)
+
+            # Load and resize image
+            img = Image.open(image_path)
+
+            # Calculate thumbnail size maintaining aspect ratio
+            max_size = (200, 150)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+            # Create PhotoImage
+            photo = ImageTk.PhotoImage(img)
+            image_refs.append(photo)  # Keep reference to prevent garbage collection
+
+            # Display image
+            img_label = tk.Label(thumb_frame, image=photo, bg="black")
+            img_label.pack(padx=5, pady=5)
+
+            # Display filename below image
+            name_label = ttk.Label(
+                thumb_frame,
+                text=image_path.name,
+                wraplength=200,
+                justify=tk.CENTER
+            )
+            name_label.pack(padx=5, pady=(0, 5))
+
+        except Exception as error:
+            # Fallback to text if image loading fails
+            error_frame = ttk.Frame(parent)
+            row = index // 3
+            col = index % 3
+            error_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+
+            ttk.Label(
+                error_frame,
+                text=f"❌ {image_path.name}\n(Errore caricamento)",
+                wraplength=200,
+                justify=tk.CENTER
+            ).pack(padx=5, pady=5)
+
+            self._log_debug(f"Errore caricamento thumbnail {image_path.name}: {error}")
 
     def _clear_selected_resources_memory(self) -> None:
         """Clear memory file for selected resources."""
