@@ -4428,6 +4428,7 @@ class DoomerGeneratorApp:
 
         # Pre-populate with existing configurations
         if self.multiday_schedule_configs:
+            self._log(f"Pre-popolamento popup con {len(self.multiday_schedule_configs)} configurazioni")
             for date_obj, hour, minute in self.multiday_schedule_configs:
                 _add_row()
                 # Get the last added row
@@ -4438,6 +4439,9 @@ class DoomerGeneratorApp:
                 # Set the time
                 last_row["hour_var"].set(f"{hour:02d}")
                 last_row["minute_var"].set(f"{minute:02d}")
+                self._log(f"  - Video {len(row_widgets)}: {date_obj} {hour:02d}:{minute:02d}")
+        else:
+            self._log("Popup multi-day: nessuna configurazione precedente")
 
         # Bottom buttons
         bottom_buttons = ttk.Frame(popup)
