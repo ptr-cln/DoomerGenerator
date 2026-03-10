@@ -5642,7 +5642,6 @@ class DoomerGeneratorApp:
                         output_path = Path(output_file)
                         if output_path.exists():
                             # Check if filename contains "(Remastered)" (case insensitive)
-                            import re
                             new_name = re.sub(r'\s*\(Remastered\)', '', output_path.stem, flags=re.IGNORECASE)
                             if new_name != output_path.stem:
                                 # Rename the file
