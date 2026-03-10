@@ -2400,13 +2400,13 @@ class DoomerVideoGenerator:
                 "-rc",
                 "cbr",  # Constant bitrate (guarantees file size)
                 "-b:v",
-                "12M",  # Constant bitrate for 1080p high quality
+                "40M",  # High constant bitrate to match CPU file sizes (1.4-4GB)
                 "-minrate",
-                "12M",  # Force minimum bitrate (same as target for CBR)
+                "40M",  # Force minimum bitrate (same as target for CBR)
                 "-maxrate",
-                "12M",  # Same as bitrate for CBR
+                "40M",  # Same as bitrate for CBR
                 "-bufsize",
-                "24M",  # Buffer size (2x bitrate)
+                "80M",  # Buffer size (2x bitrate)
             ]
         if encoder == "intel":
             return ["-c:v", "h264_qsv", "-global_quality", "18"]  # Very high quality
