@@ -1743,7 +1743,7 @@ class YouTubeUploader:
                 # This avoids wasting an AI API call if the video is already uploaded
                 base_title_check = f"{base_filename} (Doomer Wave / Slowed + Reverb)"
                 if self._video_exists_on_channel(base_title_check):
-                    self.log(self._t("upload_log_skipped_before_mood"))
+                    self.log("  Video già presente sul canale (controllo pre-mood), saltato.")
                     skipped += 1
                     continue
 
@@ -1775,12 +1775,12 @@ class YouTubeUploader:
 
                 # Double-check with final title (in case mood creates a duplicate)
                 if self._video_exists_on_channel(title):
-                    self.log(self._t("upload_log_skipped_after_mood"))
+                    self.log("  Video già presente sul canale (controllo post-mood), saltato.")
                     skipped += 1
                     continue
 
                 # Log confirmation that no duplicate was found
-                self.log(self._t("upload_log_no_duplicate"))
+                self.log("  Nessun duplicato trovato, procedo con upload.")
 
                 try:
                     try:
