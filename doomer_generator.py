@@ -2960,6 +2960,9 @@ class DoomerGeneratorApp:
         self.log_widget = tk.Text(logs_frame, wrap=tk.WORD, height=8, state=tk.DISABLED)
         self.log_widget.grid(row=1, column=0, sticky="nsew")
 
+        # Configure tag for error messages (red and bold)
+        self.log_widget.tag_configure("error", foreground="red", font=("TkDefaultFont", 9, "bold"))
+
         # Scrollbar for logs
         scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         scrollbar.grid(row=1, column=1, sticky="ns")
@@ -8007,7 +8010,16 @@ class DoomerGeneratorApp:
         """Log message to both UI widget and file."""
         # Write to UI
         self.log_widget.configure(state=tk.NORMAL)
-        self.log_widget.insert(tk.END, message + "\n")
+
+        # Apply error tag if level is ERROR
+        if level.upper() == "ERROR":
+            start_index = self.log_widget.index(tk.END + "-1c")
+            self.log_widget.insert(tk.END, message + "\n")
+            end_index = self.log_widget.index(tk.END + "-1c")
+            self.log_widget.tag_add("error", start_index, end_index)
+        else:
+            self.log_widget.insert(tk.END, message + "\n")
+
         self.log_widget.see(tk.END)
         self.log_widget.configure(state=tk.DISABLED)
 
