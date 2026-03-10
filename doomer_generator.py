@@ -5554,9 +5554,6 @@ class DoomerGeneratorApp:
                         if not line:
                             continue
 
-                        # TEMPORARY DEBUG: Log ALL output to see what yt-dlp is emitting
-                        self.events.put(("log", f"  [yt-dlp] {line}"))
-
                         # Check for playlist item progress (e.g., "Downloading item 3 of 12")
                         playlist_match = playlist_item_pattern.search(line)
                         if playlist_match:
