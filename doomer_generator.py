@@ -668,20 +668,207 @@ def _get_least_used_file(
     """Select the least used file from the list."""
     if not files:
         return None
-    
+
     file_usage = {}
     for f in files:
         file_str = str(f)
         file_usage[file_str] = memory.get(memory_key, {}).get(file_str, 0)
-    
+
     # Find the minimum usage count
     min_usage = min(file_usage.values())
     # Get all files with minimum usage
     least_used = [f for f, usage in file_usage.items() if usage == min_usage]
     # If there are multiple files with same usage, pick one randomly for variety
     selected = random.choice(least_used)
-    
+
     return Path(selected)
+
+
+def _save_video_background_mapping(
+    video_path: Path,
+    background_path: Path,
+    metadata_file: Path
+) -> None:
+    """Save mapping between video and its source background for AI vision.
+
+    Args:
+        video_path: Path to the generated video file
+        background_path: Path to the background image used
+        metadata_file: Path to the JSON cache file
+    """
+    import threading
+    import time
+
+    # Global lock for metadata file access (thread-safe within same process)
+    if not hasattr(_save_video_background_mapping, '_lock'):
+        _save_video_background_mapping._lock = threading.Lock()
+
+    try:
+        with _save_video_background_mapping._lock:
+            # Retry logic for file locking conflicts (cross-process safety)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Load existing cache
+                    cache = {}
+                    if metadata_file.exists():
+                        with open(metadata_file, "r", encoding="utf-8") as f:
+                            cache = json.load(f)
+
+                    # Add new entry
+                    from datetime import datetime
+                    cache[video_path.name] = {
+                        "background": str(background_path),
+                        "generated_at": datetime.now().isoformat(),
+                        "video_path": str(video_path)
+                    }
+
+                    # Atomic write: write to temp file, then rename
+                    temp_file = metadata_file.with_suffix(".json.tmp")
+                    with open(temp_file, "w", encoding="utf-8") as f:
+                        json.dump(cache, f, indent=2)
+
+                    # Atomic rename (overwrites existing file on POSIX, Windows 10+)
+                    temp_file.replace(metadata_file)
+                    break  # Success
+
+                except (OSError, PermissionError) as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                    else:
+                        raise  # Re-raise on final attempt
+    except Exception:  # noqa: BLE001
+        # Silent fail - cache is optional optimization
+        pass
+
+
+def _get_video_background(video_path: Path, metadata_file: Path) -> Path | None:
+    """Get the background image used for a video from cache.
+
+    Args:
+        video_path: Path to the video file
+        metadata_file: Path to the JSON cache file
+
+    Returns:
+        Path to background image if found and exists, None otherwise
+    """
+    try:
+        if not metadata_file.exists():
+            return None
+
+        with open(metadata_file, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+
+        entry = cache.get(video_path.name)
+        if entry and "background" in entry:
+            bg_path = Path(entry["background"])
+            if bg_path.exists():
+                return bg_path
+    except Exception:  # noqa: BLE001
+        # JSON corrupted, permissions error, etc. - fallback to frame extraction
+        pass
+
+    return None
+
+
+def _remove_video_background_mapping(video_path: Path, metadata_file: Path) -> None:
+    """Remove mapping entry when video is deleted.
+
+    Args:
+        video_path: Path to the video file
+        metadata_file: Path to the JSON cache file
+    """
+    import threading
+    import time
+
+    # Use same lock as save function for consistency
+    if not hasattr(_save_video_background_mapping, '_lock'):
+        _save_video_background_mapping._lock = threading.Lock()
+
+    try:
+        with _save_video_background_mapping._lock:
+            if not metadata_file.exists():
+                return
+
+            # Retry logic for file locking conflicts
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    with open(metadata_file, "r", encoding="utf-8") as f:
+                        cache = json.load(f)
+
+                    if video_path.name in cache:
+                        del cache[video_path.name]
+
+                        # Atomic write: write to temp file, then rename
+                        temp_file = metadata_file.with_suffix(".json.tmp")
+                        with open(temp_file, "w", encoding="utf-8") as f:
+                            json.dump(cache, f, indent=2)
+
+                        temp_file.replace(metadata_file)
+                    break  # Success
+
+                except (OSError, PermissionError) as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(0.1 * (attempt + 1))
+                    else:
+                        raise
+    except Exception:  # noqa: BLE001
+        # Silent fail - cleanup is best-effort
+        pass
+
+
+def _cleanup_orphaned_cache_entries(metadata_file: Path, video_dir: Path) -> None:
+    """Remove cache entries for videos that no longer exist.
+
+    Args:
+        metadata_file: Path to the JSON cache file
+        video_dir: Directory containing video files
+    """
+    import threading
+    import time
+
+    # Use same lock as save function for consistency
+    if not hasattr(_save_video_background_mapping, '_lock'):
+        _save_video_background_mapping._lock = threading.Lock()
+
+    try:
+        with _save_video_background_mapping._lock:
+            if not metadata_file.exists():
+                return
+
+            # Retry logic for file locking conflicts
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    with open(metadata_file, "r", encoding="utf-8") as f:
+                        cache = json.load(f)
+
+                    # Keep only entries where video still exists
+                    cleaned = {
+                        video_name: data
+                        for video_name, data in cache.items()
+                        if (video_dir / video_name).exists()
+                    }
+
+                    # Only write if we actually removed something
+                    if len(cleaned) != len(cache):
+                        # Atomic write: write to temp file, then rename
+                        temp_file = metadata_file.with_suffix(".json.tmp")
+                        with open(temp_file, "w", encoding="utf-8") as f:
+                            json.dump(cleaned, f, indent=2)
+
+                        temp_file.replace(metadata_file)
+                    break  # Success
+
+                except (OSError, PermissionError) as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(0.1 * (attempt + 1))
+                    else:
+                        raise
+    except Exception:  # noqa: BLE001
+        # Silent fail - cleanup is best-effort
+        pass
 
 
 def _increment_usage(
@@ -1103,46 +1290,88 @@ def _build_ai_tags(
     if not api_key or not model:
         return []
 
-    # Try to extract video frame for Vision API (same logic as mood generation)
-    frame_path = None
+    # Try to use clean background image first, fallback to frame extraction
     frame_base64 = None
-    if video_path and ffmpeg_bin and frame_cache_dir:
-        try:
-            frame_path = _extract_best_video_frame(video_path, ffmpeg_bin, frame_cache_dir)
-            if frame_path and frame_path.exists():
+    using_clean_background = False  # Track if we're using clean background
+    if video_path:
+        # Try to get clean background from cache
+        metadata_file = video_path.parent / ".video_metadata.json"
+        background_path = _get_video_background(video_path, metadata_file)
+
+        if background_path and background_path.exists():
+            # Use clean background image
+            try:
                 import base64
-                with open(frame_path, "rb") as f:
+                with open(background_path, "rb") as f:
                     frame_base64 = base64.b64encode(f.read()).decode("utf-8")
+                using_clean_background = True
                 if log:
-                    log("  Frame estratto per tag AI vision-enhanced")
-        except Exception as e:  # noqa: BLE001
-            if log:
-                log(f"  Frame extraction per tag fallito: {e}")
-            frame_base64 = None
+                    log(f"  Usando background pulito per tag AI: {background_path.name}")
+            except Exception as e:  # noqa: BLE001
+                if log:
+                    log(f"  Lettura background fallita: {e}")
+                frame_base64 = None
+
+        # Fallback to frame extraction if background not available
+        if not frame_base64 and ffmpeg_bin and frame_cache_dir:
+            try:
+                frame_path = _extract_best_video_frame(video_path, ffmpeg_bin, frame_cache_dir)
+                if frame_path and frame_path.exists():
+                    import base64
+                    with open(frame_path, "rb") as f:
+                        frame_base64 = base64.b64encode(f.read()).decode("utf-8")
+                    if log:
+                        log("  Frame estratto per tag AI (fallback)")
+            except Exception as e:  # noqa: BLE001
+                if log:
+                    log(f"  Frame extraction per tag fallito: {e}")
+                frame_base64 = None
 
     # Build prompt based on whether we have a frame
     if frame_base64:
-        # Vision-enhanced prompt
-        prompt = (
-            "Generate YouTube tags for a doomer wave / slowed reverb music video.\n\n"
-            f"Video title: {title}\n\n"
-            "Based on the visual atmosphere in this frame (colors, lighting, mood, setting), "
-            "generate relevant YouTube tags.\n\n"
-            "IMPORTANT: Ignore the character/person in the foreground. Focus ONLY on the background scene "
-            "(colors, lighting, atmosphere, setting, urban elements).\n\n"
-            "Generate 2 types of tags:\n"
-            "1. Visual/Atmospheric tags (5-6 tags): Based on what you see in the frame\n"
-            "   Examples: rainy night, neon lights, urban decay, empty streets, city lights, foggy atmosphere\n"
-            "2. Music/Genre tags (14-15 tags): Based on the title and doomer wave genre\n"
-            "   Examples: slowed reverb, doomer wave, sad music, melancholic, chill beats\n\n"
-            "Rules:\n"
-            "- Return ONLY a JSON array of strings (no markdown, no comments)\n"
-            "- Maximum 20 tags total\n"
-            "- No hashtags (#)\n"
-            "- No duplicates\n"
-            "- Each tag <= 30 characters\n"
-            "- Mix visual tags with music/genre tags for better SEO"
-        )
+        # Vision-enhanced prompt - different based on source
+        if using_clean_background:
+            # Clean background: no Doomer Guy reference
+            prompt = (
+                "Generate YouTube tags for a doomer wave / slowed reverb music video.\n\n"
+                f"Video title: {title}\n\n"
+                "Based on the visual atmosphere in this background image (colors, lighting, mood, setting), "
+                "generate relevant YouTube tags.\n\n"
+                "Generate 2 types of tags:\n"
+                "1. Visual/Atmospheric tags (5-6 tags): Based on what you see in the image\n"
+                "   Examples: rainy night, neon lights, urban decay, empty streets, city lights, foggy atmosphere\n"
+                "2. Music/Genre tags (14-15 tags): Based on the title and doomer wave genre\n"
+                "   Examples: slowed reverb, doomer wave, sad music, melancholic, chill beats\n\n"
+                "Rules:\n"
+                "- Return ONLY a JSON array of strings (no markdown, no comments)\n"
+                "- Maximum 20 tags total\n"
+                "- No hashtags (#)\n"
+                "- No duplicates\n"
+                "- Each tag <= 30 characters\n"
+                "- Mix visual tags with music/genre tags for better SEO"
+            )
+        else:
+            # Frame extraction: mention to ignore Doomer Guy
+            prompt = (
+                "Generate YouTube tags for a doomer wave / slowed reverb music video.\n\n"
+                f"Video title: {title}\n\n"
+                "Based on the visual atmosphere in this frame (colors, lighting, mood, setting), "
+                "generate relevant YouTube tags.\n\n"
+                "IMPORTANT: Ignore the character/person in the foreground. Focus ONLY on the background scene "
+                "(colors, lighting, atmosphere, setting, urban elements).\n\n"
+                "Generate 2 types of tags:\n"
+                "1. Visual/Atmospheric tags (5-6 tags): Based on what you see in the frame\n"
+                "   Examples: rainy night, neon lights, urban decay, empty streets, city lights, foggy atmosphere\n"
+                "2. Music/Genre tags (14-15 tags): Based on the title and doomer wave genre\n"
+                "   Examples: slowed reverb, doomer wave, sad music, melancholic, chill beats\n\n"
+                "Rules:\n"
+                "- Return ONLY a JSON array of strings (no markdown, no comments)\n"
+                "- Maximum 20 tags total\n"
+                "- No hashtags (#)\n"
+                "- No duplicates\n"
+                "- Each tag <= 30 characters\n"
+                "- Mix visual tags with music/genre tags for better SEO"
+            )
 
         # Vision API message format
         user_content = [
@@ -1421,49 +1650,96 @@ def _generate_mood_with_ai(
         context_parts.append(f"Song: {song_title}")
     context = "\n".join(context_parts) if context_parts else f"Song: {filename}"
 
-    # Try to extract video frame for Vision API
-    frame_path = None
+    # Try to use clean background image first, fallback to frame extraction
     frame_base64 = None
-    if video_path and ffmpeg_bin and frame_cache_dir:
-        try:
-            frame_path = _extract_best_video_frame(video_path, ffmpeg_bin, frame_cache_dir)
-            if frame_path and frame_path.exists():
+    using_clean_background = False  # Track if we're using clean background
+    if video_path:
+        # Try to get clean background from cache
+        metadata_file = video_path.parent / ".video_metadata.json"
+        background_path = _get_video_background(video_path, metadata_file)
+
+        if background_path and background_path.exists():
+            # Use clean background image
+            try:
                 import base64
-                with open(frame_path, "rb") as f:
+                with open(background_path, "rb") as f:
                     frame_base64 = base64.b64encode(f.read()).decode("utf-8")
+                using_clean_background = True
                 if log:
-                    log("  Frame estratto per analisi AI")
-        except Exception as e:  # noqa: BLE001
-            if log:
-                log(f"  Frame extraction fallito: {e}")
-            frame_base64 = None
+                    log(f"  Usando background pulito per AI: {background_path.name}")
+            except Exception as e:  # noqa: BLE001
+                if log:
+                    log(f"  Lettura background fallita: {e}")
+                frame_base64 = None
+
+        # Fallback to frame extraction if background not available
+        if not frame_base64 and ffmpeg_bin and frame_cache_dir:
+            try:
+                frame_path = _extract_best_video_frame(video_path, ffmpeg_bin, frame_cache_dir)
+                if frame_path and frame_path.exists():
+                    import base64
+                    with open(frame_path, "rb") as f:
+                        frame_base64 = base64.b64encode(f.read()).decode("utf-8")
+                    if log:
+                        log("  Frame estratto per analisi AI (fallback)")
+            except Exception as e:  # noqa: BLE001
+                if log:
+                    log(f"  Frame extraction fallito: {e}")
+                frame_base64 = None
 
     # Build prompt based on whether we have a frame
     if frame_base64:
-        # Vision-enhanced prompt
-        prompt = (
-            "You are analyzing a frame from a doomer wave music video to generate a melancholic mood phrase.\n\n"
-            f"Video title: {filename}\n\n"
-            "Based on the visual atmosphere in this frame (colors, lighting, mood, setting) and the song title, "
-            "generate a short melancholic mood phrase.\n\n"
-            "IMPORTANT: Ignore the character/person in the foreground. Focus ONLY on the background scene (colors, lighting, atmosphere, setting).\n\n"
-            "Rules:\n"
-            "- 2 to 4 words\n"
-            "- simple and visual\n"
-            "- evoke night, loneliness, city, rain, or silence\n"
-            "- avoid poetic or complex sentences\n"
-            "- avoid punctuation\n"
-            "- use lowercase\n"
-            "- do not include the words: doomer, music, vibe\n"
-            "- avoid repeating the song title words\n"
-            "- focus on the VISUAL MOOD of the image (dark colors, neon lights, empty spaces, etc.)\n\n"
-            "Examples:\n"
-            "empty city night\n"
-            "late night drive\n"
-            "rainy neon streets\n"
-            "3am loneliness\n"
-            "silent winter streets\n"
-            "foggy morning silence\n"
+        # Vision-enhanced prompt - different based on source
+        if using_clean_background:
+            # Clean background: no Doomer Guy reference
+            prompt = (
+                "You are analyzing a background image from a doomer wave music video to generate a melancholic mood phrase.\n\n"
+                f"Video title: {filename}\n\n"
+                "Based on the visual atmosphere in this image (colors, lighting, mood, setting) and the song title, "
+                "generate a short melancholic mood phrase.\n\n"
+                "Rules:\n"
+                "- 2 to 4 words\n"
+                "- simple and visual\n"
+                "- evoke night, loneliness, city, rain, or silence\n"
+                "- avoid poetic or complex sentences\n"
+                "- avoid punctuation\n"
+                "- use lowercase\n"
+                "- do not include the words: doomer, music, vibe\n"
+                "- avoid repeating the song title words\n"
+                "- focus on the VISUAL MOOD of the image (dark colors, neon lights, empty spaces, etc.)\n\n"
+                "Examples:\n"
+                "empty city night\n"
+                "late night drive\n"
+                "rainy neon streets\n"
+                "3am loneliness\n"
+                "silent winter streets\n"
+                "foggy morning silence\n"
+            )
+        else:
+            # Frame extraction: mention to ignore Doomer Guy
+            prompt = (
+                "You are analyzing a frame from a doomer wave music video to generate a melancholic mood phrase.\n\n"
+                f"Video title: {filename}\n\n"
+                "Based on the visual atmosphere in this frame (colors, lighting, mood, setting) and the song title, "
+                "generate a short melancholic mood phrase.\n\n"
+                "IMPORTANT: Ignore the character/person in the foreground. Focus ONLY on the background scene (colors, lighting, atmosphere, setting).\n\n"
+                "Rules:\n"
+                "- 2 to 4 words\n"
+                "- simple and visual\n"
+                "- evoke night, loneliness, city, rain, or silence\n"
+                "- avoid poetic or complex sentences\n"
+                "- avoid punctuation\n"
+                "- use lowercase\n"
+                "- do not include the words: doomer, music, vibe\n"
+                "- avoid repeating the song title words\n"
+                "- focus on the VISUAL MOOD of the image (dark colors, neon lights, empty spaces, etc.)\n\n"
+                "Examples:\n"
+                "empty city night\n"
+                "late night drive\n"
+                "rainy neon streets\n"
+                "3am loneliness\n"
+                "silent winter streets\n"
+                "foggy morning silence\n"
             "broken streetlights\n"
             "cigarette smoke haze\n"
             "distant train sounds\n"
@@ -1907,6 +2183,7 @@ class YouTubeUploader:
         check_pause: Callable[[], bool] | None = None,
         on_new_files: Callable[[list[Path]], None] | None = None,
         ffmpeg_bin: str | None = None,
+        get_current_multiday_schedule: Callable[[], list[str] | None] | None = None,
     ) -> UploadSummary:
         # Collect videos from output directory (not from processing/ subdirectory)
         # Videos are generated in processing/ and moved atomically when complete,
@@ -2079,11 +2356,23 @@ class YouTubeUploader:
                     elif settings.privacy_status.startswith("Multi-day"):
                         # Multi-day scheduling: use sequential timestamps
                         status_dict["privacyStatus"] = "private"
-                        if settings.multiday_publish_at:
+
+                        # Get current schedule (live from UI if callback provided, otherwise use snapshot)
+                        current_schedule = None
+                        if get_current_multiday_schedule:
+                            try:
+                                current_schedule = get_current_multiday_schedule()
+                            except Exception:
+                                # Fallback to snapshot if callback fails
+                                current_schedule = settings.multiday_publish_at
+                        else:
+                            current_schedule = settings.multiday_publish_at
+
+                        if current_schedule:
                             # Use index-1 because index starts at 1 (for display)
                             # If we have more videos than timestamps, use the last timestamp
-                            timestamp_index = min(index - 1, len(settings.multiday_publish_at) - 1)
-                            utc_timestamp = settings.multiday_publish_at[timestamp_index]
+                            timestamp_index = min(index - 1, len(current_schedule) - 1)
+                            utc_timestamp = current_schedule[timestamp_index]
                             status_dict["publishAt"] = utc_timestamp
 
                             # Convert UTC timestamp to local time for display in log
@@ -2526,6 +2815,15 @@ class DoomerVideoGenerator:
                         generated += 1
                         generation_times.append(elapsed)
                         self.log(self.translate("log_file_ok").format(filename=final_destination.name))
+
+                        # Save background mapping for AI vision
+                        if background and final_destination.exists():
+                            metadata_file = video_output_dir / ".video_metadata.json"
+                            _save_video_background_mapping(
+                                video_path=final_destination,
+                                background_path=background,
+                                metadata_file=metadata_file
+                            )
                     except Exception as e:
                         failed += 1
                         self.log(f"  ERRORE spostamento file -> {audio_file.name}: {e}")  # Keep Italian for now - this is debug info
@@ -2878,6 +3176,10 @@ class DoomerGeneratorApp:
 
         self._ensure_default_filesystem()
         self._ensure_links_file()
+
+        # Cleanup orphaned cache entries on startup
+        metadata_file = self.video_output_dir / ".video_metadata.json"
+        _cleanup_orphaned_cache_entries(metadata_file, self.video_output_dir)
 
         # Clear selected resources memory on app start
         self._clear_selected_resources_memory()
@@ -6169,6 +6471,30 @@ class DoomerGeneratorApp:
             # Refresh queue display once after adding all new items
             self._refresh_queue_display()
 
+        def get_current_multiday_schedule() -> list[str] | None:
+            """Get current multi-day schedule from UI (thread-safe via events queue)."""
+            # Convert current multiday_schedule_configs to ISO timestamps
+            if not self.multiday_schedule_configs:
+                return None
+
+            timestamps = []
+            for date_obj, hour, minute in self.multiday_schedule_configs:
+                target = datetime.datetime.combine(
+                    date_obj,
+                    datetime.time(hour=hour, minute=minute)
+                )
+                # Convert to UTC
+                try:
+                    target_utc = target.astimezone(datetime.timezone.utc)
+                except Exception:
+                    # if naive datetime cannot be converted, assume it already is UTC
+                    target_utc = target
+
+                iso_timestamp = target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+                timestamps.append(iso_timestamp)
+
+            return timestamps
+
         try:
             uploader = self._build_youtube_uploader()
             ffmpeg_bin = self._resolve_ffmpeg()  # For frame extraction in mood generation
@@ -6180,6 +6506,7 @@ class DoomerGeneratorApp:
                 check_pause=lambda: self.upload_paused,
                 on_new_files=on_new_upload_files,
                 ffmpeg_bin=ffmpeg_bin,
+                get_current_multiday_schedule=get_current_multiday_schedule,
             )
             self.events.put(("upload_finished", summary))
         except Exception as error:  # noqa: BLE001
@@ -6537,6 +6864,11 @@ class DoomerGeneratorApp:
             audio_input_root=audio_in_root,
             audio_output_root=audio_out_root,
         )
+
+        # Remove background mapping from cache
+        metadata_file = uploaded_video_path.parent / ".video_metadata.json"
+        _remove_video_background_mapping(uploaded_video_path, metadata_file)
+
         if not removed:
             self._queue_log("  Cleanup post-upload: nessun file correlato rimosso.")
             return
