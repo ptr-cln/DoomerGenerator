@@ -1081,18 +1081,93 @@ def _build_ai_tags(
     title: str,
     settings: UploadSettings,
     log: Callable[[str], None] | None = None,
+    video_path: Path | None = None,
+    ffmpeg_bin: str | None = None,
+    frame_cache_dir: Path | None = None,
 ) -> list[str]:
+    """Generate YouTube tags using AI, optionally enhanced with video frame analysis.
+
+    Args:
+        title: Video title
+        settings: Upload settings with API key and model
+        log: Optional logging function
+        video_path: Optional path to video file for frame extraction
+        ffmpeg_bin: Optional path to ffmpeg for frame extraction
+        frame_cache_dir: Optional directory to cache extracted frames
+
+    Returns:
+        List of YouTube tags (max 20)
+    """
     api_key = settings.openai_api_key.strip() or os.getenv("OPENAI_API_KEY", "").strip()
     model = settings.openai_model.strip()
     if not api_key or not model:
         return []
 
-    prompt = (
-        "Genera tag YouTube pertinenti per un video musicale in stile doomer wave / slowed reverb.\n"
-        "Rispondi SOLO con JSON array di stringhe (senza markdown, senza commenti).\n"
-        "Vincoli: massimo 20 tag, niente hashtag, niente duplicati, ogni tag <= 30 caratteri.\n"
-        f"Titolo video: {title}"
-    )
+    # Try to extract video frame for Vision API (same logic as mood generation)
+    frame_path = None
+    frame_base64 = None
+    if video_path and ffmpeg_bin and frame_cache_dir:
+        try:
+            frame_path = _extract_best_video_frame(video_path, ffmpeg_bin, frame_cache_dir)
+            if frame_path and frame_path.exists():
+                import base64
+                with open(frame_path, "rb") as f:
+                    frame_base64 = base64.b64encode(f.read()).decode("utf-8")
+                if log:
+                    log("  Frame estratto per tag AI vision-enhanced")
+        except Exception as e:  # noqa: BLE001
+            if log:
+                log(f"  Frame extraction per tag fallito: {e}")
+            frame_base64 = None
+
+    # Build prompt based on whether we have a frame
+    if frame_base64:
+        # Vision-enhanced prompt
+        prompt = (
+            "Generate YouTube tags for a doomer wave / slowed reverb music video.\n\n"
+            f"Video title: {title}\n\n"
+            "Based on the visual atmosphere in this frame (colors, lighting, mood, setting), "
+            "generate relevant YouTube tags.\n\n"
+            "IMPORTANT: Ignore the character/person in the foreground. Focus ONLY on the background scene "
+            "(colors, lighting, atmosphere, setting, urban elements).\n\n"
+            "Generate 2 types of tags:\n"
+            "1. Visual/Atmospheric tags (5-6 tags): Based on what you see in the frame\n"
+            "   Examples: rainy night, neon lights, urban decay, empty streets, city lights, foggy atmosphere\n"
+            "2. Music/Genre tags (14-15 tags): Based on the title and doomer wave genre\n"
+            "   Examples: slowed reverb, doomer wave, sad music, melancholic, chill beats\n\n"
+            "Rules:\n"
+            "- Return ONLY a JSON array of strings (no markdown, no comments)\n"
+            "- Maximum 20 tags total\n"
+            "- No hashtags (#)\n"
+            "- No duplicates\n"
+            "- Each tag <= 30 characters\n"
+            "- Mix visual tags with music/genre tags for better SEO"
+        )
+
+        # Vision API message format
+        user_content = [
+            {
+                "type": "text",
+                "text": prompt,
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{frame_base64}",
+                    "detail": "high",  # High detail for better tag accuracy
+                },
+            },
+        ]
+    else:
+        # Text-only prompt (fallback)
+        prompt = (
+            "Genera tag YouTube pertinenti per un video musicale in stile doomer wave / slowed reverb.\n"
+            "Rispondi SOLO con JSON array di stringhe (senza markdown, senza commenti).\n"
+            "Vincoli: massimo 20 tag, niente hashtag, niente duplicati, ogni tag <= 30 caratteri.\n"
+            f"Titolo video: {title}"
+        )
+        user_content = prompt
+
     payload = {
         "model": model,
         "messages": [
@@ -1102,7 +1177,7 @@ def _build_ai_tags(
             },
             {
                 "role": "user",
-                "content": prompt,
+                "content": user_content,
             },
         ],
         "temperature": 0.4,
@@ -1730,6 +1805,9 @@ def _compose_youtube_tags(
     settings: UploadSettings,
     log: Callable[[str], None] | None = None,
     mood: str | None = None,
+    video_path: Path | None = None,
+    ffmpeg_bin: str | None = None,
+    frame_cache_dir: Path | None = None,
 ) -> list[str]:
     """Compose YouTube tags from various sources.
 
@@ -1738,6 +1816,9 @@ def _compose_youtube_tags(
         settings: Upload settings
         log: Optional logging function
         mood: Optional AI-generated mood phrase to enhance tag generation
+        video_path: Optional path to video file for vision-enhanced tag generation
+        ffmpeg_bin: Optional path to ffmpeg for frame extraction
+        frame_cache_dir: Optional directory to cache extracted frames
     """
     tags: list[str] = []
 
@@ -1746,7 +1827,15 @@ def _compose_youtube_tags(
 
     # Then add AI or smart fallback tags
     if settings.smart_tags_enabled:
-        ai_tags = _build_ai_tags(title, settings, log=log)
+        # Pass video frame info for vision-enhanced tag generation
+        ai_tags = _build_ai_tags(
+            title,
+            settings,
+            log=log,
+            video_path=video_path,
+            ffmpeg_bin=ffmpeg_bin,
+            frame_cache_dir=frame_cache_dir,
+        )
         if ai_tags:
             tags.extend(ai_tags)
             if log:
@@ -1948,8 +2037,16 @@ class YouTubeUploader:
                         description = settings.description_template.format(title=base_title_for_description)
                     except Exception:
                         description = f"{base_title_for_description}\n\n{settings.description_template}"
-                    # Pass mood to tag generation for better, context-aware tags
-                    tags = _compose_youtube_tags(title, settings, log=self.log, mood=mood)
+                    # Pass mood and video frame info for vision-enhanced, context-aware tags
+                    tags = _compose_youtube_tags(
+                        title,
+                        settings,
+                        log=self.log,
+                        mood=mood,
+                        video_path=video_file if ffmpeg_bin else None,
+                        ffmpeg_bin=ffmpeg_bin,
+                        frame_cache_dir=frame_cache_dir if ffmpeg_bin else None,
+                    )
 
                     # Debug: log title to verify it's not empty
                     self.log(self._t("log_debug_title", title=title))
