@@ -1824,7 +1824,7 @@ class YouTubeUploader:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         total = len(files)
         if total == 0:
-            self.log("Nessun video trovato in video/out.")
+            self.log(self._t("log_no_videos_found"))
             return UploadSummary(total=0, uploaded=0, failed=0)
 
         _, _, _, build, HttpError, MediaFileUpload, httplib2 = _import_youtube_modules()
@@ -1857,7 +1857,7 @@ class YouTubeUploader:
 
             # Log when new videos are detected (after first batch)
             if not first_batch:
-                self.log(f"Rilevati {len(current_files)} nuovi video pronti per l'upload...")
+                self.log(self._t("log_new_videos_detected", count=len(current_files)))
                 # Notify caller about new files
                 if on_new_files:
                     on_new_files(current_files)
@@ -1899,11 +1899,11 @@ class YouTubeUploader:
                         # Format 2 (25%): {mood} | {fileName} (Doomer Wave / slowed + reverb)
                         title = f"{mood} | {base_filename} (Doomer Wave / slowed + reverb)"
                     self._title_format_counter += 1
-                    self.log(f"  Mood generato: {mood}")
+                    self.log(f"  Mood generato: {mood}")  # Keep Italian for now - this is debug info
                 else:
                     # Fallback if AI mood generation fails
                     title = f"{base_filename} (Doomer Wave / slowed + reverb)"
-                    self.log(f"  Mood non disponibile, uso titolo standard")
+                    self.log(f"  Mood non disponibile, uso titolo standard")  # Keep Italian for now - this is debug info
 
                 # Replace hyphen with en dash for better typography
                 title = title.replace(" - ", " – ")
@@ -1952,8 +1952,8 @@ class YouTubeUploader:
                     tags = _compose_youtube_tags(title, settings, log=self.log, mood=mood)
 
                     # Debug: log title to verify it's not empty
-                    self.log(f"  DEBUG: Title = '{title}'")
-                    self.log(f"  DEBUG: Description = '{description[:100]}...'")
+                    self.log(self._t("log_debug_title", title=title))
+                    self.log(self._t("log_debug_description", description=description[:100]))
 
                     # build status dictionary taking care of scheduled uploads
                     status_dict: dict[str, object] = {
@@ -1974,10 +1974,10 @@ class YouTubeUploader:
                                 utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
                                 local_dt = utc_dt.astimezone()
                                 local_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-                                self.log(f"  Scheduled for: {local_str}")
+                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=local_str))
                             except Exception:
                                 # Fallback to UTC if conversion fails
-                                self.log(f"  Scheduled for: {utc_timestamp}")
+                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=utc_timestamp))
                     elif settings.privacy_status.startswith("Multi-day"):
                         # Multi-day scheduling: use sequential timestamps
                         status_dict["privacyStatus"] = "private"
@@ -1994,10 +1994,10 @@ class YouTubeUploader:
                                 utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
                                 local_dt = utc_dt.astimezone()
                                 local_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-                                self.log(f"  Scheduled for: {local_str}")
+                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=local_str))
                             except Exception:
                                 # Fallback to UTC if conversion fails
-                                self.log(f"  Scheduled for: {utc_timestamp}")
+                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=utc_timestamp))
 
                     request_body = {
                         "snippet": {
@@ -2173,7 +2173,7 @@ class DoomerBatchConverter:
         files = _collect_files(input_dir, AUDIO_EXTENSIONS)
         total = len(files)
         if total == 0:
-            self.log("Nessun file audio trovato nella cartella di input.")
+            self.log(self._t("log_no_audio_files"))
             return ConversionSummary(total=0, converted=0, failed=0)
 
         # Randomize processing order to avoid processing similar files consecutively
@@ -2181,7 +2181,7 @@ class DoomerBatchConverter:
 
         vinyl_files = _collect_files(self.vinyls_dir, VINYL_EXTENSIONS)
         if settings.vinyl_volume_percent > 0 and not vinyl_files:
-            self.log("Attenzione: nessun file vinile in resources/vinyls. Procedo senza overlay vinile.")
+            self.log(self._t("log_no_vinyl_warning"))
 
         converted = 0
         failed = 0
@@ -2203,14 +2203,14 @@ class DoomerBatchConverter:
 
             self.log(f"[{index}/{total}] Audio: {source_file.name}")
             if vinyl_file:
-                self.log(f"  Vinile: {vinyl_file.name}")
+                self.log(self._t("log_vinyl_name", name=vinyl_file.name))
 
             if self._convert_file(source_file, destination, settings, vinyl_file):
                 converted += 1
-                self.log(f"  OK -> {destination.name}")
+                self.log(self._t("log_file_ok", filename=destination.name))
             else:
                 failed += 1
-                self.log(f"  ERRORE -> {source_file.name}")
+                self.log(self._t("log_file_error", filename=source_file.name))
 
             progress(index, total, source_file.name)
 
@@ -2291,7 +2291,7 @@ class DoomerVideoGenerator:
         self.available_video_encoders = self._detect_available_video_encoders()
         self.failed_video_encoders: set[str] = set()
         detected = ", ".join(sorted(self.available_video_encoders))
-        self.log(f"Encoder disponibili (runtime): {detected}")
+        self.log(f"Encoder disponibili (runtime): {detected}")  # Keep Italian for now - this is debug info
 
     def generate_from_audio_folder(
         self,
@@ -2308,32 +2308,32 @@ class DoomerVideoGenerator:
         # Use selected resources if provided, otherwise use all from directories
         if selected_doomer_guys:
             doomer_guys = selected_doomer_guys
-            self.log(f"Usando {len(doomer_guys)} Doomer Guys selezionati")
+            self.log(self._t("log_using_selected_doomer_guys", count=len(doomer_guys)))
         else:
             doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
 
         if not doomer_guys:
-            self.log(f"Nessuna immagine Doomer Guy trovata")
+            self.log(f"Nessuna immagine Doomer Guy trovata")  # Keep Italian for now - this is debug info
             return VideoSummary(total=0, generated=0, failed=0)
 
         if selected_backgrounds:
             backgrounds = selected_backgrounds
-            self.log(f"Usando {len(backgrounds)} backgrounds selezionati")
+            self.log(self._t("log_using_selected_backgrounds", count=len(backgrounds)))
         else:
             backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
 
         if not backgrounds:
-            self.log(f"Nessun background trovato")
+            self.log(self._t("log_no_backgrounds_found"))
             return VideoSummary(total=0, generated=0, failed=0)
 
         # Use selected resources memory if provided, otherwise use default
         memory_path = selected_resources_memory_path if selected_resources_memory_path else self.usage_memory_path
 
         resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
-        self.log(
-            "Encoder video attivo: "
-            f"{VIDEO_ENCODER_LABELS.get(resolved_encoder, resolved_encoder)}"
-        )
+        self.log(self._t(
+            "log_encoder_active",
+            encoder=VIDEO_ENCODER_LABELS.get(resolved_encoder, resolved_encoder)
+        ))
 
         generated = 0
         failed = 0
@@ -2357,7 +2357,7 @@ class DoomerVideoGenerator:
 
             # Log when new files are detected (after first batch)
             if not first_batch:
-                self.log(f"Rilevati {len(current_files)} nuovi file audio pronti per la generazione video...")
+                self.log(self._t("log_new_audio_detected", count=len(current_files)))
                 # Notify caller about new files (for queue update)
                 if on_new_files:
                     on_new_files(current_files)
@@ -2392,13 +2392,13 @@ class DoomerVideoGenerator:
 
                 self.log(f"[{index}/{total}] Video: {audio_file.name}")
                 if background:
-                    self.log(f"  Background: {background.name}")
+                    self.log(self._t("log_background_name", name=background.name))
                 else:
-                    self.log("  Background: Nessuno selezionato")
+                    self.log(self._t("log_background_none"))
                 if doomer_guy:
-                    self.log(f"  Doomer Guy: {doomer_guy.name}")
+                    self.log(self._t("log_doomer_guy_name", name=doomer_guy.name))
                 else:
-                    self.log("  Doomer Guy: Nessuno selezionato")
+                    self.log(self._t("log_doomer_guy_none"))
 
                 # Calculate ETA based on average generation time (before processing)
                 eta_seconds = 0
@@ -2425,16 +2425,16 @@ class DoomerVideoGenerator:
                         shutil.move(str(temp_destination), str(final_destination))
                         generated += 1
                         generation_times.append(elapsed)
-                        self.log(f"  OK -> {final_destination.name}")
+                        self.log(self._t("log_file_ok", filename=final_destination.name))
                     except Exception as e:
                         failed += 1
-                        self.log(f"  ERRORE spostamento file -> {audio_file.name}: {e}")
+                        self.log(f"  ERRORE spostamento file -> {audio_file.name}: {e}")  # Keep Italian for now - this is debug info
                         # Clean up temp file if move failed
                         if temp_destination.exists():
                             temp_destination.unlink()
                 else:
                     failed += 1
-                    self.log(f"  ERRORE generazione -> {audio_file.name}")
+                    self.log(self._t("log_file_error", filename=audio_file.name))
                     # Clean up temp file if generation failed
                     if temp_destination.exists():
                         temp_destination.unlink()
