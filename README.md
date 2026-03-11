@@ -155,7 +155,33 @@ pip install -r requirements.txt
 python doomer_generator.py
 ```
 
+## Architecture Highlights
+
+### Worker Classes with Dependency Injection
+The app uses a clean architecture pattern for background workers:
+- **`DoomerBatchConverter`**: Audio processing worker
+- **`DoomerVideoGenerator`**: Video generation worker
+- **`YouTubeUploader`**: Upload worker
+
+All workers receive dependencies via constructor injection:
+- `log: Callable[[str], None]` - Thread-safe logging callback
+- `translate: Callable[[str], str]` - Translation function for i18n support
+
+This ensures:
+- ✅ No tight coupling between workers and UI
+- ✅ Full i18n support in background threads
+- ✅ Thread-safe communication via event queue
+- ✅ Clean, testable code architecture
+
+### Translation System
+- **10 languages** supported: English, Italiano, Español, Français, Deutsch, Русский, Português, العربية, 中文, हिन्दी, বাংলা
+- **Dynamic loading** with caching for performance
+- **Fallback chain**: Selected language → English → key itself
+- **Runtime switching** with full UI rebuild
+- **Worker support**: All background threads use translated messages
+
 ## Notes
 
 - `app_settings.json` stores local GUI settings and is gitignored.
 - `.gitkeep` files are preserved when clearing output folders.
+- All worker classes use dependency injection for clean architecture and i18n support.

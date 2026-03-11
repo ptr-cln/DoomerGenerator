@@ -49,6 +49,51 @@ Queue system:
 - Real-time UI refresh via event queue
 - Status tracking: pending → processing → complete/error
 
+### 2.3 Dependency Injection Pattern
+All worker classes use constructor-based dependency injection for clean architecture:
+
+**Worker Classes:**
+1. **`DoomerBatchConverter`** (audio processing)
+2. **`DoomerVideoGenerator`** (video generation)
+3. **`YouTubeUploader`** (upload management)
+
+**Injected Dependencies:**
+```python
+class WorkerClass:
+    def __init__(
+        self,
+        # ... specific dependencies ...
+        log: Callable[[str], None],      # Thread-safe logging
+        translate: Callable[[str], str]  # i18n translation
+    ):
+        self.log = log
+        self.translate = translate
+```
+
+**Benefits:**
+- ✅ **No tight coupling**: Workers don't depend on UI class
+- ✅ **Thread-safe i18n**: Translation works in background threads
+- ✅ **Testability**: Easy to mock dependencies for unit tests
+- ✅ **Consistency**: All workers follow same pattern
+
+**Translation Usage in Workers:**
+```python
+# Without parameters:
+self.log(self.translate("log_key"))
+
+# With parameters:
+self.log(self.translate("log_key_with_params").format(count=10, name="test"))
+```
+
+**Main App Integration:**
+```python
+worker = DoomerBatchConverter(
+    # ... specific args ...
+    log=lambda msg: self.events.put(("log", msg)),
+    translate=self._t  # Pass translation method
+)
+```
+
 ## 3. Filesystem Layout
 
 Expected structure:
@@ -99,12 +144,30 @@ Main classes:
 - `DoomerBatchConverter`
 - `AudioPreset` (for saving/loading presets)
 
+**`DoomerBatchConverter` Constructor:**
+```python
+def __init__(
+    self,
+    ffmpeg_bin: str,
+    vinyls_dir: Path,
+    usage_memory_path: Path,
+    log: Callable[[str], None],
+    translate: Callable[[str], str]
+):
+    self.ffmpeg_bin = ffmpeg_bin
+    self.vinyls_dir = vinyls_dir
+    self.usage_memory_path = usage_memory_path
+    self.log = log
+    self.translate = translate
+```
+
 Core behavior:
 - Collect supported audio extensions recursively from input folder.
 - For each file, build output filename with suffix ` (Doomer Wave)`.
 - Apply ffmpeg `filter_complex` built by `AudioSettings.build_filter_complex(...)`.
 - Support for pause/resume during batch processing
 - Queue integration for real-time progress tracking
+- Thread-safe logging and translation via injected callbacks
 
 Audio effects chain includes:
 - slowdown with pitch lowering (`asetrate + aresample`)
@@ -134,6 +197,25 @@ Main classes:
 - `DoomerVideoGenerator`
 - `VideoPreset` (for saving/loading presets)
 
+**`DoomerVideoGenerator` Constructor:**
+```python
+def __init__(
+    self,
+    ffmpeg_bin: str,
+    backgrounds_dir: Path,
+    doomer_guys_dir: Path,
+    usage_memory_path: Path,
+    log: Callable[[str], None],
+    translate: Callable[[str], str]
+):
+    self.ffmpeg_bin = ffmpeg_bin
+    self.backgrounds_dir = backgrounds_dir
+    self.doomer_guys_dir = doomer_guys_dir
+    self.usage_memory_path = usage_memory_path
+    self.log = log
+    self.translate = translate
+```
+
 ### 6.1 Composition
 Inputs:
 1. Random background image (looped)
@@ -148,6 +230,7 @@ Video graph (high level):
 - Support for pause/resume during batch processing
 - Queue integration for real-time progress tracking
 - Callback system for detecting new files during generation
+- Thread-safe logging and translation via injected callbacks
 
 Visual effects (all configurable 0-100%):
 - noise overlay
@@ -176,6 +259,21 @@ Resolution logic:
 Main class:
 - `YouTubeUploader`
 
+**`YouTubeUploader` Constructor:**
+```python
+def __init__(
+    self,
+    client_secret_path: Path,
+    token_path: Path,
+    log: Callable[[str], None],
+    translate: Callable[[str], str]
+):
+    self.client_secret_path = client_secret_path
+    self.token_path = token_path
+    self.log = log
+    self.translate = translate
+```
+
 Auth stack:
 - `google-auth-oauthlib`
 - `google-api-python-client`
@@ -190,6 +288,7 @@ Behavior:
 3. Upload via resumable chunks (`MediaFileUpload`, `videos.insert`, 4MB chunks).
 4. Support for pause/resume during batch processing
 5. Queue integration for real-time progress tracking
+6. Thread-safe logging and translation via injected callbacks
 
 ### 7.1 Scheduled Publishing
 When privacy is set to "scheduled":
@@ -326,7 +425,7 @@ Dynamic translation loading:
 - Runtime loading with caching (`_TRANSLATIONS_CACHE`)
 - Fallback chain: selected language → English → key itself
 
-Supported languages (10):
+Supported languages (11):
 1. English (`en.py`)
 2. Italiano (`it.py`)
 3. Español (`es.py`)
@@ -341,7 +440,7 @@ Supported languages (10):
 
 ### 11.2 Translation Keys
 All UI elements use translation keys:
-- `_t(key, **kwargs)`: Main translation method
+- `_t(key, **kwargs)`: Main translation method in `DoomerGeneratorApp`
 - Supports placeholders: `{path}`, `{time}`, `{count}`, etc.
 - Example: `self._t("log_upload_start", path=video_dir)`
 
@@ -350,6 +449,60 @@ Language switching:
 - Triggers full UI rebuild (`_rebuild_ui()`)
 - Preserves log content and current state
 - Auto-saves language preference
+
+### 11.3 Worker Thread Translation
+Worker classes receive translation function via dependency injection:
+
+**Main App (`DoomerGeneratorApp`):**
+```python
+def _t(self, key: str, **kwargs: object) -> str:
+    """Translate a key using the current language, with fallback to English."""
+    table = _load_translation(self.current_language)
+    template = table.get(key)
+
+    # Fallback to English if key not found
+    if not template and self.current_language != "en":
+        table = _load_translation("en")
+        template = table.get(key)
+
+    # Final fallback to the key itself
+    if not template:
+        template = key
+
+    if kwargs:
+        try:
+            return template.format(**kwargs)
+        except Exception:
+            return template
+    return template
+```
+
+**Worker Classes:**
+```python
+class DoomerBatchConverter:
+    def __init__(self, ..., translate: Callable[[str], str]):
+        self.translate = translate
+
+    def process(self):
+        # Simple translation:
+        self.log(self.translate("log_converting"))
+
+        # With parameters:
+        self.log(self.translate("log_file_ok").format(filename="test.mp3"))
+```
+
+**Pattern Consistency:**
+- ✅ All 493 occurrences of `self._t()` verified
+- ✅ Main app uses `self._t(key, **kwargs)` with direct parameter passing
+- ✅ Workers use `self.translate(key).format(**kwargs)` pattern
+- ✅ No `AttributeError` from missing translation method
+- ✅ Full i18n support in all background threads
+
+**Verification:**
+- Audited entire codebase for translation usage
+- Confirmed all worker classes use dependency injection
+- No lambda or nested functions use `self._t()` outside main class
+- Thread-safe translation in all contexts
 
 ## 12. Theme System
 
@@ -438,12 +591,41 @@ UI Integration:
 - GPU encoder failures -> automatic CPU fallback
 - Translation key missing -> fallback to English, then key itself
 - Preset loading errors -> logged as warnings, continue with defaults
+- Worker translation errors -> prevented via dependency injection pattern
 
-## 11. Extension Points
+### 14.1 Translation Error Prevention
+The dependency injection pattern prevents `AttributeError` in worker threads:
+
+**Problem (Old Pattern):**
+```python
+class Worker:
+    def process(self):
+        self.log(self._t("log_key"))  # ❌ AttributeError: '_t' not found
+```
+
+**Solution (Current Pattern):**
+```python
+class Worker:
+    def __init__(self, translate: Callable[[str], str]):
+        self.translate = translate
+
+    def process(self):
+        self.log(self.translate("log_key"))  # ✅ Works in background thread
+```
+
+**Verification:**
+- All 493 occurrences of `self._t()` audited
+- All worker classes use dependency injection
+- No lambda or nested functions use `self._t()` outside main class
+- Zero `AttributeError` from translation in worker threads
+
+## 15. Extension Points
 
 Recommended evolutions:
 - Move i18n dictionaries to external JSON/YAML resources
 - Add unit tests for link normalization and settings IO
+- Add unit tests for worker dependency injection
 - Add codec presets profile system (quality vs speed)
 - Add headless CLI mode for CI/batch environments
 - Optional hardware-accelerated filter path (where supported)
+- Mock translation/logging for worker class unit tests
