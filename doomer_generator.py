@@ -2409,7 +2409,7 @@ class DoomerVideoGenerator:
         # Use selected resources if provided, otherwise use all from directories
         if selected_doomer_guys:
             doomer_guys = selected_doomer_guys
-            self.log(self._t("log_using_selected_doomer_guys", count=len(doomer_guys)))
+            self.log(self.translate("log_using_selected_doomer_guys").format(count=len(doomer_guys)))
         else:
             doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
 
@@ -2419,20 +2419,19 @@ class DoomerVideoGenerator:
 
         if selected_backgrounds:
             backgrounds = selected_backgrounds
-            self.log(self._t("log_using_selected_backgrounds", count=len(backgrounds)))
+            self.log(self.translate("log_using_selected_backgrounds").format(count=len(backgrounds)))
         else:
             backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
 
         if not backgrounds:
-            self.log(self._t("log_no_backgrounds_found"))
+            self.log(self.translate("log_no_backgrounds_found"))
             return VideoSummary(total=0, generated=0, failed=0)
 
         # Use selected resources memory if provided, otherwise use default
         memory_path = selected_resources_memory_path if selected_resources_memory_path else self.usage_memory_path
 
         resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
-        self.log(self._t(
-            "log_encoder_active",
+        self.log(self.translate("log_encoder_active").format(
             encoder=VIDEO_ENCODER_LABELS.get(resolved_encoder, resolved_encoder)
         ))
 
@@ -2458,7 +2457,7 @@ class DoomerVideoGenerator:
 
             # Log when new files are detected (after first batch)
             if not first_batch:
-                self.log(self._t("log_new_audio_detected", count=len(current_files)))
+                self.log(self.translate("log_new_audio_detected").format(count=len(current_files)))
                 # Notify caller about new files (for queue update)
                 if on_new_files:
                     on_new_files(current_files)
@@ -2526,7 +2525,7 @@ class DoomerVideoGenerator:
                         shutil.move(str(temp_destination), str(final_destination))
                         generated += 1
                         generation_times.append(elapsed)
-                        self.log(self._t("log_file_ok", filename=final_destination.name))
+                        self.log(self.translate("log_file_ok").format(filename=final_destination.name))
                     except Exception as e:
                         failed += 1
                         self.log(f"  ERRORE spostamento file -> {audio_file.name}: {e}")  # Keep Italian for now - this is debug info
@@ -2535,7 +2534,7 @@ class DoomerVideoGenerator:
                             temp_destination.unlink()
                 else:
                     failed += 1
-                    self.log(self._t("log_file_error", filename=audio_file.name))
+                    self.log(self.translate("log_file_error").format(filename=audio_file.name))
                     # Clean up temp file if generation failed
                     if temp_destination.exists():
                         temp_destination.unlink()
