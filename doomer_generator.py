@@ -1888,10 +1888,11 @@ def _import_youtube_modules():
 
 
 class YouTubeUploader:
-    def __init__(self, client_secret_path: Path, token_path: Path, log: Callable[[str], None]):
+    def __init__(self, client_secret_path: Path, token_path: Path, log: Callable[[str], None], translate: Callable[[str], str]):
         self.client_secret_path = client_secret_path
         self.token_path = token_path
         self.log = log
+        self.translate = translate
         self._title_format_counter = 0  # Counter to alternate title formats
 
     def login(self) -> None:
@@ -1913,7 +1914,7 @@ class YouTubeUploader:
         files = _collect_files(video_dir, VIDEO_EXTENSIONS)
         total = len(files)
         if total == 0:
-            self.log(self._t("log_no_videos_found"))
+            self.log(self.translate("log_no_videos_found"))
             return UploadSummary(total=0, uploaded=0, failed=0)
 
         _, _, _, build, HttpError, MediaFileUpload, httplib2 = _import_youtube_modules()
@@ -1946,7 +1947,7 @@ class YouTubeUploader:
 
             # Log when new videos are detected (after first batch)
             if not first_batch:
-                self.log(self._t("log_new_videos_detected", count=len(current_files)))
+                self.log(self.translate("log_new_videos_detected").format(count=len(current_files)))
                 # Notify caller about new files
                 if on_new_files:
                     on_new_files(current_files)
@@ -2049,8 +2050,8 @@ class YouTubeUploader:
                     )
 
                     # Debug: log title to verify it's not empty
-                    self.log(self._t("log_debug_title", title=title))
-                    self.log(self._t("log_debug_description", description=description[:100]))
+                    self.log(self.translate("log_debug_title").format(title=title))
+                    self.log(self.translate("log_debug_description").format(description=description[:100]))
 
                     # build status dictionary taking care of scheduled uploads
                     status_dict: dict[str, object] = {
@@ -2071,10 +2072,10 @@ class YouTubeUploader:
                                 utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
                                 local_dt = utc_dt.astimezone()
                                 local_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=local_str))
+                                self.log(self.translate("upload_multiday_log_scheduled_for").format(timestamp=local_str))
                             except Exception:
                                 # Fallback to UTC if conversion fails
-                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=utc_timestamp))
+                                self.log(self.translate("upload_multiday_log_scheduled_for").format(timestamp=utc_timestamp))
                     elif settings.privacy_status.startswith("Multi-day"):
                         # Multi-day scheduling: use sequential timestamps
                         status_dict["privacyStatus"] = "private"
@@ -2091,10 +2092,10 @@ class YouTubeUploader:
                                 utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
                                 local_dt = utc_dt.astimezone()
                                 local_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=local_str))
+                                self.log(self.translate("upload_multiday_log_scheduled_for").format(timestamp=local_str))
                             except Exception:
                                 # Fallback to UTC if conversion fails
-                                self.log(self._t("upload_multiday_log_scheduled_for", timestamp=utc_timestamp))
+                                self.log(self.translate("upload_multiday_log_scheduled_for").format(timestamp=utc_timestamp))
 
                     request_body = {
                         "snippet": {
@@ -2253,11 +2254,12 @@ class YouTubeUploader:
 
 
 class DoomerBatchConverter:
-    def __init__(self, ffmpeg_bin: str, vinyls_dir: Path, usage_memory_path: Path, log: Callable[[str], None]):
+    def __init__(self, ffmpeg_bin: str, vinyls_dir: Path, usage_memory_path: Path, log: Callable[[str], None], translate: Callable[[str], str]):
         self.ffmpeg_bin = ffmpeg_bin
         self.vinyls_dir = vinyls_dir
         self.usage_memory_path = usage_memory_path
         self.log = log
+        self.translate = translate
 
     def convert_folder(
         self,
@@ -2270,7 +2272,7 @@ class DoomerBatchConverter:
         files = _collect_files(input_dir, AUDIO_EXTENSIONS)
         total = len(files)
         if total == 0:
-            self.log(self._t("log_no_audio_files"))
+            self.log(self.translate("log_no_audio_files"))
             return ConversionSummary(total=0, converted=0, failed=0)
 
         # Randomize processing order to avoid processing similar files consecutively
@@ -2278,7 +2280,7 @@ class DoomerBatchConverter:
 
         vinyl_files = _collect_files(self.vinyls_dir, VINYL_EXTENSIONS)
         if settings.vinyl_volume_percent > 0 and not vinyl_files:
-            self.log(self._t("log_no_vinyl_warning"))
+            self.log(self.translate("log_no_vinyl_warning"))
 
         converted = 0
         failed = 0
@@ -2300,14 +2302,14 @@ class DoomerBatchConverter:
 
             self.log(f"[{index}/{total}] Audio: {source_file.name}")
             if vinyl_file:
-                self.log(self._t("log_vinyl_name", name=vinyl_file.name))
+                self.log(self.translate("log_vinyl_name").format(name=vinyl_file.name))
 
             if self._convert_file(source_file, destination, settings, vinyl_file):
                 converted += 1
-                self.log(self._t("log_file_ok", filename=destination.name))
+                self.log(self.translate("log_file_ok").format(filename=destination.name))
             else:
                 failed += 1
-                self.log(self._t("log_file_error", filename=source_file.name))
+                self.log(self.translate("log_file_error").format(filename=source_file.name))
 
             progress(index, total, source_file.name)
 
@@ -2378,6 +2380,7 @@ class DoomerVideoGenerator:
         doomer_guys_dir: Path,
         usage_memory_path: Path,
         log: Callable[[str], None],
+        translate: Callable[[str], str],
     ):
         self.ffmpeg_bin = ffmpeg_bin
         self.ffprobe_bin = self._resolve_ffprobe(ffmpeg_bin)
@@ -2385,6 +2388,7 @@ class DoomerVideoGenerator:
         self.doomer_guys_dir = doomer_guys_dir
         self.usage_memory_path = usage_memory_path
         self.log = log
+        self.translate = translate
         self.available_video_encoders = self._detect_available_video_encoders()
         self.failed_video_encoders: set[str] = set()
         detected = ", ".join(sorted(self.available_video_encoders))
@@ -2489,13 +2493,13 @@ class DoomerVideoGenerator:
 
                 self.log(f"[{index}/{total}] Video: {audio_file.name}")
                 if background:
-                    self.log(self._t("log_background_name", name=background.name))
+                    self.log(self.translate("log_background_name").format(name=background.name))
                 else:
-                    self.log(self._t("log_background_none"))
+                    self.log(self.translate("log_background_none"))
                 if doomer_guy:
-                    self.log(self._t("log_doomer_guy_name", name=doomer_guy.name))
+                    self.log(self.translate("log_doomer_guy_name").format(name=doomer_guy.name))
                 else:
-                    self.log(self._t("log_doomer_guy_none"))
+                    self.log(self.translate("log_doomer_guy_none"))
 
                 # Calculate ETA based on average generation time (before processing)
                 eta_seconds = 0
@@ -6385,7 +6389,7 @@ class DoomerGeneratorApp:
         settings: AudioSettings,
     ) -> None:
         try:
-            converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self.usage_memory_path, self._queue_log)
+            converter = DoomerBatchConverter(ffmpeg_bin, self.vinyls_dir, self.usage_memory_path, self._queue_log, self._t)
             summary = converter.convert_folder(
                 input_dir=input_dir,
                 output_dir=output_dir,
@@ -6412,6 +6416,7 @@ class DoomerGeneratorApp:
                 doomer_guys_dir=self.doomer_guys_dir,
                 usage_memory_path=self.usage_memory_path,
                 log=self._queue_log,
+                translate=self._t,
             )
 
             def on_new_video_files(new_files: list[Path]) -> None:
@@ -6517,7 +6522,7 @@ class DoomerGeneratorApp:
     def _build_youtube_uploader(self) -> YouTubeUploader:
         client_secret = Path(self.youtube_client_secret_var.get().strip())
         token_path = Path(self.youtube_token_var.get().strip())
-        return YouTubeUploader(client_secret_path=client_secret, token_path=token_path, log=self._queue_log)
+        return YouTubeUploader(client_secret_path=client_secret, token_path=token_path, log=self._queue_log, translate=self._t)
 
     def _cleanup_after_successful_upload(self, uploaded_video_path: Path) -> None:
         self._queue_log(f"  DEBUG: Cleanup callback chiamata per: {uploaded_video_path.name}")
