@@ -1411,7 +1411,7 @@ def _generate_mood_with_ai(
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{frame_base64}",
-                    "detail": "low",  # Low detail = fewer tokens, sufficient for mood detection
+                    "detail": "high",  # High detail = 255 tokens (3x more than low), better mood accuracy
                 },
             },
         ]
