@@ -7470,7 +7470,8 @@ class DoomerGeneratorApp:
         with self.queue_lock:
             if item in self.queue_items:
                 self.queue_items.remove(item)
-                self._refresh_queue_display()  # Throttled by default
+                # Use event queue for consistency (thread-safe)
+                self.events.put(("refresh_queue", None))
 
     def _clear_complete_queue_items(self) -> None:
         """Clear all completed items from the queue."""
@@ -7510,18 +7511,24 @@ class DoomerGeneratorApp:
 
         if not force and time_since_last_refresh < self.queue_refresh_interval:
             # Too soon - mark as pending and schedule a delayed refresh
+            # This ensures the last update is always shown (coalescing)
             if not self.queue_refresh_pending:
                 self.queue_refresh_pending = True
                 # Schedule refresh after the interval
                 delay_ms = int((self.queue_refresh_interval - time_since_last_refresh) * 1000) + 100
                 self.root.after(delay_ms, self._do_pending_queue_refresh)
+            # If already pending, the scheduled refresh will show the latest state
             return
 
         # Perform the actual refresh
         self._do_queue_refresh()
 
     def _do_pending_queue_refresh(self) -> None:
-        """Execute a pending queue refresh (called by after())."""
+        """Execute a pending queue refresh (called by after()).
+
+        This ensures that even if multiple refresh requests arrive during throttling,
+        the final state is always displayed (coalescing behavior).
+        """
         self.queue_refresh_pending = False
         self._do_queue_refresh()
 
@@ -7532,84 +7539,103 @@ class DoomerGeneratorApp:
 
         self.last_queue_refresh_time = time.time()
 
-        # Clear existing items
-        # Use try-except to handle race condition when multiple threads refresh simultaneously
-        for item_id in self.queue_tree.get_children():
-            try:
-                self.queue_tree.delete(item_id)
-            except tk.TclError:
-                # Item already deleted by another thread - safe to ignore
-                pass
+        try:
+            # Clear existing items
+            for item_id in self.queue_tree.get_children():
+                try:
+                    self.queue_tree.delete(item_id)
+                except tk.TclError:
+                    # Widget destroyed during operation - abort refresh
+                    self._log_debug("Queue tree widget destroyed during clear - aborting refresh")
+                    return
 
-        # Get filter
-        filter_status = self.queue_filter_var.get()
+            # Get filter
+            filter_status = self.queue_filter_var.get()
 
-        # Add filtered items
-        with self.queue_lock:
-            # Debug: log queue_items details
-            if len(self.queue_items) > 0:
-                status_counts = {}
-                for item in self.queue_items:
-                    status_counts[item.status] = status_counts.get(item.status, 0) + 1
+            # Add filtered items (with lock to prevent race conditions)
+            with self.queue_lock:
+                # Debug: log queue_items details
+                if len(self.queue_items) > 0:
+                    status_counts = {}
+                    for item in self.queue_items:
+                        status_counts[item.status] = status_counts.get(item.status, 0) + 1
+                    # Debug log removed to avoid spam
+                    # self._log_debug(f"Queue items status breakdown: {status_counts}")
+
+                filtered_items = [
+                    item for item in self.queue_items
+                    if filter_status == "all" or item.status == filter_status
+                ]
                 # Debug log removed to avoid spam
-                # self._log_debug(f"Queue items status breakdown: {status_counts}")
+                # self._log_debug(f"Refreshing queue display: {len(self.queue_items)} total, {len(filtered_items)} filtered (filter={filter_status})")
 
-            filtered_items = [
-                item for item in self.queue_items
-                if filter_status == "all" or item.status == filter_status
-            ]
-            # Debug log removed to avoid spam
-            # self._log_debug(f"Refreshing queue display: {len(self.queue_items)} total, {len(filtered_items)} filtered (filter={filter_status})")
-
-            for item in filtered_items:
-                # Format progress
-                progress_str = f"{item.progress:.0f}%" if item.status == "processing" else ""
-
-                # Get status emoji
-                status_emoji = {
-                    "pending": "⏳",
-                    "processing": "⚙️",
-                    "complete": "✅",
-                    "error": "❌",
-                }.get(item.status, "")
-
-                # Get operation label
-                operation_label = self._t(f"queue_operation_{item.operation}")
-
-                # Insert into tree
-                self.queue_tree.insert(
-                    "",
-                    tk.END,
-                    values=(
-                        Path(item.file_path).name,
-                        operation_label,
-                        f"{status_emoji} {self._t(f'queue_status_{item.status}')}",
-                        progress_str,
-                        item.error if item.error else item.message,
-                    ),
-                )
-
-            # Update stats
-            if self.queue_stats_var is not None:
+                # Calculate stats while we have the lock
                 total = len(self.queue_items)
                 pending = sum(1 for item in self.queue_items if item.status == "pending")
                 processing = sum(1 for item in self.queue_items if item.status == "processing")
                 complete = sum(1 for item in self.queue_items if item.status == "complete")
                 error = sum(1 for item in self.queue_items if item.status == "error")
 
-                if total == 0:
-                    self.queue_stats_var.set(self._t("queue_stats_empty"))
-                else:
-                    self.queue_stats_var.set(
-                        self._t(
-                            "queue_stats",
-                            total=total,
-                            pending=pending,
-                            processing=processing,
-                            complete=complete,
-                            error=error,
-                        )
+            # Insert items into tree (outside lock to avoid blocking worker threads)
+            for item in filtered_items:
+                try:
+                    # Format progress
+                    progress_str = f"{item.progress:.0f}%" if item.status == "processing" else ""
+
+                    # Get status emoji
+                    status_emoji = {
+                        "pending": "⏳",
+                        "processing": "⚙️",
+                        "complete": "✅",
+                        "error": "❌",
+                    }.get(item.status, "")
+
+                    # Get operation label
+                    operation_label = self._t(f"queue_operation_{item.operation}")
+
+                    # Insert into tree
+                    self.queue_tree.insert(
+                        "",
+                        tk.END,
+                        values=(
+                            Path(item.file_path).name,
+                            operation_label,
+                            f"{status_emoji} {self._t(f'queue_status_{item.status}')}",
+                            progress_str,
+                            item.error if item.error else item.message,
+                        ),
                     )
+                except tk.TclError:
+                    # Widget destroyed during operation - abort refresh
+                    self._log_debug("Queue tree widget destroyed during insert - aborting refresh")
+                    return
+
+            # Update stats
+            if self.queue_stats_var is not None:
+                try:
+                    if total == 0:
+                        self.queue_stats_var.set(self._t("queue_stats_empty"))
+                    else:
+                        self.queue_stats_var.set(
+                            self._t(
+                                "queue_stats",
+                                total=total,
+                                pending=pending,
+                                processing=processing,
+                                complete=complete,
+                                error=error,
+                            )
+                        )
+                except tk.TclError:
+                    # Widget destroyed during operation - safe to ignore
+                    self._log_debug("Queue stats widget destroyed during update")
+                    return
+
+        except Exception as e:
+            # Catch any unexpected errors to prevent crashes
+            self._log_debug(f"Unexpected error in _do_queue_refresh: {e}")
+            import traceback
+            self._log_debug(traceback.format_exc())
 
     # ============================================================================
     # Performance Optimization Methods
@@ -8272,9 +8298,11 @@ class DoomerGeneratorApp:
             except queue.Empty:
                 break
 
-            if event == "log":
-                self._log(str(payload))
-            elif event == "audio_test_finished":
+            # Wrap event processing in try-except to prevent crashes from unexpected errors
+            try:
+                if event == "log":
+                    self._log(str(payload))
+                elif event == "audio_test_finished":
                 if self.audio_test_process is None and self.audio_test_temp_file is None:
                     continue
                 self.audio_test_process = None
@@ -8536,6 +8564,11 @@ class DoomerGeneratorApp:
             elif event == "refresh_queue":
                 # Refresh queue display from main thread (safe for Tkinter)
                 self._refresh_queue_display()
+            except Exception as e:
+                # Log the error but don't crash the app
+                self._log_debug(f"Error processing event '{event}': {e}")
+                import traceback
+                self._log_debug(traceback.format_exc())
 
         self.root.after(120, self._poll_events)
 
