@@ -8303,267 +8303,267 @@ class DoomerGeneratorApp:
                 if event == "log":
                     self._log(str(payload))
                 elif event == "audio_test_finished":
-                if self.audio_test_process is None and self.audio_test_temp_file is None:
-                    continue
-                self.audio_test_process = None
-                if self.audio_test_temp_file and self.audio_test_temp_file.exists():
-                    self.audio_test_temp_file.unlink(missing_ok=True)
-                self.audio_test_temp_file = None
-                self._log(self._t("log_test_finished"))
-            elif event == "download_progress":
-                percent, index, total, link_percent = payload  # type: ignore[misc]
-                self.progress_var.set(percent)
-                self.download_progress_var.set(percent)
-                progress_msg = self._t(
-                    "progress_download_file",
-                    index=index,
-                    total=total,
-                    percent=link_percent,
-                )
-                self.progress_text.set(progress_msg)
-                self.download_progress_text.set(progress_msg)
-            elif event == "upload_progress":
-                percent, index, total, file_percent, file_name, speed_mbs, eta_seconds = payload  # type: ignore[misc]
-                self.progress_var.set(percent)
-                self.upload_progress_var.set(percent)
-
-                # Format ETA as HH:MM:SS
-                hours = eta_seconds // 3600
-                minutes = (eta_seconds % 3600) // 60
-                seconds = eta_seconds % 60
-                eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
-                # Add "(In pausa)" if upload is paused
-                if self.upload_paused:
-                    eta_formatted += " (In pausa)"
-
-                progress_msg = self._t(
-                    "progress_upload_file",
-                    index=index,
-                    total=total,
-                    percent=file_percent,
-                    name=file_name,
-                    speed=speed_mbs,
-                    eta=eta_formatted,
-                )
-                self.progress_text.set(progress_msg)
-                self.upload_progress_text.set(progress_msg)
-            elif event == "audio_progress":
-                done, total, file_name = payload  # type: ignore[misc]
-                percent = 0 if total == 0 else (done / total) * 100
-                self.progress_var.set(percent)
-                self.audio_progress_var.set(percent)
-                progress_msg = self._t("progress_audio_file", done=done, total=total, name=file_name)
-                self.progress_text.set(progress_msg)
-                self.audio_progress_text.set(progress_msg)
-            elif event == "video_progress":
-                done, total, eta_seconds, audio_name, background_name = payload  # type: ignore[misc]
-                percent = 0 if total == 0 else (done / total) * 100
-                self.progress_var.set(percent)
-                self.video_progress_var.set(percent)
-
-                # Format ETA as HH:MM:SS
-                hours = eta_seconds // 3600
-                minutes = (eta_seconds % 3600) // 60
-                seconds = eta_seconds % 60
-                eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
-                # Add "(In pausa)" if video processing is paused
-                if self.video_paused:
-                    eta_formatted += " (In pausa)"
-
-                progress_msg = self._t("progress_video_detailed", done=done, total=total, eta=eta_formatted, audio=audio_name, bg=background_name)
-                self.progress_text.set(progress_msg)
-                self.video_progress_text.set(progress_msg)
-            elif event == "progress":
-                done, total = payload  # type: ignore[misc]
-                percent = 0 if total == 0 else (done / total) * 100
-                self.progress_var.set(percent)
-                self.progress_text.set(self._t("progress_generic", done=done, total=total))
-            elif event == "download_finished":
-                summary: DownloadSummary = payload  # type: ignore[assignment]
-                self.downloading = False
-                self._stop_timer("download")
-                self._set_action_buttons_enabled()
-                progress_val = 100 if summary.total else 0
-                self.progress_var.set(progress_val)
-                self.download_progress_var.set(progress_val)
-                done_msg = self._t("progress_download_done", ok=summary.downloaded, err=summary.failed)
-                self.progress_text.set(done_msg)
-                self.download_progress_text.set(done_msg)
-                self._log(
-                    self._t(
-                        "log_download_finished",
-                        total=summary.total,
-                        ok=summary.downloaded,
-                        err=summary.failed,
+                    if self.audio_test_process is None and self.audio_test_temp_file is None:
+                        continue
+                    self.audio_test_process = None
+                    if self.audio_test_temp_file and self.audio_test_temp_file.exists():
+                        self.audio_test_temp_file.unlink(missing_ok=True)
+                    self.audio_test_temp_file = None
+                    self._log(self._t("log_test_finished"))
+                elif event == "download_progress":
+                    percent, index, total, link_percent = payload  # type: ignore[misc]
+                    self.progress_var.set(percent)
+                    self.download_progress_var.set(percent)
+                    progress_msg = self._t(
+                        "progress_download_file",
+                        index=index,
+                        total=total,
+                        percent=link_percent,
                     )
-                )
-            elif event == "download_runtime_error":
-                self.downloading = False
-                self._stop_timer("download")
-                self._set_action_buttons_enabled()
-                detail = str(payload)
-                self._log(self._t("log_runtime_download_error", detail=detail))
-                self.progress_text.set(self._t("progress_runtime_download_error"))
-                self.download_progress_text.set(self._t("progress_runtime_download_error"))
-            elif event == "youtube_login_ok":
-                self.youtube_authenticating = False
-                self._set_action_buttons_enabled()
-                self.progress_var.set(100)
-                self.progress_text.set(self._t("progress_login_done"))
-                self._log(self._t("log_login_done"))
-            elif event == "youtube_login_error":
-                self.youtube_authenticating = False
-                self._set_action_buttons_enabled()
-                detail = str(payload)
-                self.progress_text.set(self._t("progress_login_error"))
-                self._log(self._t("log_login_error", detail=detail))
-            elif event == "upload_finished":
-                summary: UploadSummary = payload  # type: ignore[assignment]
-                self.uploading = False
-                self.upload_paused = False  # Reset pause flag
+                    self.progress_text.set(progress_msg)
+                    self.download_progress_text.set(progress_msg)
+                elif event == "upload_progress":
+                    percent, index, total, file_percent, file_name, speed_mbs, eta_seconds = payload  # type: ignore[misc]
+                    self.progress_var.set(percent)
+                    self.upload_progress_var.set(percent)
 
-                # Mark last file as complete
-                if self.last_processed_file and self.last_processed_file in self.current_queue_items:
-                    item = self.current_queue_items[self.last_processed_file]
-                    self._update_queue_item(item, status="complete", progress=100.0, message="Uploaded")
-                self.last_processed_file = None
+                    # Format ETA as HH:MM:SS
+                    hours = eta_seconds // 3600
+                    minutes = (eta_seconds % 3600) // 60
+                    seconds = eta_seconds % 60
+                    eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-                self._stop_timer("upload")
-                if not self.youtube_authenticating:
+                    # Add "(In pausa)" if upload is paused
+                    if self.upload_paused:
+                        eta_formatted += " (In pausa)"
+
+                    progress_msg = self._t(
+                        "progress_upload_file",
+                        index=index,
+                        total=total,
+                        percent=file_percent,
+                        name=file_name,
+                        speed=speed_mbs,
+                        eta=eta_formatted,
+                    )
+                    self.progress_text.set(progress_msg)
+                    self.upload_progress_text.set(progress_msg)
+                elif event == "audio_progress":
+                    done, total, file_name = payload  # type: ignore[misc]
+                    percent = 0 if total == 0 else (done / total) * 100
+                    self.progress_var.set(percent)
+                    self.audio_progress_var.set(percent)
+                    progress_msg = self._t("progress_audio_file", done=done, total=total, name=file_name)
+                    self.progress_text.set(progress_msg)
+                    self.audio_progress_text.set(progress_msg)
+                elif event == "video_progress":
+                    done, total, eta_seconds, audio_name, background_name = payload  # type: ignore[misc]
+                    percent = 0 if total == 0 else (done / total) * 100
+                    self.progress_var.set(percent)
+                    self.video_progress_var.set(percent)
+
+                    # Format ETA as HH:MM:SS
+                    hours = eta_seconds // 3600
+                    minutes = (eta_seconds % 3600) // 60
+                    seconds = eta_seconds % 60
+                    eta_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                    # Add "(In pausa)" if video processing is paused
+                    if self.video_paused:
+                        eta_formatted += " (In pausa)"
+
+                    progress_msg = self._t("progress_video_detailed", done=done, total=total, eta=eta_formatted, audio=audio_name, bg=background_name)
+                    self.progress_text.set(progress_msg)
+                    self.video_progress_text.set(progress_msg)
+                elif event == "progress":
+                    done, total = payload  # type: ignore[misc]
+                    percent = 0 if total == 0 else (done / total) * 100
+                    self.progress_var.set(percent)
+                    self.progress_text.set(self._t("progress_generic", done=done, total=total))
+                elif event == "download_finished":
+                    summary: DownloadSummary = payload  # type: ignore[assignment]
+                    self.downloading = False
+                    self._stop_timer("download")
                     self._set_action_buttons_enabled()
-                progress_val = 100 if summary.total else 0
-                self.progress_var.set(progress_val)
-                self.upload_progress_var.set(progress_val)
-                done_msg = self._t("progress_upload_done", ok=summary.uploaded, err=summary.failed)
-                self.progress_text.set(done_msg)
-                self.upload_progress_text.set(done_msg)
-                self._log(
-                    self._t(
-                        "log_upload_finished",
-                        total=summary.total,
-                        ok=summary.uploaded,
-                        err=summary.failed,
+                    progress_val = 100 if summary.total else 0
+                    self.progress_var.set(progress_val)
+                    self.download_progress_var.set(progress_val)
+                    done_msg = self._t("progress_download_done", ok=summary.downloaded, err=summary.failed)
+                    self.progress_text.set(done_msg)
+                    self.download_progress_text.set(done_msg)
+                    self._log(
+                        self._t(
+                            "log_download_finished",
+                            total=summary.total,
+                            ok=summary.downloaded,
+                            err=summary.failed,
+                        )
                     )
-                )
-                # Check shutdown checkbox value at completion time (not at start)
-                if self.youtube_shutdown_after_upload_var.get():
-                    # Only shutdown if no other operations are running
-                    if not (self.downloading or self.audio_processing or self.video_processing or self.youtube_authenticating):
-                        self._schedule_shutdown()
-                    else:
-                        self._log(self._t("log_shutdown_skipped_busy"))
-            elif event == "upload_runtime_error":
-                self.uploading = False
-                self._stop_timer("upload")
-                self._set_action_buttons_enabled()
-                detail = str(payload)
-                self._log(self._t("log_runtime_upload_error", detail=detail))
-                self.progress_text.set(self._t("progress_runtime_upload_error"))
-                self.upload_progress_text.set(self._t("progress_runtime_upload_error"))
-            elif event == "audio_runtime_error":
-                self.audio_processing = False
-                self._stop_timer("audio")
-                self._set_action_buttons_enabled()
-                detail = str(payload)
-                self._log(self._t("log_runtime_audio_error", detail=detail))
-                self.progress_text.set(self._t("progress_runtime_audio_error"))
-                self.audio_progress_text.set(self._t("progress_runtime_audio_error"))
-            elif event == "audio_finished":
-                summary: ConversionSummary = payload  # type: ignore[assignment]
-                self.audio_processing = False
-                self.audio_paused = False  # Reset pause flag
+                elif event == "download_runtime_error":
+                    self.downloading = False
+                    self._stop_timer("download")
+                    self._set_action_buttons_enabled()
+                    detail = str(payload)
+                    self._log(self._t("log_runtime_download_error", detail=detail))
+                    self.progress_text.set(self._t("progress_runtime_download_error"))
+                    self.download_progress_text.set(self._t("progress_runtime_download_error"))
+                elif event == "youtube_login_ok":
+                    self.youtube_authenticating = False
+                    self._set_action_buttons_enabled()
+                    self.progress_var.set(100)
+                    self.progress_text.set(self._t("progress_login_done"))
+                    self._log(self._t("log_login_done"))
+                elif event == "youtube_login_error":
+                    self.youtube_authenticating = False
+                    self._set_action_buttons_enabled()
+                    detail = str(payload)
+                    self.progress_text.set(self._t("progress_login_error"))
+                    self._log(self._t("log_login_error", detail=detail))
+                elif event == "upload_finished":
+                    summary: UploadSummary = payload  # type: ignore[assignment]
+                    self.uploading = False
+                    self.upload_paused = False  # Reset pause flag
 
-                # Mark last file as complete
-                if self.last_processed_file and self.last_processed_file in self.current_queue_items:
-                    item = self.current_queue_items[self.last_processed_file]
-                    self._update_queue_item(item, status="complete", progress=100.0, message="Done")
-                self.last_processed_file = None
+                    # Mark last file as complete
+                    if self.last_processed_file and self.last_processed_file in self.current_queue_items:
+                        item = self.current_queue_items[self.last_processed_file]
+                        self._update_queue_item(item, status="complete", progress=100.0, message="Uploaded")
+                    self.last_processed_file = None
 
-                self._stop_timer("audio")
-                self._set_action_buttons_enabled()
-                progress_val = 100 if summary.total else 0
-                self.progress_var.set(progress_val)
-                self.audio_progress_var.set(progress_val)
-                done_msg = self._t("progress_audio_done", ok=summary.converted, err=summary.failed)
-                self.progress_text.set(done_msg)
-                self.audio_progress_text.set(done_msg)
-                self._log(
-                    self._t(
-                        "log_audio_finished",
-                        total=summary.total,
-                        ok=summary.converted,
-                        err=summary.failed,
+                    self._stop_timer("upload")
+                    if not self.youtube_authenticating:
+                        self._set_action_buttons_enabled()
+                    progress_val = 100 if summary.total else 0
+                    self.progress_var.set(progress_val)
+                    self.upload_progress_var.set(progress_val)
+                    done_msg = self._t("progress_upload_done", ok=summary.uploaded, err=summary.failed)
+                    self.progress_text.set(done_msg)
+                    self.upload_progress_text.set(done_msg)
+                    self._log(
+                        self._t(
+                            "log_upload_finished",
+                            total=summary.total,
+                            ok=summary.uploaded,
+                            err=summary.failed,
+                        )
                     )
-                )
-            elif event == "video_runtime_error":
-                self.video_processing = False
-                self._stop_timer("video")
-                self._set_action_buttons_enabled()
-                detail = str(payload)
-                self._log(self._t("log_runtime_video_error", detail=detail))
-                self.progress_text.set(self._t("progress_runtime_video_error"))
-                self.video_progress_text.set(self._t("progress_runtime_video_error"))
-            elif event == "video_finished":
-                summary: VideoSummary = payload  # type: ignore[assignment]
-                self.video_processing = False
-                self.video_paused = False  # Reset pause flag
+                    # Check shutdown checkbox value at completion time (not at start)
+                    if self.youtube_shutdown_after_upload_var.get():
+                        # Only shutdown if no other operations are running
+                        if not (self.downloading or self.audio_processing or self.video_processing or self.youtube_authenticating):
+                            self._schedule_shutdown()
+                        else:
+                            self._log(self._t("log_shutdown_skipped_busy"))
+                elif event == "upload_runtime_error":
+                    self.uploading = False
+                    self._stop_timer("upload")
+                    self._set_action_buttons_enabled()
+                    detail = str(payload)
+                    self._log(self._t("log_runtime_upload_error", detail=detail))
+                    self.progress_text.set(self._t("progress_runtime_upload_error"))
+                    self.upload_progress_text.set(self._t("progress_runtime_upload_error"))
+                elif event == "audio_runtime_error":
+                    self.audio_processing = False
+                    self._stop_timer("audio")
+                    self._set_action_buttons_enabled()
+                    detail = str(payload)
+                    self._log(self._t("log_runtime_audio_error", detail=detail))
+                    self.progress_text.set(self._t("progress_runtime_audio_error"))
+                    self.audio_progress_text.set(self._t("progress_runtime_audio_error"))
+                elif event == "audio_finished":
+                    summary: ConversionSummary = payload  # type: ignore[assignment]
+                    self.audio_processing = False
+                    self.audio_paused = False  # Reset pause flag
 
-                # Mark last file as complete
-                if self.last_processed_file and self.last_processed_file in self.current_queue_items:
-                    item = self.current_queue_items[self.last_processed_file]
-                    self._update_queue_item(item, status="complete", progress=100.0, message="Done")
-                self.last_processed_file = None
+                    # Mark last file as complete
+                    if self.last_processed_file and self.last_processed_file in self.current_queue_items:
+                        item = self.current_queue_items[self.last_processed_file]
+                        self._update_queue_item(item, status="complete", progress=100.0, message="Done")
+                    self.last_processed_file = None
 
-                self._stop_timer("video")
-                self._set_action_buttons_enabled()
-                progress_val = 100 if summary.total else 0
-                self.progress_var.set(progress_val)
-                self.video_progress_var.set(progress_val)
-                done_msg = self._t("progress_video_done", ok=summary.generated, err=summary.failed)
-                self.progress_text.set(done_msg)
-                self.video_progress_text.set(done_msg)
-                self._log(
-                    self._t(
-                        "log_video_finished",
-                        total=summary.total,
-                        ok=summary.generated,
-                        err=summary.failed,
+                    self._stop_timer("audio")
+                    self._set_action_buttons_enabled()
+                    progress_val = 100 if summary.total else 0
+                    self.progress_var.set(progress_val)
+                    self.audio_progress_var.set(progress_val)
+                    done_msg = self._t("progress_audio_done", ok=summary.converted, err=summary.failed)
+                    self.progress_text.set(done_msg)
+                    self.audio_progress_text.set(done_msg)
+                    self._log(
+                        self._t(
+                            "log_audio_finished",
+                            total=summary.total,
+                            ok=summary.converted,
+                            err=summary.failed,
+                        )
                     )
-                )
-                # Check shutdown checkbox value at completion time (not at start)
-                if self.video_shutdown_after_generation_var.get():
-                    # Only shutdown if no other operations are running
-                    if not (self.downloading or self.audio_processing or self.uploading or self.youtube_authenticating):
-                        self._schedule_shutdown()
-                    else:
-                        self._log(self._t("log_shutdown_skipped_busy"))
-            elif event == "update_available":
-                update_info = payload  # type: ignore[assignment]
-                self._log(self._t("log_update_available", version=update_info.get("version", "unknown")))
-                self._show_update_dialog(update_info)
-            elif event == "update_no_update":
-                version = str(payload)
-                messagebox.showinfo(
-                    self._t("update_dialog_title"),
-                    self._t("update_no_update_message", version=version)
-                )
-            elif event == "update_check_failed":
-                error = str(payload)
-                messagebox.showerror(
-                    self._t("update_dialog_title"),
-                    self._t("update_check_error", error=error)
-                )
-            elif event == "update_no_releases":
-                version = str(payload)
-                messagebox.showinfo(
-                    self._t("update_dialog_title"),
-                    self._t("update_no_releases_message", version=version)
-                )
-            elif event == "refresh_queue":
-                # Refresh queue display from main thread (safe for Tkinter)
-                self._refresh_queue_display()
+                elif event == "video_runtime_error":
+                    self.video_processing = False
+                    self._stop_timer("video")
+                    self._set_action_buttons_enabled()
+                    detail = str(payload)
+                    self._log(self._t("log_runtime_video_error", detail=detail))
+                    self.progress_text.set(self._t("progress_runtime_video_error"))
+                    self.video_progress_text.set(self._t("progress_runtime_video_error"))
+                elif event == "video_finished":
+                    summary: VideoSummary = payload  # type: ignore[assignment]
+                    self.video_processing = False
+                    self.video_paused = False  # Reset pause flag
+
+                    # Mark last file as complete
+                    if self.last_processed_file and self.last_processed_file in self.current_queue_items:
+                        item = self.current_queue_items[self.last_processed_file]
+                        self._update_queue_item(item, status="complete", progress=100.0, message="Done")
+                    self.last_processed_file = None
+
+                    self._stop_timer("video")
+                    self._set_action_buttons_enabled()
+                    progress_val = 100 if summary.total else 0
+                    self.progress_var.set(progress_val)
+                    self.video_progress_var.set(progress_val)
+                    done_msg = self._t("progress_video_done", ok=summary.generated, err=summary.failed)
+                    self.progress_text.set(done_msg)
+                    self.video_progress_text.set(done_msg)
+                    self._log(
+                        self._t(
+                            "log_video_finished",
+                            total=summary.total,
+                            ok=summary.generated,
+                            err=summary.failed,
+                        )
+                    )
+                    # Check shutdown checkbox value at completion time (not at start)
+                    if self.video_shutdown_after_generation_var.get():
+                        # Only shutdown if no other operations are running
+                        if not (self.downloading or self.audio_processing or self.uploading or self.youtube_authenticating):
+                            self._schedule_shutdown()
+                        else:
+                            self._log(self._t("log_shutdown_skipped_busy"))
+                elif event == "update_available":
+                    update_info = payload  # type: ignore[assignment]
+                    self._log(self._t("log_update_available", version=update_info.get("version", "unknown")))
+                    self._show_update_dialog(update_info)
+                elif event == "update_no_update":
+                    version = str(payload)
+                    messagebox.showinfo(
+                        self._t("update_dialog_title"),
+                        self._t("update_no_update_message", version=version)
+                    )
+                elif event == "update_check_failed":
+                    error = str(payload)
+                    messagebox.showerror(
+                        self._t("update_dialog_title"),
+                        self._t("update_check_error", error=error)
+                    )
+                elif event == "update_no_releases":
+                    version = str(payload)
+                    messagebox.showinfo(
+                        self._t("update_dialog_title"),
+                        self._t("update_no_releases_message", version=version)
+                    )
+                elif event == "refresh_queue":
+                    # Refresh queue display from main thread (safe for Tkinter)
+                    self._refresh_queue_display()
             except Exception as e:
                 # Log the error but don't crash the app
                 self._log_debug(f"Error processing event '{event}': {e}")
