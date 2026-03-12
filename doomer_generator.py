@@ -2994,7 +2994,7 @@ class DoomerVideoGenerator:
         progress(1, 3, 0, "Concatenazione audio", background.name)
 
         # Use processing directory for temp file
-        processing_dir = self.processing_dir
+        processing_dir = video_output_dir / "processing"
         processing_dir.mkdir(parents=True, exist_ok=True)
         temp_audio = processing_dir / "temp_concatenated_audio.mp3"
 
