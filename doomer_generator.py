@@ -656,12 +656,28 @@ def _check_and_reset_memory(
     memory = _load_usage_memory(memory_file)
     current_file_paths = {str(f) for f in current_files}
     stored_paths = set(memory.get(memory_key, {}).keys())
-    
+
     # If files have been added or removed, reset memory for this category
     if current_file_paths != stored_paths:
         memory[memory_key] = {str(f): 0 for f in current_files}
         _save_usage_memory(memory_file, memory)
-    
+
+    return memory
+
+
+def _check_and_reset_memory_in_place(
+    memory: dict[str, dict[str, int]],
+    current_files: list[Path],
+    memory_key: str
+) -> dict[str, dict[str, int]]:
+    """Check if new files were added, reset memory if needed (in-place version)."""
+    current_file_paths = {str(f) for f in current_files}
+    stored_paths = set(memory.get(memory_key, {}).keys())
+
+    # If files have been added or removed, reset memory for this category
+    if current_file_paths != stored_paths:
+        memory[memory_key] = {str(f): 0 for f in current_files}
+
     return memory
 
 
@@ -2784,17 +2800,25 @@ class DoomerVideoGenerator:
                 final_destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
                 final_destination.parent.mkdir(parents=True, exist_ok=True)
 
-                # Select least used background
-                memory = _check_and_reset_memory(memory_path, backgrounds, "backgrounds")
-                background = _get_least_used_file(backgrounds, memory, "backgrounds")
-                if background:
-                    _increment_usage(memory_path, background, "backgrounds")
+                # Load memory once at the start to avoid race conditions
+                memory = _load_usage_memory(memory_path)
 
-                # Select least used doomer guy image
-                memory = _check_and_reset_memory(memory_path, doomer_guys, "doomer_guys")
+                # Check and update memory for backgrounds
+                memory = _check_and_reset_memory_in_place(memory, backgrounds, "backgrounds")
+                background = _get_least_used_file(backgrounds, memory, "backgrounds")
+
+                # Check and update memory for doomer guys
+                memory = _check_and_reset_memory_in_place(memory, doomer_guys, "doomer_guys")
                 doomer_guy = _get_least_used_file(doomer_guys, memory, "doomer_guys")
+
+                # Increment usage for both and save once
+                if background:
+                    memory["backgrounds"][str(background)] = memory["backgrounds"].get(str(background), 0) + 1
                 if doomer_guy:
-                    _increment_usage(memory_path, doomer_guy, "doomer_guys")
+                    memory["doomer_guys"][str(doomer_guy)] = memory["doomer_guys"].get(str(doomer_guy), 0) + 1
+
+                # Save memory once after all updates
+                _save_usage_memory(memory_path, memory)
 
                 self.log(f"[{index}/{total}] Video: {audio_file.name}")
                 if background:
@@ -2983,8 +3007,25 @@ class DoomerVideoGenerator:
             self.log("Background o Doomer Guy mancanti")
             return VideoSummary(total=0, generated=0, failed=0)
 
-        background = random.choice(backgrounds)
-        doomer_guy = random.choice(doomer_guys)
+        # Use usage memory system for selection
+        memory_path = self.usage_memory_path
+        memory = _load_usage_memory(memory_path)
+
+        # Check and update memory for backgrounds
+        memory = _check_and_reset_memory_in_place(memory, backgrounds, "backgrounds")
+        background = _get_least_used_file(backgrounds, memory, "backgrounds")
+
+        # Check and update memory for doomer guys
+        memory = _check_and_reset_memory_in_place(memory, doomer_guys, "doomer_guys")
+        doomer_guy = _get_least_used_file(doomer_guys, memory, "doomer_guys")
+
+        # Increment usage for both and save
+        if background:
+            memory["backgrounds"][str(background)] = memory["backgrounds"].get(str(background), 0) + 1
+        if doomer_guy:
+            memory["doomer_guys"][str(doomer_guy)] = memory["doomer_guys"].get(str(doomer_guy), 0) + 1
+
+        _save_usage_memory(memory_path, memory)
 
         self.log(f"Background: {background.name}")
         self.log(f"Doomer Guy: {doomer_guy.name}")
