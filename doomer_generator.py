@@ -4423,7 +4423,7 @@ class DoomerGeneratorApp:
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
         # General settings (Single Video Mode)
-        general_frame = ttk.LabelFrame(parent, text="Generali", padding=8)
+        general_frame = ttk.LabelFrame(parent, text=self._t("video_group_general"), padding=8)
         general_frame.pack(fill=tk.X, pady=(0, 8))
         general_frame.columnconfigure(1, weight=1)
 
@@ -4431,13 +4431,13 @@ class DoomerGeneratorApp:
         self.single_video_mode_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             general_frame,
-            text="Video unico",
+            text=self._t("video_check_single_mode"),
             variable=self.single_video_mode_var,
             command=self._on_single_video_mode_changed
         ).grid(row=0, column=0, columnspan=2, padx=6, pady=6, sticky="w")
 
         # Duration (HH:MM:SS)
-        ttk.Label(general_frame, text="Durata:").grid(
+        ttk.Label(general_frame, text=self._t("video_lbl_duration")).grid(
             row=1, column=0, padx=6, pady=6, sticky="w"
         )
         duration_frame = ttk.Frame(general_frame)
@@ -4455,7 +4455,7 @@ class DoomerGeneratorApp:
         ttk.Label(duration_frame, text="s").pack(side=tk.LEFT, padx=2)
 
         # Silence
-        ttk.Label(general_frame, text="Silenzio tra canzoni (secondi):").grid(
+        ttk.Label(general_frame, text=self._t("video_lbl_silence")).grid(
             row=2, column=0, padx=6, pady=6, sticky="w"
         )
         self.single_video_silence_var = tk.StringVar(value="1.0")
@@ -4470,7 +4470,7 @@ class DoomerGeneratorApp:
         silence_spinbox.grid(row=2, column=1, padx=6, pady=6, sticky="w")
 
         # Custom title
-        ttk.Label(general_frame, text="Titolo video:").grid(
+        ttk.Label(general_frame, text=self._t("video_lbl_title")).grid(
             row=3, column=0, padx=6, pady=6, sticky="w"
         )
         self.single_video_title_var = tk.StringVar(value="")
@@ -6346,10 +6346,13 @@ class DoomerGeneratorApp:
                 minutes_available = int((total_audio_duration % 3600) // 60)
 
                 messagebox.showerror(
-                    "Audio insufficienti",
-                    f"Durata totale audio: {hours_available}h {minutes_available}m\n"
-                    f"Durata target: {hours_target}h {minutes_target}m\n\n"
-                    f"Impossibile generare video: audio insufficienti per raggiungere la durata target.",
+                    self._t("video_single_error_title"),
+                    self._t("video_single_error_body",
+                        hours_available=hours_available,
+                        minutes_available=minutes_available,
+                        hours_target=hours_target,
+                        minutes_target=minutes_target
+                    ),
                     parent=self.root
                 )
                 return
@@ -6360,10 +6363,12 @@ class DoomerGeneratorApp:
             minutes = (settings.single_video_duration_seconds % 3600) // 60
 
             confirm = messagebox.askyesno(
-                "Conferma generazione video unico",
-                f"Stai per generare un video unico di circa {hours}h {minutes}m con {num_songs} canzoni.\n"
-                f"Questa operazione potrebbe richiedere molto tempo.\n\n"
-                f"Vuoi continuare?",
+                self._t("video_single_confirm_title"),
+                self._t("video_single_confirm_body",
+                    hours=hours,
+                    minutes=minutes,
+                    num_songs=num_songs
+                ),
                 parent=self.root
             )
 
