@@ -100,7 +100,7 @@ TRANSLATIONS = {
     "video_lbl_glitch": "Glitch digitale (%)",
     "video_desc_glitch": "Disturbi digitali casuali e shift di colore.",
     "video_check_shutdown": "Spegni computer al termine (5m)",
-    "video_btn_generate": "Genera video batch",
+    "video_btn_generate": "Genera video",
     "video_btn_play_test": "▶ Preview (20s)",
     "video_btn_reset": "Reset default",
     "video_play_test_generating": "Generazione preview in corso...",

@@ -294,6 +294,11 @@ class VideoSettings:
     glitch_effect: float = 0.0
     video_encoder: str = "auto"
     shutdown_after_generation: bool = False
+    # Single video mode settings (not saved in presets)
+    single_video_mode: bool = False
+    single_video_duration_seconds: int = 3600  # 1 hour default
+    single_video_silence_seconds: float = 1.0
+    single_video_title: str = ""
 
     def build_filter_complex(self, audio_duration_seconds: float | None) -> str:
         noise_amount = round(5.0 + (self.noise_percent / 100.0) * 38.0, 2)
@@ -2695,6 +2700,18 @@ class DoomerVideoGenerator:
         selected_doomer_guys: list[Path] | None = None,
         selected_resources_memory_path: Path | None = None,
     ) -> VideoSummary:
+        # Single video mode - different logic
+        if settings.single_video_mode:
+            return self._generate_single_long_video(
+                audio_input_dir=audio_input_dir,
+                video_output_dir=video_output_dir,
+                settings=settings,
+                progress=progress,
+                check_pause=check_pause,
+                selected_backgrounds=selected_backgrounds,
+                selected_doomer_guys=selected_doomer_guys,
+            )
+
         # Use selected resources if provided, otherwise use all from directories
         if selected_doomer_guys:
             doomer_guys = selected_doomer_guys
@@ -2898,6 +2915,207 @@ class DoomerVideoGenerator:
         if detail:
             self.log(f"  ffmpeg: {detail}")
         return False
+
+    def _generate_single_long_video(
+        self,
+        audio_input_dir: Path,
+        video_output_dir: Path,
+        settings: VideoSettings,
+        progress: Callable[[int, int, int, str, str], None],
+        check_pause: Callable[[], bool] | None = None,
+        selected_backgrounds: list[Path] | None = None,
+        selected_doomer_guys: list[Path] | None = None,
+    ) -> VideoSummary:
+        """Generate a single long video by concatenating multiple audio files."""
+        self.log("=== MODALITÀ VIDEO UNICO ===")
+        self.log(f"Durata target: {settings.single_video_duration_seconds // 3600}h {(settings.single_video_duration_seconds % 3600) // 60}m")
+        self.log(f"Silenzio: {settings.single_video_silence_seconds}s")
+
+        # Get all audio files and shuffle them
+        audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
+        if not audio_files:
+            self.log("Nessun file audio trovato")
+            return VideoSummary(total=0, generated=0, failed=0)
+
+        random.shuffle(audio_files)
+        self.log(f"File audio trovati: {len(audio_files)}")
+
+        # Select files until we reach target duration
+        selected_files: list[Path] = []
+        accumulated_duration = 0.0
+        target_duration = settings.single_video_duration_seconds
+
+        for audio_file in audio_files:
+            duration = self._probe_duration_seconds(audio_file)
+            if duration is None:
+                self.log(f"  Impossibile rilevare durata: {audio_file.name} (saltato)")
+                continue
+
+            # Add the file
+            selected_files.append(audio_file)
+            accumulated_duration += duration
+            self.log(f"  Aggiunto: {audio_file.name} ({int(duration)}s) - Totale: {int(accumulated_duration)}s")
+
+            # Check if we've reached or exceeded the target duration
+            if accumulated_duration >= target_duration:
+                # We've reached the target, stop adding files
+                break
+
+        if not selected_files:
+            self.log("Nessun file audio valido trovato")
+            return VideoSummary(total=0, generated=0, failed=0)
+
+        self.log(f"File selezionati: {len(selected_files)}")
+        self.log(f"Durata totale: {int(accumulated_duration)}s ({int(accumulated_duration // 60)}m)")
+
+        # Select background and doomer guy (random or from selection)
+        if selected_backgrounds:
+            backgrounds = selected_backgrounds
+        else:
+            backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+
+        if selected_doomer_guys:
+            doomer_guys = selected_doomer_guys
+        else:
+            doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+
+        if not backgrounds or not doomer_guys:
+            self.log("Background o Doomer Guy mancanti")
+            return VideoSummary(total=0, generated=0, failed=0)
+
+        background = random.choice(backgrounds)
+        doomer_guy = random.choice(doomer_guys)
+
+        self.log(f"Background: {background.name}")
+        self.log(f"Doomer Guy: {doomer_guy.name}")
+
+        # Generate concatenated audio file
+        self.log("Concatenazione audio in corso...")
+        progress(1, 3, 0, "Concatenazione audio", background.name)
+
+        # Use processing directory for temp file
+        processing_dir = self.processing_dir
+        processing_dir.mkdir(parents=True, exist_ok=True)
+        temp_audio = processing_dir / "temp_concatenated_audio.mp3"
+
+        success = self._concatenate_audio_files(
+            selected_files,
+            temp_audio,
+            settings.single_video_silence_seconds,
+        )
+
+        if not success or not temp_audio.exists():
+            self.log("ERRORE: Concatenazione audio fallita")
+            return VideoSummary(total=1, generated=0, failed=1)
+
+        # Generate video from concatenated audio
+        self.log("Generazione video in corso...")
+        progress(2, 3, 0, "Generazione video", background.name)
+
+        # Determine output filename
+        if settings.single_video_title:
+            output_filename = f"{settings.single_video_title}.mp4"
+        else:
+            output_filename = f"doomer_mix_{len(selected_files)}_songs.mp4"
+
+        # Generate video in processing directory first
+        temp_video = processing_dir / output_filename
+        resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
+
+        video_success = self._generate_single_video(
+            audio_file=temp_audio,
+            background=background,
+            doomer_guy=doomer_guy,
+            destination=temp_video,
+            settings=settings,
+            resolved_encoder=resolved_encoder,
+        )
+
+        # Clean up temp audio
+        if temp_audio.exists():
+            temp_audio.unlink()
+
+        if video_success and temp_video.exists():
+            # Move video from processing to output directory
+            final_destination = video_output_dir / output_filename
+            import shutil
+            shutil.move(str(temp_video), str(final_destination))
+            self.log(f"✓ Video generato: {output_filename}")
+            progress(3, 3, 0, "Completato", background.name)
+            return VideoSummary(total=1, generated=1, failed=0)
+        else:
+            self.log("ERRORE: Generazione video fallita")
+            # Clean up temp video if it exists
+            if temp_video.exists():
+                temp_video.unlink()
+            return VideoSummary(total=1, generated=0, failed=1)
+
+    def _concatenate_audio_files(
+        self,
+        audio_files: list[Path],
+        output_path: Path,
+        silence_seconds: float,
+    ) -> bool:
+        """Concatenate multiple audio files with optional silence between tracks."""
+        if not audio_files:
+            return False
+
+        if len(audio_files) == 1:
+            # Single file - just copy it
+            import shutil
+            shutil.copy(str(audio_files[0]), str(output_path))
+            return True
+
+        # Build FFmpeg filter complex for concatenation
+        if silence_seconds > 0:
+            # Add silence between tracks using adelay
+            filter_parts = []
+            for i in range(len(audio_files)):
+                if i > 0:
+                    # Add delay to all tracks except the first
+                    filter_parts.append(f"[{i}:a]adelay={int(silence_seconds * 1000)}|{int(silence_seconds * 1000)}[delayed{i}];")
+                else:
+                    # First track - no delay
+                    filter_parts.append(f"[{i}:a]anull[delayed{i}];")
+            # Concatenate all delayed tracks
+            filter_parts.append("".join([f"[delayed{i}]" for i in range(len(audio_files))]))
+            filter_parts.append(f"concat=n={len(audio_files)}:v=0:a=1[out]")
+            filter_complex = "".join(filter_parts)
+            output_label = "[out]"
+        else:
+            # Simple concat without silence
+            filter_complex = "".join([f"[{i}:a]" for i in range(len(audio_files))]) + f"concat=n={len(audio_files)}:v=0:a=1[out]"
+            output_label = "[out]"
+
+        # Build FFmpeg command
+        command = [
+            self.ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-y",
+        ]
+
+        # Add all input files
+        for audio_file in audio_files:
+            command.extend(["-i", str(audio_file)])
+
+        # Add filter complex
+        command.extend([
+            "-filter_complex", filter_complex,
+            "-map", output_label,
+            "-c:a", "libmp3lame",
+            "-b:a", "192k",
+            str(output_path),
+        ])
+
+        self.log(f"Concatenazione di {len(audio_files)} file audio...")
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            self.log(f"ERRORE concatenazione: {result.stderr}")
+            return False
+
+        return True
 
     def _build_video_render_command(
         self,
@@ -4204,6 +4422,63 @@ class DoomerGeneratorApp:
         ttk.Label(audio_progress_box, textvariable=self.audio_timer_text).pack(anchor="w", pady=(2, 0))
 
     def _build_video_tab(self, parent: ttk.Frame) -> None:
+        # General settings (Single Video Mode)
+        general_frame = ttk.LabelFrame(parent, text="Generali", padding=8)
+        general_frame.pack(fill=tk.X, pady=(0, 8))
+        general_frame.columnconfigure(1, weight=1)
+
+        # Single video mode checkbox
+        self.single_video_mode_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            general_frame,
+            text="Video unico",
+            variable=self.single_video_mode_var,
+            command=self._on_single_video_mode_changed
+        ).grid(row=0, column=0, columnspan=2, padx=6, pady=6, sticky="w")
+
+        # Duration (HH:MM:SS)
+        ttk.Label(general_frame, text="Durata:").grid(
+            row=1, column=0, padx=6, pady=6, sticky="w"
+        )
+        duration_frame = ttk.Frame(general_frame)
+        duration_frame.grid(row=1, column=1, padx=6, pady=6, sticky="w")
+
+        self.single_video_hours_var = tk.StringVar(value="01")
+        self.single_video_minutes_var = tk.StringVar(value="00")
+        self.single_video_seconds_var = tk.StringVar(value="00")
+
+        ttk.Entry(duration_frame, textvariable=self.single_video_hours_var, width=4).pack(side=tk.LEFT)
+        ttk.Label(duration_frame, text="h").pack(side=tk.LEFT, padx=2)
+        ttk.Entry(duration_frame, textvariable=self.single_video_minutes_var, width=4).pack(side=tk.LEFT)
+        ttk.Label(duration_frame, text="m").pack(side=tk.LEFT, padx=2)
+        ttk.Entry(duration_frame, textvariable=self.single_video_seconds_var, width=4).pack(side=tk.LEFT)
+        ttk.Label(duration_frame, text="s").pack(side=tk.LEFT, padx=2)
+
+        # Silence
+        ttk.Label(general_frame, text="Silenzio tra canzoni (secondi):").grid(
+            row=2, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.single_video_silence_var = tk.StringVar(value="1.0")
+        silence_spinbox = ttk.Spinbox(
+            general_frame,
+            from_=0.0,
+            to=30.0,
+            increment=0.5,
+            textvariable=self.single_video_silence_var,
+            width=10
+        )
+        silence_spinbox.grid(row=2, column=1, padx=6, pady=6, sticky="w")
+
+        # Custom title
+        ttk.Label(general_frame, text="Titolo video:").grid(
+            row=3, column=0, padx=6, pady=6, sticky="w"
+        )
+        self.single_video_title_var = tk.StringVar(value="")
+        ttk.Entry(
+            general_frame,
+            textvariable=self.single_video_title_var
+        ).grid(row=3, column=1, padx=6, pady=6, sticky="ew")
+
         # Preset management
         presets_frame = ttk.LabelFrame(parent, text=self._t("video_group_presets"), padding=8)
         presets_frame.pack(fill=tk.X, pady=(0, 8))
@@ -5297,6 +5572,21 @@ class DoomerGeneratorApp:
 
     def _collect_video_settings_from_ui(self) -> VideoSettings:
         """Collect current video settings from UI."""
+        # Parse duration from HH:MM:SS
+        try:
+            hours = int(self.single_video_hours_var.get() or "0")
+            minutes = int(self.single_video_minutes_var.get() or "0")
+            seconds = int(self.single_video_seconds_var.get() or "0")
+            duration_seconds = hours * 3600 + minutes * 60 + seconds
+        except ValueError:
+            duration_seconds = 3600  # Default 1 hour
+
+        # Parse silence
+        try:
+            silence = float(self.single_video_silence_var.get())
+        except ValueError:
+            silence = 1.0
+
         return VideoSettings(
             fade_in_seconds=self.video_fade_in_var.get(),
             fade_out_seconds=self.video_fade_out_var.get(),
@@ -5311,6 +5601,10 @@ class DoomerGeneratorApp:
                 self.default_video_settings.video_encoder,
             ),
             shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
+            single_video_mode=self.single_video_mode_var.get(),
+            single_video_duration_seconds=duration_seconds,
+            single_video_silence_seconds=silence,
+            single_video_title=self.single_video_title_var.get().strip(),
         )
 
     def _resolve_ffplay(self, ffmpeg_bin: str) -> str | None:
@@ -6008,21 +6302,73 @@ class DoomerGeneratorApp:
             return
         output_video_dir.mkdir(parents=True, exist_ok=True)
 
-        settings = VideoSettings(
-            fade_in_seconds=self.video_fade_in_var.get(),
-            fade_out_seconds=self.video_fade_out_var.get(),
-            noise_percent=self.video_noise_var.get(),
-            distortion_percent=self.video_distortion_var.get(),
-            vhs_effect=self.video_vhs_var.get(),
-            chromatic_aberration=self.video_chromatic_var.get(),
-            film_burn=self.video_burn_var.get(),
-            glitch_effect=self.video_glitch_var.get(),
-            video_encoder=self._sanitize_video_encoder(
-                self.video_encoder_var.get(),
-                self.default_video_settings.video_encoder,
-            ),
-            shutdown_after_generation=self.video_shutdown_after_generation_var.get(),
-        )
+        settings = self._collect_video_settings_from_ui()
+
+        # Single video mode validation
+        if settings.single_video_mode:
+            # Validate duration (5 min - 12 hours)
+            min_duration = 5 * 60  # 5 minutes
+            max_duration = 12 * 60 * 60  # 12 hours
+
+            if settings.single_video_duration_seconds < min_duration:
+                messagebox.showerror(
+                    "Durata non valida",
+                    f"La durata minima è 5 minuti.\nDurata impostata: {settings.single_video_duration_seconds // 60} minuti.",
+                    parent=self.root
+                )
+                return
+
+            if settings.single_video_duration_seconds > max_duration:
+                messagebox.showerror(
+                    "Durata non valida",
+                    f"La durata massima è 12 ore.\nDurata impostata: {settings.single_video_duration_seconds // 3600} ore.",
+                    parent=self.root
+                )
+                return
+
+            # Check if we have enough audio to reach target duration
+            audio_files = _collect_files(input_audio_dir, AUDIO_EXTENSIONS)
+            if not audio_files:
+                messagebox.showerror(
+                    "Nessun audio trovato",
+                    "Non ci sono file audio nella cartella selezionata.",
+                    parent=self.root
+                )
+                return
+
+            # Calculate total audio duration
+            total_audio_duration = self._calculate_total_audio_duration(audio_files)
+
+            if total_audio_duration < settings.single_video_duration_seconds:
+                hours_target = settings.single_video_duration_seconds // 3600
+                minutes_target = (settings.single_video_duration_seconds % 3600) // 60
+                hours_available = int(total_audio_duration // 3600)
+                minutes_available = int((total_audio_duration % 3600) // 60)
+
+                messagebox.showerror(
+                    "Audio insufficienti",
+                    f"Durata totale audio: {hours_available}h {minutes_available}m\n"
+                    f"Durata target: {hours_target}h {minutes_target}m\n\n"
+                    f"Impossibile generare video: audio insufficienti per raggiungere la durata target.",
+                    parent=self.root
+                )
+                return
+
+            # Confirmation dialog for long videos
+            num_songs = len(audio_files)
+            hours = settings.single_video_duration_seconds // 3600
+            minutes = (settings.single_video_duration_seconds % 3600) // 60
+
+            confirm = messagebox.askyesno(
+                "Conferma generazione video unico",
+                f"Stai per generare un video unico di circa {hours}h {minutes}m con {num_songs} canzoni.\n"
+                f"Questa operazione potrebbe richiedere molto tempo.\n\n"
+                f"Vuoi continuare?",
+                parent=self.root
+            )
+
+            if not confirm:
+                return
 
         # Add files to queue (batch mode - refresh only once at the end)
         audio_files = _collect_files(input_audio_dir, AUDIO_EXTENSIONS)
@@ -8551,6 +8897,62 @@ class DoomerGeneratorApp:
         self.audio_pause_button.configure(text=button_text)
         status = "paused" if self.audio_paused else "resumed"
         self._log(self._t(f"log_audio_{status}"))
+
+    def _calculate_total_audio_duration(self, audio_files: list[Path]) -> float:
+        """Calculate total duration of all audio files in seconds."""
+        ffmpeg_bin = self._resolve_ffmpeg()
+        if not ffmpeg_bin:
+            return 0.0
+
+        # Resolve ffprobe using the same logic as DoomerVideoGenerator
+        ffmpeg_path = Path(ffmpeg_bin)
+        ffprobe_bin = None
+
+        # Try ffprobe.exe first (Windows)
+        sibling = ffmpeg_path.with_name("ffprobe.exe")
+        if sibling.is_file():
+            ffprobe_bin = str(sibling)
+        else:
+            # Try ffprobe without extension (Linux/Mac)
+            sibling_no_ext = ffmpeg_path.with_name("ffprobe")
+            if sibling_no_ext.is_file():
+                ffprobe_bin = str(sibling_no_ext)
+            else:
+                # Try system PATH
+                import shutil
+                lookup = shutil.which("ffprobe")
+                if lookup:
+                    ffprobe_bin = lookup
+
+        if not ffprobe_bin:
+            return 0.0
+
+        total_duration = 0.0
+
+        for audio_file in audio_files:
+            try:
+                command = [
+                    ffprobe_bin,
+                    "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    str(audio_file),
+                ]
+                result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    duration_str = result.stdout.strip()
+                    if duration_str:
+                        total_duration += float(duration_str)
+            except (subprocess.TimeoutExpired, ValueError):
+                # Skip files that can't be probed
+                continue
+
+        return total_duration
+
+    def _on_single_video_mode_changed(self) -> None:
+        """Callback when single video mode checkbox is toggled."""
+        # Just a placeholder for now - could add UI state changes if needed
+        pass
 
     def _toggle_video_pause(self) -> None:
         """Toggle pause/resume for video operation."""
