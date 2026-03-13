@@ -3043,6 +3043,14 @@ class DoomerVideoGenerator:
         self.log(f"Background: {background.name}")
         self.log(f"Doomer Guy: {doomer_guy.name}")
 
+        # Write timestamp log to mix_history.txt (before processing starts)
+        self._write_mix_history(
+            video_title=settings.single_video_title or f"doomer_mix_{len(selected_files)}_songs",
+            selected_files=selected_files,
+            file_durations=file_durations,
+            silence_seconds=settings.single_video_silence_seconds,
+        )
+
         # Generate concatenated audio file
         self.log("Concatenazione audio in corso...")
         progress(1, 3, 0, "Concatenazione audio", background.name)
@@ -3095,14 +3103,6 @@ class DoomerVideoGenerator:
             import shutil
             shutil.move(str(temp_video), str(final_destination))
             self.log(f"✓ Video generato: {output_filename}")
-
-            # Write timestamp log to mix_history.txt
-            self._write_mix_history(
-                video_title=settings.single_video_title or f"doomer_mix_{len(selected_files)}_songs",
-                selected_files=selected_files,
-                file_durations=file_durations,
-                silence_seconds=settings.single_video_silence_seconds,
-            )
 
             progress(3, 3, 0, "Completato", background.name)
             return VideoSummary(total=1, generated=1, failed=0)
