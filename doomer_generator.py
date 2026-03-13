@@ -2450,12 +2450,46 @@ class YouTubeUploader:
                     speed_mbps = 0.0  # Initialize speed
                     max_retries = 5
                     retry_count = 0
+                    upload_started = False  # Track if we started uploading chunks
 
                     # Loop until we get a valid response dict (not None, not False)
                     while not isinstance(response, dict):
                         # Check if stopped during upload
                         if check_stop and check_stop():
                             self.log("  ⏹ Upload interrotto durante il caricamento")
+
+                            # If we started uploading, try to find and delete the partial video
+                            if upload_started:
+                                try:
+                                    # List recent uploads to find the partial video
+                                    # We look for videos uploaded in the last 5 minutes with "uploading" or "processing" status
+                                    list_response = service.videos().list(
+                                        part="id,status,snippet",
+                                        mine=True,
+                                        maxResults=10
+                                    ).execute()
+
+                                    # Find videos that match our filename and are still processing
+                                    video_title = video_file.stem
+                                    for item in list_response.get("items", []):
+                                        item_title = item.get("snippet", {}).get("title", "")
+                                        upload_status = item.get("status", {}).get("uploadStatus", "")
+
+                                        # Check if this is our partial upload
+                                        if item_title == video_title and upload_status in ("uploading", "processing"):
+                                            video_id = item["id"]
+                                            service.videos().delete(id=video_id).execute()
+                                            self.log(f"  ✓ Video parziale cancellato da YouTube (ID: {video_id})")
+                                            break
+                                    else:
+                                        self.log("  ℹ️ Nessun video parziale trovato da cancellare")
+
+                                except Exception as delete_error:  # noqa: BLE001
+                                    self.log(f"  ⚠ Impossibile cancellare video parziale: {delete_error}")
+                                    self.log("  💡 Cancellalo manualmente su: https://studio.youtube.com/")
+                            else:
+                                self.log("  ✓ Upload non ancora iniziato (nessun video creato su YouTube)")
+
                             # Don't set cleanup_target - this prevents file deletion (rollback)
                             raise Exception("Upload interrotto dall'utente")
 
@@ -2473,6 +2507,9 @@ class YouTubeUploader:
                         if status is None:
                             # First chunk, no progress yet
                             continue
+
+                        # Mark that we've started uploading (video is being created on YouTube)
+                        upload_started = True
 
                         chunk_count += 1
                         retry_count = 0  # Reset retry count on successful chunk
