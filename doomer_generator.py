@@ -3476,11 +3476,13 @@ class DoomerGeneratorApp:
         self.uploading = False
         self.youtube_authenticating = False
 
-        # Pause/Resume flags
+        # Pause/Resume/Stop flags
         self.download_paused = False
         self.audio_paused = False
         self.video_paused = False
         self.upload_paused = False
+        self.video_stopped = False
+        self.upload_stopped = False
 
         # Single video track order
         self.custom_track_order: list[Path] | None = None
@@ -4890,7 +4892,9 @@ class DoomerGeneratorApp:
         )
         self.video_generate_button.pack(side=tk.LEFT, padx=(0, 5))
         self.video_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_video_pause, state=tk.DISABLED)
-        self.video_pause_button.pack(side=tk.LEFT)
+        self.video_pause_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.video_stop_button = ttk.Button(actions, text=self._t("btn_stop"), command=self._stop_video_generation, state=tk.DISABLED)
+        self.video_stop_button.pack(side=tk.LEFT, padx=(0, 5))
         self.video_play_test_button = ttk.Button(
             actions,
             text=self._t("video_btn_play_test"),
@@ -5062,7 +5066,9 @@ class DoomerGeneratorApp:
         )
         self.youtube_upload_button.pack(side=tk.LEFT, padx=(0, 5))
         self.upload_pause_button = ttk.Button(actions, text=self._t("btn_pause"), command=self._toggle_upload_pause, state=tk.DISABLED)
-        self.upload_pause_button.pack(side=tk.LEFT)
+        self.upload_pause_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.upload_stop_button = ttk.Button(actions, text=self._t("btn_stop"), command=self._stop_upload, state=tk.DISABLED)
+        self.upload_stop_button.pack(side=tk.LEFT, padx=(0, 5))
         self.upload_save_button = ttk.Button(
             actions,
             text=self._t("save_settings_btn"),
@@ -6519,6 +6525,8 @@ class DoomerGeneratorApp:
 
         # Don't capture shutdown flag here - we'll check it when video finishes
         self.video_processing = True
+        self.video_stopped = False  # Reset stop flag
+        self.video_paused = False  # Reset pause flag
         self._start_timer("video")
         self._set_action_buttons_enabled()
         self.progress_var.set(0)
@@ -6850,6 +6858,8 @@ class DoomerGeneratorApp:
 
         # Don't capture shutdown flag here - we'll check it when upload finishes
         self.uploading = True
+        self.upload_stopped = False  # Reset stop flag
+        self.upload_paused = False  # Reset pause flag
         self._start_timer("upload")
         self._set_action_buttons_enabled()
         self.progress_var.set(0)
@@ -9229,6 +9239,20 @@ class DoomerGeneratorApp:
         status = "paused" if self.upload_paused else "resumed"
         self._log(self._t(f"log_upload_{status}"))
 
+    def _stop_video_generation(self) -> None:
+        """Stop video generation completely."""
+        self.video_stopped = True
+        self.video_paused = False  # Clear pause state
+        self._log("⏹ Arresto generazione video in corso...")
+        self.video_stop_button.configure(state=tk.DISABLED)
+
+    def _stop_upload(self) -> None:
+        """Stop upload completely."""
+        self.upload_stopped = True
+        self.upload_paused = False  # Clear pause state
+        self._log("⏹ Arresto upload in corso...")
+        self.upload_stop_button.configure(state=tk.DISABLED)
+
     def _set_action_buttons_enabled(self) -> None:
         """Update button states based on current operations.
 
@@ -9260,8 +9284,9 @@ class DoomerGeneratorApp:
         self.video_encoder_combo.configure(state="readonly" if not self.video_processing else "disabled")
         # Shutdown checkbox is always enabled so users can toggle it during video generation
         self.video_shutdown_after_generation_check.configure(state=tk.NORMAL)
-        # Pause button enabled only when processing video
+        # Pause and Stop buttons enabled only when processing video
         self.video_pause_button.configure(state=tk.NORMAL if self.video_processing else tk.DISABLED)
+        self.video_stop_button.configure(state=tk.NORMAL if self.video_processing else tk.DISABLED)
 
         # Upload tab buttons - disabled when uploading or authenticating
         upload_state = tk.NORMAL if not (self.uploading or self.youtube_authenticating) else tk.DISABLED
@@ -9275,8 +9300,9 @@ class DoomerGeneratorApp:
         self.youtube_shutdown_after_upload_check.configure(state=tk.NORMAL)
         self.youtube_openai_model_entry.configure(state=upload_state)
         self.youtube_openai_key_entry.configure(state=upload_state)
-        # Pause button enabled only when uploading
+        # Pause and Stop buttons enabled only when uploading
         self.upload_pause_button.configure(state=tk.NORMAL if self.uploading else tk.DISABLED)
+        self.upload_stop_button.configure(state=tk.NORMAL if self.uploading else tk.DISABLED)
 
         # General tab buttons - disabled if ANY operation is running
         any_busy = self._is_busy()

@@ -254,9 +254,10 @@ TRANSLATIONS = {
     "export_logs_error": "Error exporting logs:\n{error}",
     "log_export_success": "Logs exported to: {path}",
     "log_export_error": "Error exporting logs: {error}",
-    # Pause/Resume
+    # Pause/Resume/Stop
     "btn_pause": "Pause",
     "btn_resume": "Resume",
+    "btn_stop": "Stop",
     "btn_ok": "OK",
     "btn_cancel": "Cancel",
     "log_download_paused": "Download paused",
