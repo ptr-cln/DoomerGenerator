@@ -3016,9 +3016,17 @@ class DoomerVideoGenerator:
             with self.active_ffmpeg_lock:
                 self.active_ffmpeg_process = None
 
-        # Check if stopped
+        # Check if stopped (either by flag or by process being killed)
+        # On Windows: terminate() -> returncode -15 or 1, kill() -> returncode 1
+        # On Linux: terminate() -> returncode -15 (SIGTERM), kill() -> returncode -9 (SIGKILL)
         if check_stop and check_stop():
             self.log("  ⏹ Generazione video interrotta")
+            return False
+
+        # Also check if process was killed (negative return code or specific error codes)
+        if returncode < 0 or returncode == 1:
+            # Process was terminated/killed
+            self.log("  ⏹ Processo FFmpeg terminato")
             return False
 
         if returncode == 0:
@@ -3052,9 +3060,14 @@ class DoomerVideoGenerator:
                 with self.active_ffmpeg_lock:
                     self.active_ffmpeg_process = None
 
-            # Check if stopped
+            # Check if stopped (either by flag or by process being killed)
             if check_stop and check_stop():
                 self.log("  ⏹ Generazione video interrotta (fallback)")
+                return False
+
+            # Also check if process was killed
+            if fallback_returncode < 0 or fallback_returncode == 1:
+                self.log("  ⏹ Processo FFmpeg fallback terminato")
                 return False
 
             if fallback_returncode == 0:
