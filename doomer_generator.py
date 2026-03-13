@@ -2691,6 +2691,7 @@ class DoomerVideoGenerator:
         usage_memory_path: Path,
         log: Callable[[str], None],
         translate: Callable[[str], str],
+        mix_history_file: Path,
     ):
         self.ffmpeg_bin = ffmpeg_bin
         self.ffprobe_bin = self._resolve_ffprobe(ffmpeg_bin)
@@ -2699,6 +2700,7 @@ class DoomerVideoGenerator:
         self.usage_memory_path = usage_memory_path
         self.log = log
         self.translate = translate
+        self.mix_history_file = mix_history_file
         self.available_video_encoders = self._detect_available_video_encoders()
         self.failed_video_encoders: set[str] = set()
         detected = ", ".join(sorted(self.available_video_encoders))
@@ -7223,6 +7225,7 @@ class DoomerGeneratorApp:
                 usage_memory_path=self.usage_memory_path,
                 log=self._queue_log,
                 translate=self._t,
+                mix_history_file=self.mix_history_file,
             )
 
             def on_new_video_files(new_files: list[Path]) -> None:
