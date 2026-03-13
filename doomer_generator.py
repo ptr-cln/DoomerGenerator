@@ -1202,6 +1202,24 @@ def _sanitize_tag(tag: str) -> str:
     return normalized
 
 
+def _sanitize_filename(filename: str) -> str:
+    """Remove invalid characters from filename for Windows/Linux/macOS compatibility."""
+    # Remove invalid characters for Windows: < > : " / \ | ? *
+    # Also remove control characters (0-31)
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', filename)
+    # Replace multiple spaces with single space
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    # Trim whitespace and dots from start/end (Windows doesn't allow trailing dots/spaces)
+    sanitized = sanitized.strip('. ')
+    # If empty after sanitization, use a default name
+    if not sanitized:
+        sanitized = "video"
+    # Limit length to avoid path too long errors (Windows has 260 char limit)
+    if len(sanitized) > 200:
+        sanitized = sanitized[:200].rstrip('. ')
+    return sanitized
+
+
 def _extract_ai_content_text(content: object) -> str:
     if isinstance(content, str):
         return content.strip()
@@ -3224,7 +3242,9 @@ class DoomerVideoGenerator:
 
         # Determine output filename
         if settings.single_video_title:
-            output_filename = f"{settings.single_video_title}.mp4"
+            # Sanitize the title to remove invalid filename characters
+            safe_title = _sanitize_filename(settings.single_video_title)
+            output_filename = f"{safe_title}.mp4"
         else:
             output_filename = f"doomer_mix_{len(selected_files)}_songs.mp4"
 
