@@ -1159,7 +1159,8 @@ def _clear_directory_contents(path: Path) -> int:
     for item in items:
         try:
             if item.is_file() or item.is_symlink():
-                if item.name == ".gitkeep":
+                # Never delete these protected files
+                if item.name in (".gitkeep", "mix_history.txt", ".usage_memory.json"):
                     continue
                 item.unlink()
                 removed_files += 1
