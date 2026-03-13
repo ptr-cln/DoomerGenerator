@@ -2748,6 +2748,7 @@ class DoomerVideoGenerator:
         log: Callable[[str], None],
         translate: Callable[[str], str],
         mix_history_file: Path,
+        active_ffmpeg_lock: threading.Lock | None = None,
     ):
         self.ffmpeg_bin = ffmpeg_bin
         self.ffprobe_bin = self._resolve_ffprobe(ffmpeg_bin)
@@ -2757,6 +2758,13 @@ class DoomerVideoGenerator:
         self.log = log
         self.translate = translate
         self.mix_history_file = mix_history_file
+
+        # FFmpeg process tracking for stop functionality
+        if active_ffmpeg_lock is None:
+            active_ffmpeg_lock = threading.Lock()
+        self.active_ffmpeg_lock = active_ffmpeg_lock
+        self.active_ffmpeg_process: subprocess.Popen | None = None
+
         self.available_video_encoders = self._detect_available_video_encoders()
         self.failed_video_encoders: set[str] = set()
         detected = ", ".join(sorted(self.available_video_encoders))
@@ -7344,6 +7352,7 @@ class DoomerGeneratorApp:
                 log=self._queue_log,
                 translate=self._t,
                 mix_history_file=self.mix_history_file,
+                active_ffmpeg_lock=self.active_ffmpeg_lock,
             )
 
             def on_new_video_files(new_files: list[Path]) -> None:
