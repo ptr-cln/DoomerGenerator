@@ -2203,6 +2203,7 @@ class YouTubeUploader:
         progress: Callable[[float, int, int, float, str, float, int], None],
         on_uploaded: Callable[[Path], None] | None = None,
         check_pause: Callable[[], bool] | None = None,
+        check_stop: Callable[[], bool] | None = None,
         on_new_files: Callable[[list[Path]], None] | None = None,
         ffmpeg_bin: str | None = None,
         get_current_multiday_schedule: Callable[[], list[str] | None] | None = None,
@@ -2253,6 +2254,11 @@ class YouTubeUploader:
             first_batch = False
 
             for video_file in current_files:
+                # Check if stopped
+                if check_stop and check_stop():
+                    self.log("⏹ Upload interrotto dall'utente")
+                    break
+
                 # Check for pause
                 if check_pause:
                     while check_pause():
@@ -2446,6 +2452,12 @@ class YouTubeUploader:
 
                     # Loop until we get a valid response dict (not None, not False)
                     while not isinstance(response, dict):
+                        # Check if stopped during upload
+                        if check_stop and check_stop():
+                            self.log("  ⏹ Upload interrotto durante il caricamento")
+                            # Don't set cleanup_target - this prevents file deletion (rollback)
+                            raise Exception("Upload interrotto dall'utente")
+
                         try:
                             status, response = insert_request.next_chunk(num_retries=3)
                         except Exception as chunk_error:  # noqa: BLE001
@@ -2526,6 +2538,11 @@ class YouTubeUploader:
                             on_uploaded(cleanup_target)
                         except Exception as callback_error:  # noqa: BLE001
                             self.log(f"  Cleanup warning: {callback_error}")
+
+            # Check if stopped (break out of outer loop)
+            if check_stop and check_stop():
+                self.log("⏹ Upload completamente interrotto")
+                break
 
         return UploadSummary(total=total, uploaded=uploaded, failed=failed)
 
@@ -3722,13 +3739,9 @@ class DoomerGeneratorApp:
         self._load_default_presets_on_startup()
         # ensure UI reflects any scheduled value right away
         self._update_schedule_visibility()
-        # Check for git updates after UI is ready
-        self.root.after(500, self._check_git_updates)
         self.progress_text.set(self._t("status_ready"))
         self.root.after(100, self._poll_events)
         self.root.after(1000, self._update_timers)
-        # Check for updates on startup (after 2 seconds to let UI load)
-        self.root.after(2000, lambda: self._check_for_updates(show_no_update=False))
 
     def _t(self, key: str, **kwargs: object) -> str:
         """Translate a key using the current language, with fallback to English."""
@@ -4331,33 +4344,6 @@ class DoomerGeneratorApp:
         backup_info_text = self._t("backup_info", count=backup_count)
         self.backup_info_label = ttk.Label(backup_box, text=backup_info_text)
         self.backup_info_label.grid(row=1, column=0, columnspan=2, padx=6, pady=6, sticky="w")
-
-        # Update System section
-        update_box = ttk.LabelFrame(parent, text=self._t("general_group_update"), padding=8)
-        update_box.pack(fill=tk.X, pady=(10, 0))
-        update_box.columnconfigure(1, weight=1)
-
-        # Version info
-        version_text = self._t("update_current_version", version=APP_VERSION)
-        self.version_label = ttk.Label(update_box, text=version_text)
-        self.version_label.grid(row=0, column=0, columnspan=2, padx=6, pady=6, sticky="w")
-
-        # Check for updates button
-        self.check_updates_button = ttk.Button(
-            update_box,
-            text=self._t("update_btn_check"),
-            command=lambda: self._check_for_updates(show_no_update=True),
-        )
-        self.check_updates_button.grid(row=1, column=0, padx=6, pady=6, sticky="w")
-
-        # Auto-check checkbox
-        self.auto_check_updates_var = tk.BooleanVar(value=True)
-        self.auto_check_updates_check = ttk.Checkbutton(
-            update_box,
-            text=self._t("update_check_auto_check"),
-            variable=self.auto_check_updates_var,
-        )
-        self.auto_check_updates_check.grid(row=1, column=1, padx=6, pady=6, sticky="w")
 
         info = ttk.LabelFrame(parent, text=self._t("general_group_paths"), padding=8)
         info.pack(fill=tk.X, pady=(10, 0))
@@ -7079,6 +7065,7 @@ class DoomerGeneratorApp:
                 progress=self._queue_upload_progress,
                 on_uploaded=self._cleanup_after_successful_upload,
                 check_pause=lambda: self.upload_paused,
+                check_stop=lambda: self.upload_stopped,
                 on_new_files=on_new_upload_files,
                 ffmpeg_bin=ffmpeg_bin,
                 get_current_multiday_schedule=get_current_multiday_schedule,
