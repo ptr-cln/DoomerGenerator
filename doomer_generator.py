@@ -2423,9 +2423,10 @@ class YouTubeUploader:
                         },
                         "status": status_dict,
                     }
-                    # Use 4MB chunks for optimal balance between speed and stability
-                    # 4MB provides good progress updates without excessive HTTP overhead
-                    media = MediaFileUpload(str(video_file), chunksize=4 * 1024 * 1024, resumable=True)
+                    # Use 1MB chunks for responsive stop button
+                    # Smaller chunks allow checking stop flag more frequently
+                    # while maintaining good upload performance
+                    media = MediaFileUpload(str(video_file), chunksize=1 * 1024 * 1024, resumable=True)
                     insert_request = service.videos().insert(
                         part="snippet,status",
                         body=request_body,
