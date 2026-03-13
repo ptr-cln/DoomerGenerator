@@ -2970,6 +2970,7 @@ class DoomerVideoGenerator:
             fallback_command = self._build_video_render_command(
                 audio_file=audio_file,
                 background=background,
+                doomer_guy=doomer_guy,
                 destination=destination,
                 settings=settings,
                 duration=duration,
@@ -9330,12 +9331,20 @@ class DoomerGeneratorApp:
 
         # Kill active FFmpeg process if any
         with self.active_ffmpeg_lock:
-            if self.active_ffmpeg_process is not None:
+            if self.active_ffmpeg_process is not None and self.active_ffmpeg_process.poll() is None:
                 try:
                     self._log("⏹ Terminazione processo FFmpeg...")
-                    self.active_ffmpeg_process.kill()
-                    self.active_ffmpeg_process.wait(timeout=5)
-                    self._log("✓ Processo FFmpeg terminato")
+                    # Try graceful termination first
+                    self.active_ffmpeg_process.terminate()
+                    try:
+                        self.active_ffmpeg_process.wait(timeout=2)
+                        self._log("✓ Processo FFmpeg terminato")
+                    except subprocess.TimeoutExpired:
+                        # Force kill if terminate didn't work
+                        self._log("⏹ Forzatura terminazione FFmpeg...")
+                        self.active_ffmpeg_process.kill()
+                        self.active_ffmpeg_process.wait(timeout=3)
+                        self._log("✓ Processo FFmpeg forzatamente terminato")
                 except Exception as e:
                     self._log(f"⚠ Errore terminazione FFmpeg: {e}")
 
