@@ -3131,27 +3131,21 @@ class DoomerVideoGenerator:
                 start_seconds = int(current_time % 60)
                 start_str = f"{start_minutes:02d}:{start_seconds:02d}"
 
-                # Calculate end time (start + duration)
-                end_time = current_time + duration
-                end_minutes = int(end_time // 60)
-                end_seconds = int(end_time % 60)
-                end_str = f"{end_minutes:02d}:{end_seconds:02d}"
-
                 # Extract artist and title from filename (assuming format: "Artist - Title.mp3")
                 filename_stem = audio_file.stem
                 if " - " in filename_stem:
                     parts = filename_stem.split(" - ", 1)
                     artist = parts[0].strip()
                     title = parts[1].strip()
-                    track_info = f"{artist} - {title}"
+                    track_info = f"{artist} – {title}"  # Using en-dash (–)
                 else:
                     track_info = filename_stem
 
-                # Format: "00:00 - 03:30 : Artist - Title"
-                timestamp_lines.append(f"{start_str} - {end_str} : {track_info}")
+                # Format: "00:00 Artist – Title"
+                timestamp_lines.append(f"{start_str} {track_info}")
 
                 # Move to next track (add silence)
-                current_time = end_time + silence_seconds
+                current_time += duration + silence_seconds
 
             # Prepare the log entry
             now = datetime.datetime.now()
