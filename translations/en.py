@@ -103,6 +103,7 @@ TRANSLATIONS = {
     "video_btn_generate": "Generate videos",
     "video_btn_play_test": "▶ Preview (20s)",
     "video_btn_reset": "Reset defaults",
+    "video_btn_order_tracks": "📋 Order tracks",
     "video_play_test_generating": "Generating preview...",
     "video_play_test_title": "Video Effects Preview",
     "video_play_test_error": "Error generating test video",

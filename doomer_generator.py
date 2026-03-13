@@ -2715,6 +2715,7 @@ class DoomerVideoGenerator:
         selected_backgrounds: list[Path] | None = None,
         selected_doomer_guys: list[Path] | None = None,
         selected_resources_memory_path: Path | None = None,
+        custom_track_order: list[Path] | None = None,
     ) -> VideoSummary:
         # Single video mode - different logic
         if settings.single_video_mode:
@@ -2726,6 +2727,7 @@ class DoomerVideoGenerator:
                 check_pause=check_pause,
                 selected_backgrounds=selected_backgrounds,
                 selected_doomer_guys=selected_doomer_guys,
+                custom_track_order=custom_track_order,
             )
 
         # Use selected resources if provided, otherwise use all from directories
@@ -2949,20 +2951,26 @@ class DoomerVideoGenerator:
         check_pause: Callable[[], bool] | None = None,
         selected_backgrounds: list[Path] | None = None,
         selected_doomer_guys: list[Path] | None = None,
+        custom_track_order: list[Path] | None = None,
     ) -> VideoSummary:
         """Generate a single long video by concatenating multiple audio files."""
         self.log("=== MODALITÀ VIDEO UNICO ===")
         self.log(f"Durata target: {settings.single_video_duration_seconds // 3600}h {(settings.single_video_duration_seconds % 3600) // 60}m")
         self.log(f"Silenzio: {settings.single_video_silence_seconds}s")
 
-        # Get all audio files and shuffle them
-        audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
-        if not audio_files:
-            self.log("Nessun file audio trovato")
-            return VideoSummary(total=0, generated=0, failed=0)
-
-        random.shuffle(audio_files)
-        self.log(f"File audio trovati: {len(audio_files)}")
+        # Get all audio files
+        if custom_track_order:
+            # Use custom order if provided
+            audio_files = custom_track_order
+            self.log(f"Usando ordine personalizzato: {len(audio_files)} tracce")
+        else:
+            # Collect and shuffle
+            audio_files = _collect_files(audio_input_dir, AUDIO_EXTENSIONS)
+            if not audio_files:
+                self.log("Nessun file audio trovato")
+                return VideoSummary(total=0, generated=0, failed=0)
+            random.shuffle(audio_files)
+            self.log(f"File audio trovati: {len(audio_files)}")
 
         # Select files until we reach target duration
         selected_files: list[Path] = []
@@ -3400,6 +3408,9 @@ class DoomerGeneratorApp:
         self.audio_paused = False
         self.video_paused = False
         self.upload_paused = False
+
+        # Single video track order
+        self.custom_track_order: list[Path] | None = None
 
         # Preset system
         self.presets_dir = self.project_dir / "presets"
@@ -4519,6 +4530,13 @@ class DoomerGeneratorApp:
             general_frame,
             textvariable=self.single_video_title_var
         ).grid(row=3, column=1, padx=6, pady=6, sticky="ew")
+
+        # Track order button
+        ttk.Button(
+            general_frame,
+            text=self._t("video_btn_order_tracks"),
+            command=self._open_track_order_dialog
+        ).grid(row=4, column=0, columnspan=2, padx=6, pady=6, sticky="w")
 
         # Preset management
         presets_frame = ttk.LabelFrame(parent, text=self._t("video_group_presets"), padding=8)
@@ -7156,6 +7174,7 @@ class DoomerGeneratorApp:
                 selected_backgrounds=self.selected_backgrounds if self.selected_backgrounds else None,
                 selected_doomer_guys=self.selected_doomer_guys if self.selected_doomer_guys else None,
                 selected_resources_memory_path=self.selected_resources_memory_path if (self.selected_backgrounds or self.selected_doomer_guys) else None,
+                custom_track_order=self.custom_track_order if settings.single_video_mode else None,
             )
 
             # Clear selected resources memory after generation completes
@@ -8999,6 +9018,121 @@ class DoomerGeneratorApp:
         """Callback when single video mode checkbox is toggled."""
         # Just a placeholder for now - could add UI state changes if needed
         pass
+
+    def _open_track_order_dialog(self) -> None:
+        """Open dialog to reorder audio tracks for single video mode."""
+        input_audio_dir = Path(self.video_audio_input_var.get().strip())
+        if not input_audio_dir.is_dir():
+            messagebox.showerror(
+                self._t("dialog_invalid_input_title"),
+                self._t("dialog_invalid_audio_input_body"),
+                parent=self.root
+            )
+            return
+
+        # Collect audio files
+        audio_files = _collect_files(input_audio_dir, AUDIO_EXTENSIONS)
+        if not audio_files:
+            messagebox.showinfo(
+                self._t("video_btn_order_tracks"),
+                "Nessun file audio trovato nella cartella di input.",
+                parent=self.root
+            )
+            return
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self._t("video_btn_order_tracks"))
+        dialog.geometry("600x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Instructions
+        ttk.Label(
+            dialog,
+            text="Riordina le tracce trascinandole. L'ordine finale sarà usato per il video unico.",
+            wraplength=550
+        ).pack(padx=10, pady=10)
+
+        # Listbox with scrollbar
+        list_frame = ttk.Frame(dialog)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, selectmode=tk.SINGLE)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+
+        # Populate listbox with current order or custom order
+        if self.custom_track_order:
+            ordered_files = self.custom_track_order
+        else:
+            ordered_files = sorted(audio_files, key=lambda p: p.name.lower())
+
+        for audio_file in ordered_files:
+            listbox.insert(tk.END, audio_file.name)
+
+        # Drag and drop functionality
+        drag_data = {"index": None}
+
+        def on_drag_start(event):
+            index = listbox.nearest(event.y)
+            if index >= 0:
+                drag_data["index"] = index
+                listbox.selection_clear(0, tk.END)
+                listbox.selection_set(index)
+
+        def on_drag_motion(event):
+            if drag_data["index"] is None:
+                return
+            current_index = listbox.nearest(event.y)
+            if current_index != drag_data["index"]:
+                # Move item
+                item = listbox.get(drag_data["index"])
+                listbox.delete(drag_data["index"])
+                listbox.insert(current_index, item)
+                drag_data["index"] = current_index
+                listbox.selection_clear(0, tk.END)
+                listbox.selection_set(current_index)
+
+        def on_drag_end(event):
+            drag_data["index"] = None
+
+        listbox.bind("<Button-1>", on_drag_start)
+        listbox.bind("<B1-Motion>", on_drag_motion)
+        listbox.bind("<ButtonRelease-1>", on_drag_end)
+
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+        def save_order():
+            # Get current order from listbox
+            ordered_names = [listbox.get(i) for i in range(listbox.size())]
+            # Map back to Path objects
+            name_to_path = {f.name: f for f in audio_files}
+            self.custom_track_order = [name_to_path[name] for name in ordered_names if name in name_to_path]
+            messagebox.showinfo(
+                self._t("video_btn_order_tracks"),
+                f"Ordine salvato: {len(self.custom_track_order)} tracce.",
+                parent=dialog
+            )
+            dialog.destroy()
+
+        def reset_order():
+            self.custom_track_order = None
+            messagebox.showinfo(
+                self._t("video_btn_order_tracks"),
+                "Ordine resettato. Verrà usato l'ordine casuale.",
+                parent=dialog
+            )
+            dialog.destroy()
+
+        ttk.Button(button_frame, text="Salva ordine", command=save_order).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Reset ordine", command=reset_order).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Annulla", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
 
     def _toggle_video_pause(self) -> None:
         """Toggle pause/resume for video operation."""
