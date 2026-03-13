@@ -2714,6 +2714,7 @@ class DoomerVideoGenerator:
         settings: VideoSettings,
         progress: Callable[[int, int, int, str, str], None],
         check_pause: Callable[[], bool] | None = None,
+        check_stop: Callable[[], bool] | None = None,
         on_new_files: Callable[[list[Path]], None] | None = None,
         selected_backgrounds: list[Path] | None = None,
         selected_doomer_guys: list[Path] | None = None,
@@ -2728,6 +2729,7 @@ class DoomerVideoGenerator:
                 settings=settings,
                 progress=progress,
                 check_pause=check_pause,
+                check_stop=check_stop,
                 selected_backgrounds=selected_backgrounds,
                 selected_doomer_guys=selected_doomer_guys,
                 custom_track_order=custom_track_order,
@@ -2791,6 +2793,11 @@ class DoomerVideoGenerator:
             first_batch = False
 
             for audio_file in current_files:
+                # Check if stopped
+                if check_stop and check_stop():
+                    self.log("⏹ Generazione video interrotta dall'utente")
+                    break
+
                 # Recalculate total on each iteration to account for new files detected during generation
                 all_pending = [f for f in _collect_files(audio_input_dir, AUDIO_EXTENSIONS) if f not in processed_files]
                 total = generated + failed + len(all_pending)
@@ -2849,7 +2856,9 @@ class DoomerVideoGenerator:
                 # Track generation time
                 start_time = time.time()
                 # Generate to temporary location in processing/ subdirectory
-                success = self._generate_single_video(audio_file, background, doomer_guy, temp_destination, settings, resolved_encoder)
+                success = self._generate_single_video(
+                    audio_file, background, doomer_guy, temp_destination, settings, resolved_encoder, check_stop=check_stop
+                )
                 elapsed = time.time() - start_time
 
                 if success:
@@ -2888,6 +2897,20 @@ class DoomerVideoGenerator:
                     while check_pause():
                         time.sleep(0.1)
 
+            # Check if stopped (break out of outer loop)
+            if check_stop and check_stop():
+                self.log("⏹ Generazione video completamente interrotta")
+                # Clean up processing directory
+                processing_dir = video_output_dir / "processing"
+                if processing_dir.exists():
+                    import shutil
+                    try:
+                        shutil.rmtree(processing_dir)
+                        self.log("✓ File temporanei eliminati")
+                    except Exception as e:
+                        self.log(f"⚠ Errore eliminazione file temporanei: {e}")
+                break
+
         return VideoSummary(total=total, generated=generated, failed=failed)
 
     def _generate_single_video(
@@ -2898,6 +2921,7 @@ class DoomerVideoGenerator:
         destination: Path,
         settings: VideoSettings,
         resolved_encoder: str,
+        check_stop: Callable[[], bool] | None = None,
     ) -> bool:
         duration = self._probe_duration_seconds(audio_file)
         if duration is None:
@@ -2914,12 +2938,31 @@ class DoomerVideoGenerator:
             encoder=active_encoder,
         )
 
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode == 0:
+        # Use Popen to allow killing the process
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Track the process so it can be killed on stop
+        with self.active_ffmpeg_lock:
+            self.active_ffmpeg_process = process
+
+        try:
+            stdout, stderr = process.communicate()
+            returncode = process.returncode
+        finally:
+            # Clear the tracked process
+            with self.active_ffmpeg_lock:
+                self.active_ffmpeg_process = None
+
+        # Check if stopped
+        if check_stop and check_stop():
+            self.log("  ⏹ Generazione video interrotta")
+            return False
+
+        if returncode == 0:
             return True
 
         if active_encoder != "cpu":
-            gpu_detail = _summarize_process_output(result.stdout, result.stderr)
+            gpu_detail = _summarize_process_output(stdout, stderr)
             if gpu_detail:
                 self.log(f"  ffmpeg ({active_encoder}): {gpu_detail}")
             self.log("  Encoder GPU non disponibile/stabile su questo host. Fallback CPU...")
@@ -2932,15 +2975,32 @@ class DoomerVideoGenerator:
                 duration=duration,
                 encoder="cpu",
             )
-            fallback_result = subprocess.run(fallback_command, capture_output=True, text=True)
-            if fallback_result.returncode == 0:
+
+            # Use Popen for fallback too
+            fallback_process = subprocess.Popen(fallback_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            with self.active_ffmpeg_lock:
+                self.active_ffmpeg_process = fallback_process
+
+            try:
+                fallback_stdout, fallback_stderr = fallback_process.communicate()
+                fallback_returncode = fallback_process.returncode
+            finally:
+                with self.active_ffmpeg_lock:
+                    self.active_ffmpeg_process = None
+
+            # Check if stopped
+            if check_stop and check_stop():
+                self.log("  ⏹ Generazione video interrotta (fallback)")
+                return False
+
+            if fallback_returncode == 0:
                 return True
-            detail = _summarize_process_output(fallback_result.stdout, fallback_result.stderr)
+            detail = _summarize_process_output(fallback_stdout, fallback_stderr)
             if detail:
                 self.log(f"  ffmpeg: {detail}")
             return False
 
-        detail = _summarize_process_output(result.stdout, result.stderr)
+        detail = _summarize_process_output(stdout, stderr)
         if detail:
             self.log(f"  ffmpeg: {detail}")
         return False
@@ -2952,6 +3012,7 @@ class DoomerVideoGenerator:
         settings: VideoSettings,
         progress: Callable[[int, int, int, str, str], None],
         check_pause: Callable[[], bool] | None = None,
+        check_stop: Callable[[], bool] | None = None,
         selected_backgrounds: list[Path] | None = None,
         selected_doomer_guys: list[Path] | None = None,
         custom_track_order: list[Path] | None = None,
@@ -3091,11 +3152,27 @@ class DoomerVideoGenerator:
             destination=temp_video,
             settings=settings,
             resolved_encoder=resolved_encoder,
+            check_stop=check_stop,
         )
 
         # Clean up temp audio
         if temp_audio.exists():
             temp_audio.unlink()
+
+        # Check if stopped
+        if check_stop and check_stop():
+            self.log("⏹ Generazione video unico interrotta dall'utente")
+            # Clean up temp video and processing directory
+            if temp_video.exists():
+                temp_video.unlink()
+            if processing_dir.exists():
+                import shutil
+                try:
+                    shutil.rmtree(processing_dir)
+                    self.log("✓ File temporanei eliminati")
+                except Exception as e:
+                    self.log(f"⚠ Errore eliminazione file temporanei: {e}")
+            return VideoSummary(total=1, generated=0, failed=0)
 
         if video_success and temp_video.exists():
             # Move video from processing to output directory
@@ -3483,6 +3560,10 @@ class DoomerGeneratorApp:
         self.upload_paused = False
         self.video_stopped = False
         self.upload_stopped = False
+
+        # Active FFmpeg processes (for killing on stop)
+        self.active_ffmpeg_process: subprocess.Popen | None = None
+        self.active_ffmpeg_lock = threading.Lock()
 
         # Single video track order
         self.custom_track_order: list[Path] | None = None
@@ -7254,6 +7335,7 @@ class DoomerGeneratorApp:
                 settings=settings,
                 progress=self._queue_video_progress,
                 check_pause=lambda: self.video_paused,
+                check_stop=lambda: self.video_stopped,
                 on_new_files=on_new_video_files,
                 selected_backgrounds=self.selected_backgrounds if self.selected_backgrounds else None,
                 selected_doomer_guys=self.selected_doomer_guys if self.selected_doomer_guys else None,
@@ -9245,6 +9327,17 @@ class DoomerGeneratorApp:
         self.video_paused = False  # Clear pause state
         self._log("⏹ Arresto generazione video in corso...")
         self.video_stop_button.configure(state=tk.DISABLED)
+
+        # Kill active FFmpeg process if any
+        with self.active_ffmpeg_lock:
+            if self.active_ffmpeg_process is not None:
+                try:
+                    self._log("⏹ Terminazione processo FFmpeg...")
+                    self.active_ffmpeg_process.kill()
+                    self.active_ffmpeg_process.wait(timeout=5)
+                    self._log("✓ Processo FFmpeg terminato")
+                except Exception as e:
+                    self._log(f"⚠ Errore terminazione FFmpeg: {e}")
 
     def _stop_upload(self) -> None:
         """Stop upload completely."""
