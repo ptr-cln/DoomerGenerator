@@ -2974,6 +2974,7 @@ class DoomerVideoGenerator:
 
         # Select files until we reach target duration
         selected_files: list[Path] = []
+        file_durations: list[float] = []  # Store durations for timestamp calculation
         accumulated_duration = 0.0
         target_duration = settings.single_video_duration_seconds
 
@@ -2985,6 +2986,7 @@ class DoomerVideoGenerator:
 
             # Add the file
             selected_files.append(audio_file)
+            file_durations.append(duration)
             accumulated_duration += duration
             self.log(f"  Aggiunto: {audio_file.name} ({int(duration)}s) - Totale: {int(accumulated_duration)}s")
 
@@ -3090,6 +3092,15 @@ class DoomerVideoGenerator:
             import shutil
             shutil.move(str(temp_video), str(final_destination))
             self.log(f"✓ Video generato: {output_filename}")
+
+            # Write timestamp log to mix_history.txt
+            self._write_mix_history(
+                video_title=settings.single_video_title or f"doomer_mix_{len(selected_files)}_songs",
+                selected_files=selected_files,
+                file_durations=file_durations,
+                silence_seconds=settings.single_video_silence_seconds,
+            )
+
             progress(3, 3, 0, "Completato", background.name)
             return VideoSummary(total=1, generated=1, failed=0)
         else:
@@ -3098,6 +3109,70 @@ class DoomerVideoGenerator:
             if temp_video.exists():
                 temp_video.unlink()
             return VideoSummary(total=1, generated=0, failed=1)
+
+    def _write_mix_history(
+        self,
+        video_title: str,
+        selected_files: list[Path],
+        file_durations: list[float],
+        silence_seconds: float,
+    ) -> None:
+        """Write timestamp log to mix_history.txt (append-only)."""
+        try:
+            import datetime
+
+            # Calculate timestamps
+            timestamp_lines = []
+            current_time = 0.0
+
+            for audio_file, duration in zip(selected_files, file_durations):
+                # Format start time
+                start_minutes = int(current_time // 60)
+                start_seconds = int(current_time % 60)
+                start_str = f"{start_minutes:02d}:{start_seconds:02d}"
+
+                # Calculate end time (start + duration)
+                end_time = current_time + duration
+                end_minutes = int(end_time // 60)
+                end_seconds = int(end_time % 60)
+                end_str = f"{end_minutes:02d}:{end_seconds:02d}"
+
+                # Extract artist and title from filename (assuming format: "Artist - Title.mp3")
+                filename_stem = audio_file.stem
+                if " - " in filename_stem:
+                    parts = filename_stem.split(" - ", 1)
+                    artist = parts[0].strip()
+                    title = parts[1].strip()
+                    track_info = f"{artist} - {title}"
+                else:
+                    track_info = filename_stem
+
+                # Format: "00:00 - 03:30 : Artist - Title"
+                timestamp_lines.append(f"{start_str} - {end_str} : {track_info}")
+
+                # Move to next track (add silence)
+                current_time = end_time + silence_seconds
+
+            # Prepare the log entry
+            now = datetime.datetime.now()
+            date_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+            log_entry = f"\n{'='*80}\n"
+            log_entry += f"Video: {video_title}\n"
+            log_entry += f"Data: {date_str}\n"
+            log_entry += f"Tracce: {len(selected_files)}\n"
+            log_entry += f"{'-'*80}\n"
+            log_entry += "\n".join(timestamp_lines)
+            log_entry += f"\n{'='*80}\n"
+
+            # Append to file
+            with open(self.mix_history_file, "a", encoding="utf-8") as f:
+                f.write(log_entry)
+
+            self.log(f"✓ Timestamp salvati in: {self.mix_history_file.name}")
+
+        except Exception as e:
+            self.log(f"⚠ Errore salvataggio timestamp: {e}")
 
     def _concatenate_audio_files(
         self,
@@ -3388,6 +3463,7 @@ class DoomerGeneratorApp:
         self.usage_memory_path = self.project_dir / ".usage_memory.json"
         self.selected_resources_memory_path = self.project_dir / ".selected_resources_memory.json"
         self.logs_dir = self.project_dir / "logs"
+        self.mix_history_file = self.project_dir / "mix_history.txt"
 
         # Setup logging system
         self._setup_logging()
