@@ -2949,11 +2949,21 @@ class DoomerVideoGenerator:
                         if temp_destination.exists():
                             temp_destination.unlink()
                 else:
-                    failed += 1
-                    self.log(self.translate("log_file_error").format(filename=audio_file.name))
-                    # Clean up temp file if generation failed
-                    if temp_destination.exists():
-                        temp_destination.unlink()
+                    # Check if it failed due to stop or actual error
+                    if check_stop and check_stop():
+                        # Stopped by user - break immediately
+                        self.log("⏹ Generazione video interrotta dall'utente")
+                        # Clean up temp file
+                        if temp_destination.exists():
+                            temp_destination.unlink()
+                        break  # Exit the for loop immediately
+                    else:
+                        # Actual error - continue with next file
+                        failed += 1
+                        self.log(self.translate("log_file_error").format(filename=audio_file.name))
+                        # Clean up temp file if generation failed
+                        if temp_destination.exists():
+                            temp_destination.unlink()
 
                 # Check for pause AFTER processing the file to avoid re-processing
                 if check_pause:
@@ -3261,11 +3271,26 @@ class DoomerVideoGenerator:
             progress(3, 3, 0, "Completato", background.name)
             return VideoSummary(total=1, generated=1, failed=0)
         else:
-            self.log("ERRORE: Generazione video fallita")
-            # Clean up temp video if it exists
-            if temp_video.exists():
-                temp_video.unlink()
-            return VideoSummary(total=1, generated=0, failed=1)
+            # Check if it failed due to stop or actual error
+            if check_stop and check_stop():
+                # Already handled above, but double-check
+                self.log("⏹ Generazione video unico interrotta")
+                if temp_video.exists():
+                    temp_video.unlink()
+                if processing_dir.exists():
+                    import shutil
+                    try:
+                        shutil.rmtree(processing_dir)
+                    except Exception:
+                        pass
+                return VideoSummary(total=1, generated=0, failed=0)
+            else:
+                # Actual error
+                self.log("ERRORE: Generazione video fallita")
+                # Clean up temp video if it exists
+                if temp_video.exists():
+                    temp_video.unlink()
+                return VideoSummary(total=1, generated=0, failed=1)
 
     def _write_mix_history(
         self,
