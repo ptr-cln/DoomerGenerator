@@ -2802,6 +2802,7 @@ class DoomerVideoGenerator:
         selected_doomer_guys: list[Path] | None = None,
         selected_resources_memory_path: Path | None = None,
         custom_track_order: list[Path] | None = None,
+        parallel_progress_callback: Callable[[str, float, str], None] | None = None,
     ) -> VideoSummary:
         # Single video mode - different logic (no multithread, single file)
         if settings.single_video_mode:
@@ -2831,6 +2832,7 @@ class DoomerVideoGenerator:
                 selected_doomer_guys=selected_doomer_guys,
                 selected_resources_memory_path=selected_resources_memory_path,
                 custom_track_order=custom_track_order,
+                parallel_progress_callback=parallel_progress_callback,
             )
 
         # Single-threaded mode (original implementation)
@@ -3064,6 +3066,7 @@ class DoomerVideoGenerator:
         selected_doomer_guys: list[Path] | None = None,
         selected_resources_memory_path: Path | None = None,
         custom_track_order: list[Path] | None = None,
+        parallel_progress_callback: Callable[[str, float, str], None] | None = None,
     ) -> VideoSummary:
         """Parallel (multi-threaded) video generation for faster processing."""
         import concurrent.futures
@@ -3109,11 +3112,6 @@ class DoomerVideoGenerator:
         # Thread-safe locks for shared resources
         memory_lock = threading.Lock()
         stats_lock = threading.Lock()
-
-        # Create progress callback for parallel bars
-        def parallel_progress_callback(thread_id: str, percent: float, message: str) -> None:
-            """Thread-safe callback to update parallel progress bars."""
-            self.event_queue.put(("parallel_video_progress", (thread_id, percent, message)))
 
         first_batch = True
 
@@ -7915,6 +7913,10 @@ class DoomerGeneratorApp:
                 # Refresh queue display once after adding all new items
                 self._refresh_queue_display()
 
+            def parallel_progress_callback(thread_id: str, percent: float, message: str) -> None:
+                """Thread-safe callback to update parallel progress bars."""
+                self.events.put(("parallel_video_progress", (thread_id, percent, message)))
+
             summary = generator.generate_from_audio_folder(
                 audio_input_dir=input_audio_dir,
                 video_output_dir=output_video_dir,
@@ -7927,6 +7929,7 @@ class DoomerGeneratorApp:
                 selected_doomer_guys=self.selected_doomer_guys if self.selected_doomer_guys else None,
                 selected_resources_memory_path=self.selected_resources_memory_path if (self.selected_backgrounds or self.selected_doomer_guys) else None,
                 custom_track_order=self.custom_track_order if settings.single_video_mode else None,
+                parallel_progress_callback=parallel_progress_callback,
             )
 
             # Clear selected resources memory after generation completes
