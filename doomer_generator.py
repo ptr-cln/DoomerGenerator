@@ -7988,6 +7988,7 @@ class DoomerGeneratorApp:
             self.video_glitch_var.set(defaults.glitch_effect)
             self.video_encoder_var.set(defaults.video_encoder)
             self.video_shutdown_after_generation_var.set(defaults.shutdown_after_generation)
+            self.video_max_parallel_var.set(defaults.max_parallel_videos)
         self._log(self._t("log_video_defaults_reset"))
 
     @staticmethod
@@ -9404,6 +9405,13 @@ class DoomerGeneratorApp:
         if isinstance(shutdown_after_generation, bool):
             self.video_shutdown_after_generation_var.set(shutdown_after_generation)
 
+        # Load max_parallel_videos (default to 3 if not present)
+        max_parallel = video.get("max_parallel_videos")
+        if isinstance(max_parallel, int) and 1 <= max_parallel <= 4:
+            self.video_max_parallel_var.set(max_parallel)
+        else:
+            self.video_max_parallel_var.set(self.default_video_settings.max_parallel_videos)
+
     def _load_language_preference(self) -> None:
         """Load language preference from settings BEFORE building UI."""
         payload = self._read_persisted_app_settings()
@@ -9539,6 +9547,7 @@ class DoomerGeneratorApp:
                 self.default_video_settings.video_encoder,
             ),
             "shutdown_after_generation": self.video_shutdown_after_generation_var.get(),
+            "max_parallel_videos": self.video_max_parallel_var.get(),
         }
         if self._write_persisted_app_settings(payload) and not silent:
             self._log(self._t("log_video_settings_saved", file=self.app_settings_path.name))
