@@ -3110,6 +3110,11 @@ class DoomerVideoGenerator:
         memory_lock = threading.Lock()
         stats_lock = threading.Lock()
 
+        # Create progress callback for parallel bars
+        def parallel_progress_callback(thread_id: str, percent: float, message: str) -> None:
+            """Thread-safe callback to update parallel progress bars."""
+            self.event_queue.put(("parallel_video_progress", (thread_id, percent, message)))
+
         first_batch = True
 
         while True:
@@ -3160,6 +3165,7 @@ class DoomerVideoGenerator:
                         resolved_encoder=resolved_encoder,
                         check_stop=check_stop,
                         check_pause=check_pause,
+                        progress_callback=parallel_progress_callback,
                     )
                     future_to_file[future] = audio_file
 
@@ -3234,13 +3240,18 @@ class DoomerVideoGenerator:
         resolved_encoder: str,
         check_stop: Callable[[], bool] | None,
         check_pause: Callable[[], bool] | None,
+        progress_callback: Callable[[str, float, str], None] | None = None,
     ) -> tuple[bool, float]:
         """
         Process a single video in a worker thread.
         Returns (success, elapsed_time).
+        progress_callback: Optional callback(thread_id, percent, message) for parallel progress bars.
         """
         import time
         import shutil
+
+        # Get thread ID for progress tracking
+        thread_id = str(threading.current_thread().ident)
 
         # Check if stopped before starting
         if check_stop and check_stop():
@@ -3260,10 +3271,13 @@ class DoomerVideoGenerator:
             processing_dir.mkdir(parents=True, exist_ok=True)
 
             # Use thread ID to avoid filename conflicts in processing directory
-            thread_id = threading.current_thread().ident
             temp_destination = processing_dir / f"{audio_file.stem}_{thread_id}.mp4"
             final_destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
             final_destination.parent.mkdir(parents=True, exist_ok=True)
+
+            # Report progress: selecting resources
+            if progress_callback:
+                progress_callback(thread_id, 10, f"Selezione risorse per {audio_file.name}")
 
             # Select background and doomer guy (thread-safe)
             with memory_lock:
@@ -3292,6 +3306,10 @@ class DoomerVideoGenerator:
             if doomer_guy:
                 self.log(f"   Doomer Guy: {doomer_guy.name}")
 
+            # Report progress: generating video
+            if progress_callback:
+                progress_callback(thread_id, 30, f"Generazione {audio_file.name}")
+
             # Generate video
             start_time = time.time()
             success = self._generate_single_video(
@@ -3305,10 +3323,17 @@ class DoomerVideoGenerator:
             )
             elapsed = time.time() - start_time
 
+            # Report progress: finalizing
+            if progress_callback:
+                progress_callback(thread_id, 90, f"Finalizzazione {audio_file.name}")
+
             if not success:
                 # Clean up temp file
                 if temp_destination.exists():
                     temp_destination.unlink()
+                # Report failure
+                if progress_callback:
+                    progress_callback(thread_id, 0, f"❌ Fallito: {audio_file.name}")
                 return (False, elapsed)
 
             # Move to final destination (atomic operation)
@@ -3324,6 +3349,10 @@ class DoomerVideoGenerator:
                         metadata_file=metadata_file
                     )
 
+                # Report completion
+                if progress_callback:
+                    progress_callback(thread_id, 100, f"✅ Completato: {audio_file.name}")
+
                 return (True, elapsed)
 
             except Exception as e:
@@ -3331,10 +3360,16 @@ class DoomerVideoGenerator:
                 # Clean up temp file if move failed
                 if temp_destination.exists():
                     temp_destination.unlink()
+                # Report failure
+                if progress_callback:
+                    progress_callback(thread_id, 0, f"❌ Errore: {audio_file.name}")
                 return (False, elapsed)
 
         except Exception as e:
             self.log(f"  ERRORE generazione -> {audio_file.name}: {e}")
+            # Report failure
+            if progress_callback:
+                progress_callback(thread_id, 0, f"❌ Errore: {audio_file.name}")
             return (False, 0.0)
 
     def _generate_single_video(
@@ -4186,6 +4221,10 @@ class DoomerGeneratorApp:
         self.video_timer_text = tk.StringVar(value="00:00:00")
         self.video_start_time: float | None = None
 
+        # Parallel video progress tracking
+        self.parallel_video_progress_bars: dict[str, dict[str, tk.Variable | ttk.Progressbar | ttk.Label]] = {}
+        self.parallel_progress_container: ttk.Frame | None = None
+
         self.upload_progress_var = tk.DoubleVar(value=0.0)
         self.upload_progress_text = tk.StringVar(value=self._t("status_ready"))
         self.upload_timer_text = tk.StringVar(value="00:00:00")
@@ -4297,6 +4336,62 @@ class DoomerGeneratorApp:
 
         # Schedule next update
         self.root.after(1000, self._update_timers)
+
+    def _create_parallel_progress_bar(self, thread_id: str) -> None:
+        """Create a progress bar for a specific parallel thread."""
+        if not self.parallel_progress_container:
+            return
+
+        # Show container if hidden
+        if not self.parallel_progress_container.winfo_ismapped():
+            self.parallel_progress_container.pack(fill=tk.X, pady=(10, 0))
+
+        # Create frame for this thread
+        thread_frame = ttk.Frame(self.parallel_progress_container)
+        thread_frame.pack(fill=tk.X, pady=(0, 8))
+
+        # Create progress bar
+        progress_var = tk.DoubleVar(value=0.0)
+        progress_bar = ttk.Progressbar(thread_frame, variable=progress_var, maximum=100)
+        progress_bar.pack(fill=tk.X)
+
+        # Create label
+        text_var = tk.StringVar(value=f"Thread {thread_id}: Inizializzazione...")
+        label = ttk.Label(thread_frame, textvariable=text_var)
+        label.pack(anchor="w", pady=(4, 0))
+
+        # Store references
+        self.parallel_video_progress_bars[thread_id] = {
+            "frame": thread_frame,
+            "progress_var": progress_var,
+            "text_var": text_var,
+            "progress_bar": progress_bar,
+            "label": label,
+        }
+
+    def _update_parallel_progress_bar(self, thread_id: str, percent: float, message: str) -> None:
+        """Update a specific parallel thread's progress bar."""
+        if thread_id not in self.parallel_video_progress_bars:
+            self._create_parallel_progress_bar(thread_id)
+
+        bar_data = self.parallel_video_progress_bars[thread_id]
+        bar_data["progress_var"].set(percent)  # type: ignore[attr-defined]
+        bar_data["text_var"].set(f"Thread {thread_id}: {message}")  # type: ignore[attr-defined]
+
+    def _clear_parallel_progress_bars(self) -> None:
+        """Clear all parallel progress bars and hide container."""
+        # Destroy all thread frames
+        for thread_id in list(self.parallel_video_progress_bars.keys()):
+            bar_data = self.parallel_video_progress_bars[thread_id]
+            bar_data["frame"].destroy()  # type: ignore[attr-defined]
+
+        # Clear dictionary
+        self.parallel_video_progress_bars.clear()
+
+        # Hide container
+        if self.parallel_progress_container and self.parallel_progress_container.winfo_ismapped():
+            self.parallel_progress_container.pack_forget()
+
 
     def _persist_general_language(self) -> None:
         payload = self._read_persisted_app_settings()
@@ -5485,6 +5580,10 @@ class DoomerGeneratorApp:
         ttk.Progressbar(video_progress_box, variable=self.video_progress_var, maximum=100).pack(fill=tk.X)
         ttk.Label(video_progress_box, textvariable=self.video_progress_text).pack(anchor="w", pady=(6, 0))
         ttk.Label(video_progress_box, textvariable=self.video_timer_text).pack(anchor="w", pady=(2, 0))
+
+        # Parallel video progress (hidden by default, shown when parallel mode is active)
+        self.parallel_progress_container = ttk.LabelFrame(parent, text="🚀 Progresso Parallelo", padding=8)
+        # Don't pack it yet - will be shown/hidden dynamically
 
     def _build_upload_tab(self, parent: ttk.Frame) -> None:
         source_box = ttk.LabelFrame(parent, text=self._t("upload_group_source"), padding=8)
@@ -9824,6 +9923,9 @@ class DoomerGeneratorApp:
         self._log("⏹ Arresto generazione video in corso...")
         self.video_stop_button.configure(state=tk.DISABLED)
 
+        # Clear parallel progress bars
+        self._clear_parallel_progress_bars()
+
         # Kill active FFmpeg process if any
         with self.active_ffmpeg_lock:
             if self.active_ffmpeg_process is not None and self.active_ffmpeg_process.poll() is None:
@@ -9976,6 +10078,10 @@ class DoomerGeneratorApp:
                     progress_msg = self._t("progress_audio_file", done=done, total=total, name=file_name)
                     self.progress_text.set(progress_msg)
                     self.audio_progress_text.set(progress_msg)
+                elif event == "parallel_video_progress":
+                    # Update individual parallel progress bar
+                    thread_id, percent, message = payload  # type: ignore[misc]
+                    self._update_parallel_progress_bar(thread_id, percent, message)
                 elif event == "video_progress":
                     done, total, eta_seconds, audio_name, background_name = payload  # type: ignore[misc]
                     percent = 0 if total == 0 else (done / total) * 100
@@ -10129,6 +10235,9 @@ class DoomerGeneratorApp:
                     summary: VideoSummary = payload  # type: ignore[assignment]
                     self.video_processing = False
                     self.video_paused = False  # Reset pause flag
+
+                    # Clear parallel progress bars
+                    self._clear_parallel_progress_bars()
 
                     # Mark last file as complete
                     if self.last_processed_file and self.last_processed_file in self.current_queue_items:
