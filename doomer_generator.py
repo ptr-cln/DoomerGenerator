@@ -3475,13 +3475,34 @@ class DoomerVideoGenerator:
             self.log(f"File audio trovati: {len(audio_files)}")
 
         # Select files until we reach target duration
+        # OPTIMIZATION: Probe all durations in parallel first
+        self.log("🚀 Rilevamento durate in parallelo...")
+        import concurrent.futures
+
+        file_duration_map: dict[Path, float] = {}
+
+        def probe_with_path(audio_file: Path) -> tuple[Path, float | None]:
+            """Probe duration and return (path, duration) tuple."""
+            return (audio_file, self._probe_duration_seconds(audio_file))
+
+        # Probe all files in parallel (up to 8 threads for I/O-bound operations)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(probe_with_path, f) for f in audio_files]
+            for future in concurrent.futures.as_completed(futures):
+                path, duration = future.result()
+                if duration is not None:
+                    file_duration_map[path] = duration
+
+        self.log(f"✓ Durate rilevate: {len(file_duration_map)}/{len(audio_files)} file validi")
+
+        # Now select files based on pre-computed durations
         selected_files: list[Path] = []
-        file_durations: list[float] = []  # Store durations for timestamp calculation
+        file_durations: list[float] = []
         accumulated_duration = 0.0
         target_duration = settings.single_video_duration_seconds
 
         for audio_file in audio_files:
-            duration = self._probe_duration_seconds(audio_file)
+            duration = file_duration_map.get(audio_file)
             if duration is None:
                 self.log(f"  Impossibile rilevare durata: {audio_file.name} (saltato)")
                 continue
@@ -3551,8 +3572,8 @@ class DoomerVideoGenerator:
         )
 
         # Generate concatenated audio file
-        self.log("Concatenazione audio in corso...")
-        progress(1, 3, 0, "Concatenazione audio", background.name)
+        self.log(f"🎵 Concatenazione audio in corso ({len(selected_files)} tracce)...")
+        progress(1, 3, 0, f"Concatenazione {len(selected_files)} tracce", background.name)
 
         # Use processing directory for temp file
         processing_dir = video_output_dir / "processing"
@@ -3752,22 +3773,24 @@ class DoomerVideoGenerator:
         for audio_file in audio_files:
             command.extend(["-i", str(audio_file)])
 
-        # Add filter complex
+        # Add filter complex and optimizations
         command.extend([
             "-filter_complex", filter_complex,
             "-map", output_label,
             "-c:a", "libmp3lame",
-            "-b:a", "192k",
+            "-q:a", "2",  # VBR quality 2 (high quality, ~190 kbps average)
+            "-threads", "0",  # Use all available CPU threads
             str(output_path),
         ])
 
-        self.log(f"Concatenazione di {len(audio_files)} file audio...")
+        self.log(f"🚀 Concatenazione di {len(audio_files)} file audio (multithread)...")
         result = subprocess.run(command, capture_output=True, text=True)
 
         if result.returncode != 0:
             self.log(f"ERRORE concatenazione: {result.stderr}")
             return False
 
+        self.log(f"✓ Concatenazione completata")
         return True
 
     def _build_video_render_command(
