@@ -294,6 +294,7 @@ class VideoSettings:
     glitch_effect: float = 0.0
     video_encoder: str = "auto"
     shutdown_after_generation: bool = False
+    max_parallel_videos: int = 3  # Number of videos to process in parallel (1-4)
     # Single video mode settings (not saved in presets)
     single_video_mode: bool = False
     single_video_duration_seconds: int = 3600  # 1 hour default
@@ -2802,7 +2803,7 @@ class DoomerVideoGenerator:
         selected_resources_memory_path: Path | None = None,
         custom_track_order: list[Path] | None = None,
     ) -> VideoSummary:
-        # Single video mode - different logic
+        # Single video mode - different logic (no multithread, single file)
         if settings.single_video_mode:
             return self._generate_single_long_video(
                 audio_input_dir=audio_input_dir,
@@ -2816,6 +2817,52 @@ class DoomerVideoGenerator:
                 custom_track_order=custom_track_order,
             )
 
+        # Use multithread if max_parallel_videos > 1
+        if settings.max_parallel_videos > 1:
+            return self._generate_from_audio_folder_parallel(
+                audio_input_dir=audio_input_dir,
+                video_output_dir=video_output_dir,
+                settings=settings,
+                progress=progress,
+                check_pause=check_pause,
+                check_stop=check_stop,
+                on_new_files=on_new_files,
+                selected_backgrounds=selected_backgrounds,
+                selected_doomer_guys=selected_doomer_guys,
+                selected_resources_memory_path=selected_resources_memory_path,
+                custom_track_order=custom_track_order,
+            )
+
+        # Single-threaded mode (original implementation)
+        return self._generate_from_audio_folder_sequential(
+            audio_input_dir=audio_input_dir,
+            video_output_dir=video_output_dir,
+            settings=settings,
+            progress=progress,
+            check_pause=check_pause,
+            check_stop=check_stop,
+            on_new_files=on_new_files,
+            selected_backgrounds=selected_backgrounds,
+            selected_doomer_guys=selected_doomer_guys,
+            selected_resources_memory_path=selected_resources_memory_path,
+            custom_track_order=custom_track_order,
+        )
+
+    def _generate_from_audio_folder_sequential(
+        self,
+        audio_input_dir: Path,
+        video_output_dir: Path,
+        settings: VideoSettings,
+        progress: Callable[[int, int, int, str, str], None],
+        check_pause: Callable[[], bool] | None = None,
+        check_stop: Callable[[], bool] | None = None,
+        on_new_files: Callable[[list[Path]], None] | None = None,
+        selected_backgrounds: list[Path] | None = None,
+        selected_doomer_guys: list[Path] | None = None,
+        selected_resources_memory_path: Path | None = None,
+        custom_track_order: list[Path] | None = None,
+    ) -> VideoSummary:
+        """Sequential (single-threaded) video generation - original implementation."""
         # Use selected resources if provided, otherwise use all from directories
         if selected_doomer_guys:
             doomer_guys = selected_doomer_guys
@@ -3003,6 +3050,292 @@ class DoomerVideoGenerator:
                 break
 
         return VideoSummary(total=total, generated=generated, failed=failed)
+
+    def _generate_from_audio_folder_parallel(
+        self,
+        audio_input_dir: Path,
+        video_output_dir: Path,
+        settings: VideoSettings,
+        progress: Callable[[int, int, int, str, str], None],
+        check_pause: Callable[[], bool] | None = None,
+        check_stop: Callable[[], bool] | None = None,
+        on_new_files: Callable[[list[Path]], None] | None = None,
+        selected_backgrounds: list[Path] | None = None,
+        selected_doomer_guys: list[Path] | None = None,
+        selected_resources_memory_path: Path | None = None,
+        custom_track_order: list[Path] | None = None,
+    ) -> VideoSummary:
+        """Parallel (multi-threaded) video generation for faster processing."""
+        import concurrent.futures
+        import queue
+
+        # Use selected resources if provided, otherwise use all from directories
+        if selected_doomer_guys:
+            doomer_guys = selected_doomer_guys
+            self.log(self.translate("log_using_selected_doomer_guys").format(count=len(doomer_guys)))
+        else:
+            doomer_guys = _collect_files(self.doomer_guys_dir, IMAGE_EXTENSIONS)
+
+        if not doomer_guys:
+            self.log(f"Nessuna immagine Doomer Guy trovata")
+            return VideoSummary(total=0, generated=0, failed=0)
+
+        if selected_backgrounds:
+            backgrounds = selected_backgrounds
+            self.log(self.translate("log_using_selected_backgrounds").format(count=len(backgrounds)))
+        else:
+            backgrounds = _collect_files(self.backgrounds_dir, IMAGE_EXTENSIONS)
+
+        if not backgrounds:
+            self.log(self.translate("log_no_backgrounds_found"))
+            return VideoSummary(total=0, generated=0, failed=0)
+
+        # Use selected resources memory if provided, otherwise use default
+        memory_path = selected_resources_memory_path if selected_resources_memory_path else self.usage_memory_path
+
+        resolved_encoder = self._resolve_video_encoder(settings.video_encoder)
+        max_workers = min(settings.max_parallel_videos, 4)  # Cap at 4 to avoid overwhelming system
+
+        self.log(f"🚀 Modalità PARALLELA attiva: {max_workers} video contemporaneamente")
+        self.log(self.translate("log_encoder_active").format(
+            encoder=VIDEO_ENCODER_LABELS.get(resolved_encoder, resolved_encoder)
+        ))
+
+        generated = 0
+        failed = 0
+        processed_files: set[Path] = set()
+        generation_times: list[float] = []
+
+        # Thread-safe locks for shared resources
+        memory_lock = threading.Lock()
+        stats_lock = threading.Lock()
+
+        first_batch = True
+
+        while True:
+            # Check if stopped
+            if check_stop and check_stop():
+                self.log("⏹ Generazione video interrotta dall'utente")
+                break
+
+            # Get current list of audio files, excluding already processed ones
+            current_files = [f for f in _collect_files(audio_input_dir, AUDIO_EXTENSIONS) if f not in processed_files]
+
+            if not current_files:
+                break
+
+            # Randomize processing order
+            random.shuffle(current_files)
+
+            # Log when new files are detected
+            if not first_batch:
+                self.log(self.translate("log_new_audio_detected").format(count=len(current_files)))
+                if on_new_files:
+                    on_new_files(current_files)
+            first_batch = False
+
+            # Process files in parallel batches
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all files to the thread pool
+                future_to_file: dict[concurrent.futures.Future, Path] = {}
+
+                for audio_file in current_files:
+                    if check_stop and check_stop():
+                        break
+
+                    # Mark as processed immediately to avoid duplicate processing
+                    processed_files.add(audio_file)
+
+                    # Submit task to thread pool
+                    future = executor.submit(
+                        self._process_single_video_task,
+                        audio_file=audio_file,
+                        audio_input_dir=audio_input_dir,
+                        video_output_dir=video_output_dir,
+                        backgrounds=backgrounds,
+                        doomer_guys=doomer_guys,
+                        memory_path=memory_path,
+                        memory_lock=memory_lock,
+                        settings=settings,
+                        resolved_encoder=resolved_encoder,
+                        check_stop=check_stop,
+                        check_pause=check_pause,
+                    )
+                    future_to_file[future] = audio_file
+
+                # Process completed tasks as they finish
+                for future in concurrent.futures.as_completed(future_to_file):
+                    audio_file = future_to_file[future]
+
+                    try:
+                        success, elapsed = future.result()
+
+                        with stats_lock:
+                            if success:
+                                generated += 1
+                                generation_times.append(elapsed)
+                                self.log(self.translate("log_file_ok").format(filename=audio_file.name))
+                            else:
+                                # Check if it was a stop or an error
+                                if check_stop and check_stop():
+                                    self.log("⏹ Generazione video interrotta dall'utente")
+                                    executor.shutdown(wait=False, cancel_futures=True)
+                                    break
+                                else:
+                                    failed += 1
+                                    self.log(self.translate("log_file_error").format(filename=audio_file.name))
+
+                            # Update progress
+                            all_pending = [f for f in _collect_files(audio_input_dir, AUDIO_EXTENSIONS) if f not in processed_files]
+                            total = generated + failed + len(all_pending)
+
+                            # Calculate ETA
+                            eta_seconds = 0
+                            if generation_times:
+                                avg_time = sum(generation_times) / len(generation_times)
+                                # Divide by max_workers because we're processing in parallel
+                                remaining_videos = len(all_pending)
+                                eta_seconds = int((avg_time * remaining_videos) / max_workers)
+
+                            progress(generated + failed, total, eta_seconds, audio_file.name, "Parallel")
+
+                    except Exception as e:
+                        with stats_lock:
+                            failed += 1
+                        self.log(f"  ERRORE task -> {audio_file.name}: {e}")
+
+            # Check if stopped after batch
+            if check_stop and check_stop():
+                break
+
+        # Final cleanup
+        processing_dir = video_output_dir / "processing"
+        if processing_dir.exists():
+            import shutil
+            try:
+                shutil.rmtree(processing_dir)
+                self.log("✓ File temporanei eliminati")
+            except Exception as e:
+                self.log(f"⚠ Errore eliminazione file temporanei: {e}")
+
+        total = generated + failed
+        return VideoSummary(total=total, generated=generated, failed=failed)
+
+    def _process_single_video_task(
+        self,
+        audio_file: Path,
+        audio_input_dir: Path,
+        video_output_dir: Path,
+        backgrounds: list[Path],
+        doomer_guys: list[Path],
+        memory_path: Path,
+        memory_lock: threading.Lock,
+        settings: VideoSettings,
+        resolved_encoder: str,
+        check_stop: Callable[[], bool] | None,
+        check_pause: Callable[[], bool] | None,
+    ) -> tuple[bool, float]:
+        """
+        Process a single video in a worker thread.
+        Returns (success, elapsed_time).
+        """
+        import time
+        import shutil
+
+        # Check if stopped before starting
+        if check_stop and check_stop():
+            return (False, 0.0)
+
+        # Handle pause
+        if check_pause:
+            while check_pause():
+                time.sleep(0.1)
+                if check_stop and check_stop():
+                    return (False, 0.0)
+
+        try:
+            # Setup paths
+            relative = audio_file.relative_to(audio_input_dir)
+            processing_dir = video_output_dir / "processing"
+            processing_dir.mkdir(parents=True, exist_ok=True)
+
+            # Use thread ID to avoid filename conflicts in processing directory
+            thread_id = threading.current_thread().ident
+            temp_destination = processing_dir / f"{audio_file.stem}_{thread_id}.mp4"
+            final_destination = video_output_dir / relative.parent / f"{audio_file.stem}.mp4"
+            final_destination.parent.mkdir(parents=True, exist_ok=True)
+
+            # Select background and doomer guy (thread-safe)
+            with memory_lock:
+                memory = _load_usage_memory(memory_path)
+
+                # Check and update memory for backgrounds
+                memory = _check_and_reset_memory_in_place(memory, backgrounds, "backgrounds")
+                background = _get_least_used_file(backgrounds, memory, "backgrounds")
+
+                # Check and update memory for doomer guys
+                memory = _check_and_reset_memory_in_place(memory, doomer_guys, "doomer_guys")
+                doomer_guy = _get_least_used_file(doomer_guys, memory, "doomer_guys")
+
+                # Increment usage for both and save
+                if background:
+                    memory["backgrounds"][str(background)] = memory["backgrounds"].get(str(background), 0) + 1
+                if doomer_guy:
+                    memory["doomer_guys"][str(doomer_guy)] = memory["doomer_guys"].get(str(doomer_guy), 0) + 1
+
+                _save_usage_memory(memory_path, memory)
+
+            # Log (thread-safe via self.log which uses queue)
+            self.log(f"🎬 [{threading.current_thread().name}] Video: {audio_file.name}")
+            if background:
+                self.log(f"   Background: {background.name}")
+            if doomer_guy:
+                self.log(f"   Doomer Guy: {doomer_guy.name}")
+
+            # Generate video
+            start_time = time.time()
+            success = self._generate_single_video(
+                audio_file=audio_file,
+                background=background,
+                doomer_guy=doomer_guy,
+                destination=temp_destination,
+                settings=settings,
+                resolved_encoder=resolved_encoder,
+                check_stop=check_stop,
+            )
+            elapsed = time.time() - start_time
+
+            if not success:
+                # Clean up temp file
+                if temp_destination.exists():
+                    temp_destination.unlink()
+                return (False, elapsed)
+
+            # Move to final destination (atomic operation)
+            try:
+                shutil.move(str(temp_destination), str(final_destination))
+
+                # Save background mapping for AI vision
+                if background and final_destination.exists():
+                    metadata_file = video_output_dir / ".video_metadata.json"
+                    _save_video_background_mapping(
+                        video_path=final_destination,
+                        background_path=background,
+                        metadata_file=metadata_file
+                    )
+
+                return (True, elapsed)
+
+            except Exception as e:
+                self.log(f"  ERRORE spostamento file -> {audio_file.name}: {e}")
+                # Clean up temp file if move failed
+                if temp_destination.exists():
+                    temp_destination.unlink()
+                return (False, elapsed)
+
+        except Exception as e:
+            self.log(f"  ERRORE generazione -> {audio_file.name}: {e}")
+            return (False, 0.0)
 
     def _generate_single_video(
         self,
@@ -3586,7 +3919,17 @@ class DoomerVideoGenerator:
             return ["-c:v", "h264_qsv", "-global_quality", "18"]  # Very high quality
         if encoder == "amd":
             return ["-c:v", "h264_amf", "-quality", "quality", "-qp_i", "18", "-qp_p", "20"]  # Very high quality
-        return ["-c:v", "libx264", "-preset", "medium", "-crf", "23"]  # CPU baseline
+        # CPU baseline with optimizations
+        return [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "23",
+            "-threads",
+            "0",  # Use all available CPU threads for encoding
+        ]
 
     def _probe_duration_seconds(self, audio_file: Path) -> float | None:
         if not self.ffprobe_bin:
@@ -3769,6 +4112,7 @@ class DoomerGeneratorApp:
         self.video_burn_var = tk.DoubleVar(value=self.default_video_settings.film_burn)
         self.video_glitch_var = tk.DoubleVar(value=self.default_video_settings.glitch_effect)
         self.video_encoder_var = tk.StringVar(value=self.default_video_settings.video_encoder)
+        self.video_max_parallel_var = tk.IntVar(value=self.default_video_settings.max_parallel_videos)
         self.video_shutdown_after_generation_var = tk.BooleanVar(
             value=self.default_video_settings.shutdown_after_generation
         )
@@ -4968,6 +5312,32 @@ class DoomerGeneratorApp:
             text=self._t("video_encoder_hint"),
         ).grid(row=3, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="w")
 
+        # Parallel processing
+        ttk.Label(paths, text="🚀 Video paralleli:").grid(row=4, column=0, padx=6, pady=6, sticky="w")
+        parallel_frame = ttk.Frame(paths)
+        parallel_frame.grid(row=4, column=1, padx=6, pady=6, sticky="w")
+
+        ttk.Spinbox(
+            parallel_frame,
+            from_=1,
+            to=4,
+            textvariable=self.video_max_parallel_var,
+            width=5,
+            state="readonly"
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        ttk.Label(
+            parallel_frame,
+            text="(1=sequenziale, 2-4=parallelo)",
+            foreground="gray"
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            paths,
+            text="💡 Più video = più veloce ma usa più RAM/CPU",
+            foreground="gray"
+        ).grid(row=5, column=0, columnspan=3, padx=6, pady=(0, 6), sticky="w")
+
         effects = ttk.LabelFrame(parent, text=self._t("video_group_effects"), padding=8)
         effects.pack(fill=tk.X, pady=(0, 8))
 
@@ -5915,6 +6285,7 @@ class DoomerGeneratorApp:
             single_video_duration_seconds=duration_seconds,
             single_video_silence_seconds=silence,
             single_video_title=self.single_video_title_var.get().strip(),
+            max_parallel_videos=self.video_max_parallel_var.get(),
         )
 
     def _resolve_ffplay(self, ffmpeg_bin: str) -> str | None:
