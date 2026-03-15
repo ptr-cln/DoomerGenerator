@@ -1157,8 +1157,16 @@ def _clear_directory_contents(path: Path) -> int:
     path.mkdir(parents=True, exist_ok=True)
     removed_files = 0
     items = sorted(path.rglob("*"), key=lambda value: len(value.parts), reverse=True)
+
+    # Protected directories that should never be deleted
+    protected_dirs = {"long_videos"}
+
     for item in items:
         try:
+            # Skip items inside protected directories
+            if any(part in protected_dirs for part in item.parts):
+                continue
+
             if item.is_file() or item.is_symlink():
                 # Never delete these protected files
                 if item.name in (".gitkeep", "mix_history.txt", ".usage_memory.json"):
@@ -1166,6 +1174,9 @@ def _clear_directory_contents(path: Path) -> int:
                 item.unlink()
                 removed_files += 1
             elif item.is_dir():
+                # Don't delete protected directories
+                if item.name in protected_dirs:
+                    continue
                 item.rmdir()
         except OSError:
             continue
@@ -3669,11 +3680,14 @@ class DoomerVideoGenerator:
             return VideoSummary(total=1, generated=0, failed=0)
 
         if video_success and temp_video.exists():
-            # Move video from processing to output directory
-            final_destination = video_output_dir / output_filename
+            # Move video from processing to long_videos directory
+            long_videos_dir = video_output_dir / "long_videos"
+            long_videos_dir.mkdir(parents=True, exist_ok=True)
+            final_destination = long_videos_dir / output_filename
             import shutil
             shutil.move(str(temp_video), str(final_destination))
             self.log(f"✓ Video generato: {output_filename}")
+            self.log(f"📁 Salvato in: long_videos/{output_filename}")
 
             progress(3, 3, 0, "Completato", background.name)
             return VideoSummary(total=1, generated=1, failed=0)
@@ -4052,6 +4066,7 @@ class DoomerGeneratorApp:
         self.audio_input_dir = self.audio_root / "in"
         self.audio_output_dir = self.audio_root / "out"
         self.video_output_dir = self.video_root / "out"
+        self.long_videos_dir = self.video_root / "out" / "long_videos"
         self.youtube_client_secret_path = self.project_dir / "youtube_client_secret.json"
         self.youtube_token_path = self.project_dir / "youtube_token.json"
         self.app_settings_path = self.project_dir / APP_SETTINGS_FILE
@@ -10436,6 +10451,12 @@ class DoomerGeneratorApp:
         self.audio_input_dir.mkdir(parents=True, exist_ok=True)
         self.audio_output_dir.mkdir(parents=True, exist_ok=True)
         self.video_output_dir.mkdir(parents=True, exist_ok=True)
+        self.long_videos_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create .gitkeep in long_videos directory
+        gitkeep = self.long_videos_dir / ".gitkeep"
+        if not gitkeep.exists():
+            gitkeep.touch()
 
     def _ensure_links_file(self) -> None:
         if self.links_file.is_file():
