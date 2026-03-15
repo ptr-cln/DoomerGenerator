@@ -3689,6 +3689,9 @@ class DoomerVideoGenerator:
             self.log(f"✓ Video generato: {output_filename}")
             self.log(f"📁 Salvato in: long_videos/{output_filename}")
 
+            # Track used songs in dedicated file
+            self._append_used_songs_for_long_video(selected_files)
+
             progress(3, 3, 0, "Completato", background.name)
             return VideoSummary(total=1, generated=1, failed=0)
         else:
@@ -3770,6 +3773,35 @@ class DoomerVideoGenerator:
 
         except Exception as e:
             self.log(f"⚠ Errore salvataggio timestamp: {e}")
+
+    def _append_used_songs_for_long_video(self, selected_files: list[Path]) -> None:
+        """Append used songs to the tracking file for long videos."""
+        try:
+            tracking_file = self.project_dir / "used_songs_for_long_videos.txt"
+
+            # Extract artist and title from each file
+            songs_to_add = []
+            for audio_file in selected_files:
+                filename_stem = audio_file.stem
+                if " - " in filename_stem:
+                    # Format: "Artist - Title"
+                    parts = filename_stem.split(" - ", 1)
+                    artist = parts[0].strip()
+                    title = parts[1].strip()
+                    songs_to_add.append(f"{artist} – {title}")  # Using en-dash (–)
+                else:
+                    # No artist detected, just use filename
+                    songs_to_add.append(filename_stem)
+
+            # Append to file
+            with open(tracking_file, "a", encoding="utf-8") as f:
+                for song in songs_to_add:
+                    f.write(f"{song}\n")
+
+            self.log(f"✓ {len(songs_to_add)} canzoni aggiunte a: {tracking_file.name}")
+
+        except Exception as e:
+            self.log(f"⚠ Errore salvataggio canzoni usate: {e}")
 
     def _concatenate_audio_files(
         self,
